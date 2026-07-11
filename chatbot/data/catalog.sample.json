@@ -3,8 +3,15 @@
     {
       "id": "uni-lpu",
       "slug": "lovely-professional-university-online",
-      "aliases": ["lpu", "lpu online"],
-      "_meta": {"page_type": "university", "document_title": "LPU Online University Page", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "lpu",
+        "lpu online"
+      ],
+      "_meta": {
+        "page_type": "university",
+        "document_title": "LPU Online University Page",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "university_name": "Lovely Professional University",
       "university_full_name": "Lovely Professional University Online",
       "hero_description": "A UGC-entitled online university with career-focused degree programs.",
@@ -14,16 +21,36 @@
       "mode_of_learning": "Online",
       "starting_fee": "INR 32,000 per semester",
       "programs_table": [
-        {"program_name": "Online MBA", "program_fee": "INR 1,60,000", "program_eligibility": "Graduation"},
-        {"program_name": "Online MCA", "program_fee": "INR 1,40,000", "program_eligibility": "Graduation with Mathematics"}
+        {
+          "program_name": "Online MBA",
+          "program_fee": "INR 1,60,000",
+          "program_eligibility": "Graduation"
+        },
+        {
+          "program_name": "Online MCA",
+          "program_fee": "INR 1,40,000",
+          "program_eligibility": "Graduation with Mathematics"
+        }
       ],
-      "faqs": [{"question": "Are LPU online degrees UGC entitled?", "answer": "Yes, eligible online programs are UGC entitled."}]
+      "faqs": [
+        {
+          "question": "Are LPU online degrees UGC entitled?",
+          "answer": "Yes, eligible online programs are UGC entitled."
+        }
+      ]
     },
     {
       "id": "uni-nmims",
       "slug": "nmims-online",
-      "aliases": ["nmims", "nmims online"],
-      "_meta": {"page_type": "university", "document_title": "NMIMS Online University Page", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "nmims",
+        "nmims online"
+      ],
+      "_meta": {
+        "page_type": "university",
+        "document_title": "NMIMS Online University Page",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "university_name": "NMIMS Online",
       "university_full_name": "Narsee Monjee Institute of Management Studies Online",
       "hero_description": "Management and technology programs from the NMIMS online learning division.",
@@ -31,13 +58,26 @@
       "ugc_approved": "UGC Entitled",
       "mode_of_learning": "Online",
       "starting_fee": "INR 48,000 per semester",
-      "programs_table": [{"program_name": "Online MBA", "program_fee": "INR 1,96,000", "program_eligibility": "Graduation"}]
+      "programs_table": [
+        {
+          "program_name": "Online MBA",
+          "program_fee": "INR 1,96,000",
+          "program_eligibility": "Graduation"
+        }
+      ]
     },
     {
       "id": "uni-amity",
       "slug": "amity-university-online",
-      "aliases": ["amity", "amity online"],
-      "_meta": {"page_type": "university", "document_title": "Amity Online University Page", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "amity",
+        "amity online"
+      ],
+      "_meta": {
+        "page_type": "university",
+        "document_title": "Amity Online University Page",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "university_name": "Amity University Online",
       "university_full_name": "Amity University Online",
       "hero_description": "Flexible online degrees supported by live classes and digital learning resources.",
@@ -45,13 +85,26 @@
       "ugc_approved": "UGC Entitled",
       "mode_of_learning": "Online",
       "starting_fee": "INR 42,500 per semester",
-      "programs_table": [{"program_name": "Online MBA", "program_fee": "INR 1,99,000", "program_eligibility": "Graduation"}]
+      "programs_table": [
+        {
+          "program_name": "Online MBA",
+          "program_fee": "INR 1,99,000",
+          "program_eligibility": "Graduation"
+        }
+      ]
     },
     {
       "id": "uni-manipal-jaipur",
       "slug": "manipal-university-jaipur-online",
-      "aliases": ["manipal jaipur", "muj"],
-      "_meta": {"page_type": "university", "document_title": "Manipal University Jaipur Online Page", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "manipal jaipur",
+        "muj"
+      ],
+      "_meta": {
+        "page_type": "university",
+        "document_title": "Manipal University Jaipur Online Page",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "university_name": "Manipal University Jaipur",
       "university_full_name": "Manipal University Jaipur Online",
       "hero_description": "Online management and computer application degrees from Manipal University Jaipur.",
@@ -60,15 +113,30 @@
       "mode_of_learning": "Online",
       "starting_fee": "INR 39,500 per semester",
       "programs_table": [
-        {"program_name": "Online MBA", "program_fee": "INR 1,75,000", "program_eligibility": "Graduation"},
-        {"program_name": "Online MCA", "program_fee": "INR 1,58,000", "program_eligibility": "Graduation"}
+        {
+          "program_name": "Online MBA",
+          "program_fee": "INR 1,75,000",
+          "program_eligibility": "Graduation"
+        },
+        {
+          "program_name": "Online MCA",
+          "program_fee": "INR 1,58,000",
+          "program_eligibility": "Graduation"
+        }
       ]
     },
     {
       "id": "uni-sikkim-manipal",
       "slug": "sikkim-manipal-university-online",
-      "aliases": ["smu", "sikkim manipal"],
-      "_meta": {"page_type": "university", "document_title": "Sikkim Manipal University Online Page", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "smu",
+        "sikkim manipal"
+      ],
+      "_meta": {
+        "page_type": "university",
+        "document_title": "Sikkim Manipal University Online Page",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "university_name": "Sikkim Manipal University",
       "university_full_name": "Sikkim Manipal University Online",
       "hero_description": "An established Manipal-family university offering accessible online education.",
@@ -80,8 +148,14 @@
     {
       "id": "uni-ignou",
       "slug": "indira-gandhi-national-open-university",
-      "aliases": ["ignou"],
-      "_meta": {"page_type": "university", "document_title": "IGNOU University Page", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "ignou"
+      ],
+      "_meta": {
+        "page_type": "university",
+        "document_title": "IGNOU University Page",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "university_name": "IGNOU",
       "university_full_name": "Indira Gandhi National Open University",
       "hero_description": "India's national open university with affordable distance and online programs.",
@@ -89,13 +163,25 @@
       "ugc_approved": "Central University",
       "mode_of_learning": "Open and Distance Learning",
       "starting_fee": "INR 15,500 per semester",
-      "programs_table": [{"program_name": "Online MCA", "program_fee": "INR 50,800", "program_eligibility": "Graduation"}]
+      "programs_table": [
+        {
+          "program_name": "Online MCA",
+          "program_fee": "INR 50,800",
+          "program_eligibility": "Graduation"
+        }
+      ]
     },
     {
       "id": "uni-srinivas-management",
       "slug": "srinivas-management-university",
-      "aliases": ["smu"],
-      "_meta": {"page_type": "university", "document_title": "Srinivas Management University Demo Page", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "smu"
+      ],
+      "_meta": {
+        "page_type": "university",
+        "document_title": "Srinivas Management University Demo Page",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "university_name": "Srinivas Management University",
       "university_full_name": "Srinivas Management University",
       "hero_description": "A sample management-university listing retained to model real acronym collisions.",
@@ -105,8 +191,15 @@
     {
       "id": "uni-jain",
       "slug": "jain-university-online",
-      "aliases": ["jain", "jain online"],
-      "_meta": {"page_type": "university", "document_title": "Jain University Online Page", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "jain",
+        "jain online"
+      ],
+      "_meta": {
+        "page_type": "university",
+        "document_title": "Jain University Online Page",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "university_name": "Jain University Online",
       "university_full_name": "Jain University Online",
       "hero_description": "Industry-aligned online degrees from a deemed-to-be university.",
@@ -114,15 +207,26 @@
       "ugc_approved": "UGC Entitled",
       "mode_of_learning": "Online",
       "starting_fee": "INR 40,000 per semester",
-      "programs_table": [{"program_name": "Online MBA", "program_fee": "INR 1,96,000", "program_eligibility": "Graduation"}]
+      "programs_table": [
+        {
+          "program_name": "Online MBA",
+          "program_fee": "INR 1,96,000",
+          "program_eligibility": "Graduation"
+        }
+      ]
     },
-
     {
       "id": "course-lpu-mba",
       "slug": "lpu-online-mba",
       "category": "mba",
-      "aliases": ["mba"],
-      "_meta": {"page_type": "course", "document_title": "LPU Online MBA", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "mba"
+      ],
+      "_meta": {
+        "page_type": "course",
+        "document_title": "LPU Online MBA",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "program_name": "Online MBA",
       "university_name": "Lovely Professional University",
       "linked_university": "uni-lpu",
@@ -136,15 +240,32 @@
       "eligibility_summary": "Bachelor's degree in any discipline",
       "emi_amount": "From INR 6,667 per month",
       "placement_content": null,
-      "fee_plans": [{"plan_name": "Semester Fee", "plan_amount": "INR 40,000", "plan_total": "INR 1,60,000"}],
-      "highlights": [{"highlight_title": "Flexible learning", "highlight_description": "Live and recorded online classes."}]
+      "fee_plans": [
+        {
+          "plan_name": "Semester Fee",
+          "plan_amount": "INR 40,000",
+          "plan_total": "INR 1,60,000"
+        }
+      ],
+      "highlights": [
+        {
+          "highlight_title": "Flexible learning",
+          "highlight_description": "Live and recorded online classes."
+        }
+      ]
     },
     {
       "id": "course-nmims-mba",
       "slug": "nmims-online-mba",
       "category": "mba",
-      "aliases": ["mba"],
-      "_meta": {"page_type": "course", "document_title": "NMIMS Online MBA", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "mba"
+      ],
+      "_meta": {
+        "page_type": "course",
+        "document_title": "NMIMS Online MBA",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "program_name": "Online MBA",
       "university_name": "NMIMS Online",
       "linked_university": "uni-nmims",
@@ -160,8 +281,14 @@
       "id": "course-amity-mba",
       "slug": "amity-online-mba",
       "category": "mba",
-      "aliases": ["mba"],
-      "_meta": {"page_type": "course", "document_title": "Amity Online MBA", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "mba"
+      ],
+      "_meta": {
+        "page_type": "course",
+        "document_title": "Amity Online MBA",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "program_name": "Online MBA",
       "university_name": "Amity University Online",
       "linked_university": "uni-amity",
@@ -176,8 +303,14 @@
       "id": "course-manipal-jaipur-mba",
       "slug": "manipal-jaipur-online-mba",
       "category": "mba",
-      "aliases": ["mba"],
-      "_meta": {"page_type": "course", "document_title": "Manipal Jaipur Online MBA", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "mba"
+      ],
+      "_meta": {
+        "page_type": "course",
+        "document_title": "Manipal Jaipur Online MBA",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "program_name": "Online MBA",
       "university_name": "Manipal University Jaipur",
       "linked_university": "uni-manipal-jaipur",
@@ -192,8 +325,14 @@
       "id": "course-jain-mba",
       "slug": "jain-online-mba",
       "category": "mba",
-      "aliases": ["mba"],
-      "_meta": {"page_type": "course", "document_title": "Jain Online MBA", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "mba"
+      ],
+      "_meta": {
+        "page_type": "course",
+        "document_title": "Jain Online MBA",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "program_name": "Online MBA",
       "university_name": "Jain University Online",
       "linked_university": "uni-jain",
@@ -208,8 +347,14 @@
       "id": "course-lpu-mca",
       "slug": "lpu-online-mca",
       "category": "mca",
-      "aliases": ["mca"],
-      "_meta": {"page_type": "course", "document_title": "LPU Online MCA", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "mca"
+      ],
+      "_meta": {
+        "page_type": "course",
+        "document_title": "LPU Online MCA",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "program_name": "Online MCA",
       "university_name": "Lovely Professional University",
       "linked_university": "uni-lpu",
@@ -222,8 +367,14 @@
       "id": "course-manipal-jaipur-mca",
       "slug": "manipal-jaipur-online-mca",
       "category": "mca",
-      "aliases": ["mca"],
-      "_meta": {"page_type": "course", "document_title": "Manipal Jaipur Online MCA", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "mca"
+      ],
+      "_meta": {
+        "page_type": "course",
+        "document_title": "Manipal Jaipur Online MCA",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "program_name": "Online MCA",
       "university_name": "Manipal University Jaipur",
       "linked_university": "uni-manipal-jaipur",
@@ -236,8 +387,14 @@
       "id": "course-ignou-mca",
       "slug": "ignou-online-mca",
       "category": "mca",
-      "aliases": ["mca"],
-      "_meta": {"page_type": "course", "document_title": "IGNOU MCA", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "mca"
+      ],
+      "_meta": {
+        "page_type": "course",
+        "document_title": "IGNOU MCA",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "program_name": "Online MCA",
       "university_name": "IGNOU",
       "linked_university": "uni-ignou",
@@ -246,14 +403,19 @@
       "total_fee": "INR 50,800",
       "eligibility_summary": "Bachelor's degree with Mathematics"
     },
-
     {
       "id": "spec-lpu-mba-marketing",
       "slug": "lpu-mba-marketing",
       "category": "mba",
       "specialization_name": "Marketing",
-      "aliases": ["marketing"],
-      "_meta": {"page_type": "specialization", "document_title": "LPU MBA Marketing", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "marketing"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "LPU MBA Marketing",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "spec_name": "Marketing",
       "university_name": "Lovely Professional University",
       "linked_university": "uni-lpu",
@@ -262,16 +424,32 @@
       "mode": "Online",
       "total_fee": "INR 1,60,000",
       "eligibility_summary": "Bachelor's degree",
-      "highlights": [{"highlight_title": "Applied marketing", "highlight_description": "Digital, brand, and consumer strategy."}],
-      "job_profiles": [{"job_title": "Marketing Manager", "avg_salary": "INR 8 LPA"}]
+      "highlights": [
+        {
+          "highlight_title": "Applied marketing",
+          "highlight_description": "Digital, brand, and consumer strategy."
+        }
+      ],
+      "job_profiles": [
+        {
+          "job_title": "Marketing Manager",
+          "avg_salary": "INR 8 LPA"
+        }
+      ]
     },
     {
       "id": "spec-nmims-mba-marketing",
       "slug": "nmims-mba-marketing",
       "category": "mba",
       "specialization_name": "Marketing",
-      "aliases": ["marketing"],
-      "_meta": {"page_type": "specialization", "document_title": "NMIMS MBA Marketing", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "marketing"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "NMIMS MBA Marketing",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "spec_name": "Marketing",
       "university_name": "NMIMS Online",
       "linked_university": "uni-nmims",
@@ -285,8 +463,14 @@
       "slug": "amity-mba-marketing",
       "category": "mba",
       "specialization_name": "Marketing",
-      "aliases": ["marketing"],
-      "_meta": {"page_type": "specialization", "document_title": "Amity MBA Marketing", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "marketing"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "Amity MBA Marketing",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "spec_name": "Marketing",
       "university_name": "Amity University Online",
       "linked_university": "uni-amity",
@@ -300,8 +484,14 @@
       "slug": "manipal-jaipur-mba-marketing",
       "category": "mba",
       "specialization_name": "Marketing",
-      "aliases": ["marketing"],
-      "_meta": {"page_type": "specialization", "document_title": "Manipal Jaipur MBA Marketing", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "marketing"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "Manipal Jaipur MBA Marketing",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "spec_name": "Marketing",
       "university_name": "Manipal University Jaipur",
       "linked_university": "uni-manipal-jaipur",
@@ -315,8 +505,14 @@
       "slug": "jain-mba-marketing",
       "category": "mba",
       "specialization_name": "Marketing",
-      "aliases": ["marketing"],
-      "_meta": {"page_type": "specialization", "document_title": "Jain MBA Marketing", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "marketing"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "Jain MBA Marketing",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "spec_name": "Marketing",
       "university_name": "Jain University Online",
       "linked_university": "uni-jain",
@@ -330,8 +526,15 @@
       "slug": "nmims-mba-business-analytics",
       "category": "mba",
       "specialization_name": "Business Analytics",
-      "aliases": ["analytics", "business analytics"],
-      "_meta": {"page_type": "specialization", "document_title": "NMIMS MBA Business Analytics", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "analytics",
+        "business analytics"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "NMIMS MBA Business Analytics",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "spec_name": "Business Analytics",
       "university_name": "NMIMS Online",
       "linked_university": "uni-nmims",
@@ -339,15 +542,28 @@
       "duration": "2 Years",
       "mode": "Online",
       "total_fee": "INR 1,96,000",
-      "job_profiles": [{"job_title": "Business Analyst", "avg_salary": "INR 7.5 LPA"}]
+      "job_profiles": [
+        {
+          "job_title": "Business Analyst",
+          "avg_salary": "INR 7.5 LPA"
+        }
+      ]
     },
     {
       "id": "spec-lpu-mba-human-resource-management",
       "slug": "lpu-mba-human-resource-management",
       "category": "mba",
       "specialization_name": "Human Resource Management",
-      "aliases": ["hr", "hrm", "human resources"],
-      "_meta": {"page_type": "specialization", "document_title": "LPU MBA Human Resource Management", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "hr",
+        "hrm",
+        "human resources"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "LPU MBA Human Resource Management",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "spec_name": "Human Resource Management",
       "university_name": "Lovely Professional University",
       "linked_university": "uni-lpu",
@@ -355,15 +571,27 @@
       "duration": "2 Years",
       "mode": "Online",
       "total_fee": "INR 1,60,000",
-      "job_profiles": [{"job_title": "HR Business Partner", "avg_salary": "INR 7 LPA"}]
+      "job_profiles": [
+        {
+          "job_title": "HR Business Partner",
+          "avg_salary": "INR 7 LPA"
+        }
+      ]
     },
     {
       "id": "spec-jain-mba-finance-management",
       "slug": "jain-mba-finance-management",
       "category": "mba",
       "specialization_name": "Finance Management",
-      "aliases": ["finance", "financial management"],
-      "_meta": {"page_type": "specialization", "document_title": "Jain MBA Finance Management", "generated_by": "DegreeBaba Content Publisher"},
+      "aliases": [
+        "finance",
+        "financial management"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "Jain MBA Finance Management",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
       "spec_name": "Finance Management",
       "university_name": "Jain University Online",
       "linked_university": "uni-jain",
@@ -371,8 +599,18 @@
       "duration": "2 Years",
       "mode": "Online",
       "total_fee": "INR 1,96,000",
-      "job_profiles": [{"job_title": "Financial Analyst", "avg_salary": "INR 6.5 LPA"}],
-      "other_specs": [{"other_spec_name": "Marketing", "other_spec_fee": "INR 1,96,000"}]
+      "job_profiles": [
+        {
+          "job_title": "Financial Analyst",
+          "avg_salary": "INR 6.5 LPA"
+        }
+      ],
+      "other_specs": [
+        {
+          "other_spec_name": "Marketing",
+          "other_spec_fee": "INR 1,96,000"
+        }
+      ]
     }
   ]
 }

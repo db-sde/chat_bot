@@ -193,13 +193,22 @@ class CatalogStore:
             except Exception as error:
                 logger.warning("Catalog path load failed (%s): %s", self.catalog_path, error)
         if payload is None:
+            attempted = self.catalog_url or (str(self.catalog_path) if self.catalog_path else None)
+            logger.error(
+                "Catalog load failed for configured source '%s'; "
+                "falling back to bundled sample catalog",
+                attempted or "(none configured)",
+            )
             payload = await self._read_path(SAMPLE_CATALOG_PATH)
             source = str(SAMPLE_CATALOG_PATH)
 
         records = _records_from_payload(payload)
         if not records:
             if source != str(SAMPLE_CATALOG_PATH):
-                logger.warning("Catalog source %s contained no entities; using sample", source)
+                logger.error(
+                    "Catalog source %s contained no entities; falling back to sample",
+                    source,
+                )
                 payload = await self._read_path(SAMPLE_CATALOG_PATH)
                 records = _records_from_payload(payload)
                 source = str(SAMPLE_CATALOG_PATH)
@@ -207,6 +216,19 @@ class CatalogStore:
                 raise ValueError("Bundled sample catalog contains no entities")
         self.replace(records)
         self.source = source
+
+        # Startup summary so it is immediately obvious which catalog loaded.
+        counts = {"university": 0, "course": 0, "specialization": 0}
+        for meta in self._metadata.values():
+            counts[meta.page_type] = counts.get(meta.page_type, 0) + 1
+        logger.info(
+            "catalog loaded: source=%s entities=%d universities=%d courses=%d specializations=%d",
+            source,
+            len(self._metadata),
+            counts["university"],
+            counts["course"],
+            counts["specialization"],
+        )
         return self
 
     @classmethod

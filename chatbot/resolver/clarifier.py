@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -10,6 +11,8 @@ from taxonomy.entity_matcher import Candidate
 from taxonomy.index_builder import TaxonomyIndexes
 
 from .focus_updater import FocusUpdateResult
+
+LOGGER = logging.getLogger("chatbot.resolver")
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +106,11 @@ def clarify(
             (slot for slot in priority if slot in update.medium), next(iter(update.medium))
         )
         candidates = tuple(update.medium[slot_type])
+        LOGGER.warning(
+            "Fuzzy MEDIUM confidence match for slot %s: %s",
+            slot_type,
+            [c.entity_id for c in candidates],
+        )
         # Keep tied fuzzy candidates, but ask only about this unresolved slot.
         labels = tuple(candidate_label(candidate, indexes) for candidate in candidates)
         _set_pending(state, candidates, slot_type)

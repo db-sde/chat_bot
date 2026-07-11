@@ -70,6 +70,15 @@ def pragmatic_score(query: str, candidate: str) -> float:
         and not (Counter(shorter) - Counter(longer))
     ):
         score = max(score, 85.0)
+
+    # Transposition/anagram rule: same length, same first letter, identical multiset
+    if (
+        len(query_key) == len(candidate_key)
+        and query_key[:1] == candidate_key[:1]
+        and Counter(query_key) == Counter(candidate_key)
+    ):
+        score = max(score, 85.0)
+
     return score
 
 

@@ -50,6 +50,7 @@ class HealthResponse(TransportModel):
     status: Literal["ok", "degraded"]
     dependencies: dict[str, Any] = Field(default_factory=dict)
     timestamp: str | None = None
+    catalog_source: str | None = None
 
 
 class ReindexResponse(TransportModel):

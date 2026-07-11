@@ -18,6 +18,17 @@ def unavailable_answer(entity: Any, topic: str) -> str:
     )
 
 
+def entity_not_found_answer(name: str, suggestion: str | None = None) -> str:
+    """Response when entity_matcher returned no match — the name is unresolved."""
+
+    base = f"I couldn't find a match for \"{name}\" in the published catalog."
+    if suggestion:
+        base += f" Did you mean {suggestion}?"
+    else:
+        base += " Could you check the spelling, or try a different university or course name?"
+    return base
+
+
 def fee_answer(entity: Any) -> str:
     subject = entity_label(entity)
     total = clean_text(safe_get(entity, "total_fee", None))
@@ -319,6 +330,7 @@ __all__ = [
     "duration_answer",
     "eligibility_answer",
     "emi_answer",
+    "entity_not_found_answer",
     "exam_answer",
     "fee_answer",
     "jobs_answer",

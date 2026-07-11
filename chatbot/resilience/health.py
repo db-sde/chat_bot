@@ -9,6 +9,8 @@ from typing import Any
 
 import httpx
 
+from data.loader import SAMPLE_CATALOG_PATH
+
 
 async def _probe(name: str, call: Any, timeout: float = 1.0) -> tuple[str, Any]:
     try:
@@ -64,8 +66,14 @@ async def dependency_health(session_store: Any, catalog: Any, llm: Any) -> dict[
         if all(status not in {"down", "error", "degraded"} for status in statuses)
         else "degraded"
     )
+
+    # Report catalog source so monitoring can detect fallback-to-sample.
+    raw_source = getattr(catalog, "source", None) or ""
+    catalog_source = "fallback_sample" if raw_source == str(SAMPLE_CATALOG_PATH) else raw_source
+
     return {
         "status": overall,
         "timestamp": datetime.now(UTC).isoformat(),
         "dependencies": dependencies,
+        "catalog_source": catalog_source,
     }

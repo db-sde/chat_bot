@@ -249,6 +249,19 @@ def update_focus(
     explicit_category = "course" in single
     explicit_specialization = "specialization" in single
 
+    # --- Hierarchical slot reset (Bug 2.1/2.2 fix) ---
+    # When a shallower slot is explicitly re-mentioned without the deeper slot,
+    # the deeper slot must be reset.  Previously, only the university-XOR-category
+    # branches below ran, so when both were present (e.g. "LPU MBA fee") neither
+    # branch fired and the stale specialization from a prior turn survived into
+    # the join logic, producing wrong-entity answers.
+    #
+    # Depth order: university/category (same level) > specialization.
+    has_shallow_mention = explicit_university or explicit_category
+    if has_shallow_mention and not explicit_specialization:
+        _assign(focus, "specialization", None)
+        _assign(focus, "entity_id", None)
+
     # Concrete topic-switch guarantees: category-only cannot stick to a prior
     # university, and university-only cannot retain a prior course/spec context.
     if explicit_category and not explicit_university:

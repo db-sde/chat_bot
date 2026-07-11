@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
@@ -14,6 +15,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
+import logging_setup
 from config import Settings, get_settings
 from data.accessor import safe_get
 from data.loader import SAMPLE_CATALOG_PATH, CatalogStore
@@ -176,15 +178,24 @@ class ChatbotService:
         await self.session_store.set(state)
 
     async def process_turn(self, chat: ChatRequest) -> TurnResult:
+        turn_start = time.monotonic()
         session_id = chat.session_id or str(uuid4())
         state = await self.session_store.get_or_create(session_id)
         state.turn_count += 1
         self._append_history(state, "user", chat.message)
 
+        tl = logging_setup.TurnLogger(
+            logging_setup.correlation_id(session_id, state.turn_count)
+        )
+        tl.info("chatbot.nlu", 'IN msg="%s"', chat.message)
+
         # Step 2: callback intent always wins and does not alter catalog focus.
-        if is_callback_request(chat.message):
+        cb_match = is_callback_request(chat.message)
+        tl.info("chatbot.nlu", "callback_detector: %s", "match" if cb_match else "no match")
+        if cb_match:
             payload = self.lead_funnel.handle_callback(state, chat.message)
             await self._persist_result(state, payload)
+            tl.info("chatbot.routing", "route: lead (callback)")
             return TurnResult(session_id, state, payload, "lead")
 
         # Step 3: an offered clarification is resolved before all ordinary NLU.
@@ -194,12 +205,22 @@ class ChatbotService:
             indexes=self.indexes,
             catalog=self.catalog,
         )
+        pending_status = (
+            f"resolved to {pending.entity_id}" if pending.resolved
+            else (
+                "pending, awaiting answer"
+                if state.pending_clarification and not pending.new_topic
+                else "none active"
+            )
+        )
+        tl.info("chatbot.resolver", "pending_clarification: %s", pending_status)
         if pending.resolved:
             intent = Intent.FACTUAL
             route = select_route(state.focus, intent, state.pending_clarification)
             payload = await self.router.dispatch(state, intent, chat.message)
             payload = self.lead_funnel.augment(state, payload, chat.message)
             await self._persist_result(state, payload)
+            tl.info("chatbot.routing", "route: %s (clarification resolved)", route)
             return TurnResult(
                 session_id,
                 state,
@@ -210,6 +231,7 @@ class ChatbotService:
         if state.pending_clarification is not None and not pending.new_topic:
             payload = await self.router.dispatch(state, Intent.FACTUAL, chat.message)
             await self._persist_result(state, payload)
+            tl.info("chatbot.routing", "route: clarification (still pending)")
             return TurnResult(session_id, state, payload, "clarification")
 
         # A direct answer to the lead funnel remains a lead-only turn. Product questions
@@ -266,12 +288,35 @@ class ChatbotService:
                 "computer",
             )
         )
+        intent_start = time.monotonic()
         intent = (
             Intent.ADVISORY
             if preference_followup
             else await classify_intent(chat.message, self.llm)
         )
+        intent_ms = (time.monotonic() - intent_start) * 1000
+        tl.info("chatbot.nlu", "intent: %s (%.0fms)", intent.value, intent_ms)
+
         mentions = extract_mentions(chat.message, self.matcher)
+        # Log per-slot mention results.
+        for slot, candidates in [
+            ("university", mentions.universities),
+            ("category", mentions.courses),
+            ("specialization", mentions.specializations),
+        ]:
+            if candidates:
+                top = candidates[0]
+                tl.info(
+                    "chatbot.nlu",
+                    "mention: %s=%s conf=%s layer=%s",
+                    slot,
+                    getattr(top, "entity_id", top),
+                    getattr(top, "confidence", "?"),
+                    getattr(top, "layer", "?"),
+                )
+            else:
+                tl.info("chatbot.nlu", "mention: %s=none", slot)
+
         domain_topic = knowledge_topic(chat.message)
         if domain_topic and not mentions.has_explicit_mentions and not mentions.reference:
             payload = await handle_knowledge(
@@ -283,7 +328,16 @@ class ChatbotService:
             )
             payload = self.lead_funnel.augment(state, payload, chat.message)
             await self._persist_result(state, payload)
+            tl.info("chatbot.routing", "route: knowledge (domain_topic=%s)", domain_topic)
             return TurnResult(session_id, state, payload, "knowledge")
+
+        # Capture focus-before snapshot for the log diff.
+        focus_before = {
+            "uni": state.focus.university,
+            "cat": state.focus.category,
+            "spec": state.focus.specialization,
+            "eid": state.focus.entity_id,
+        }
 
         resolve_reference(mentions, state, raw_input=chat.message)
         update = update_focus(
@@ -294,8 +348,44 @@ class ChatbotService:
             indexes=self.indexes,
             category_index=self.indexes.category_index,
         )
+
+        # --- Bug 2.3 fix: off-topic turns must not reuse stale focus ---
+        # When no entities are mentioned and the message isn't referential,
+        # distinguish bare follow-ups ("what is the fee?") from off-topic
+        # messages ("what is the value of pi?") using domain keywords.
+        # The heuristic intent classifier defaults to FACTUAL for everything
+        # it doesn't recognise, so intent alone cannot distinguish off-topic.
+        if (
+            not mentions.has_explicit_mentions
+            and not mentions.reference
+            and topic_from_message(chat.message) == "about"
+            and not domain_topic
+        ):
+            # "about" is the default/fallback topic — no domain keyword matched.
+            # This is genuinely off-topic; clear focus to prevent stale answers.
+            state.focus.clear()
+            tl.info(
+                "chatbot.resolver",
+                "focus: cleared (off-topic, no entities, no domain keywords)",
+            )
+
         decision = clarify(state, update, indexes=self.indexes)
         route = select_route(state.focus, intent, state.pending_clarification)
+
+        # Log focus state change.
+        focus_after = {
+            "uni": state.focus.university,
+            "cat": state.focus.category,
+            "spec": state.focus.specialization,
+            "eid": state.focus.entity_id,
+        }
+        tl.info(
+            "chatbot.resolver",
+            "focus: before=%s after=%s",
+            focus_before,
+            focus_after,
+        )
+        tl.info("chatbot.routing", "route: %s", route)
 
         topic = "accreditation" if domain_topic else None
         if route == "knowledge" and topic is None:
@@ -326,6 +416,22 @@ class ChatbotService:
             payload = self.lead_funnel.augment(state, payload, chat.message)
 
         await self._persist_result(state, payload)
+
+        turn_ms = (time.monotonic() - turn_start) * 1000
+        is_templated = not self._synthesis_prompt(state, chat.message, route, payload)
+        tl.info(
+            "chatbot.routing",
+            "response: templated=%s latency=%.0fms",
+            is_templated,
+            turn_ms,
+        )
+        lead_field = state.lead.last_asked_field
+        tl.info(
+            "chatbot.leads",
+            "lead: %s",
+            f"last asked={lead_field}" if lead_field else "no ask this turn",
+        )
+
         return TurnResult(
             session_id,
             state,
@@ -375,10 +481,7 @@ async def _event_stream(service: ChatbotService, result: TurnResult):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
-    logging.basicConfig(
-        level=getattr(logging, settings.log_level.upper(), logging.INFO),
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    logging_setup.configure(level=settings.log_level, log_format=settings.log_format)
     app.state.service = await ChatbotService.create(settings)
     try:
         yield

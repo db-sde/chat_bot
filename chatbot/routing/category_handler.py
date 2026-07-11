@@ -182,15 +182,18 @@ async def handle_category(
         seen: set[str] = set()
         for entity in summary["entities"]:
             university = entity_university(entity) or entity_label(entity)
+            # Dedup by university name — not the full rendered string — so the
+            # same university with slightly different phrasing isn't listed twice.
+            university_key = university.casefold()
+            if university_key in seen:
+                continue
             eligibility = safe_get(entity, "eligibility_summary", None) or safe_get(
                 entity, "eligibility_content", None
             )
             if not eligibility:
                 continue
-            rendered = f"{university}: {eligibility}"
-            if rendered.casefold() not in seen:
-                seen.add(rendered.casefold())
-                requirements.append(rendered)
+            seen.add(university_key)
+            requirements.append(f"{university}: {eligibility}")
         if requirements:
             return build_response(
                 f"Published {label} eligibility varies by university: "
