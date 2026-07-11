@@ -23,15 +23,26 @@ _CHITCHAT = re.compile(
     re.IGNORECASE,
 )
 _COMPARISON = re.compile(
-    r"\b(?:compare|comparison|versus|vs\.?|difference\s+between)\b",
+    r"\b(?:compare|comparison|versus|vs\.?|difference\s+between)\b|"
+    r"\bwhich\b[^?]{0,100}\bbetter\b[^?]{0,100}\bor\b",
     re.IGNORECASE,
 )
 _ADVISORY = re.compile(
-    r"\b(?:best\s+for\s+me|which\s+(?:one|course|program|university)\s+should\s+i|recommend|suggest|suit(?:s|able)?\s+(?:me|my)|help\s+me\s+choose)\b",
+    r"\b(?:best\s+for\s+me|"
+    r"which\s+(?:one|course|program|university|(?:online\s+)?mba|mca|"
+    r"speciali[sz]ation)\b[^?]{0,80}\b(?:should\s+i|is\s+best|has\s+the\s+best)|"
+    r"which\s+university\b[^?]{0,80}\b(?:highest|reasonable\s+fees?)|"
+    r"recommend|suggest|suit(?:s|able)?\s+(?:me|my)|help\s+me\s+choose)\b",
     re.IGNORECASE,
 )
 _DISCOVERY = re.compile(
     r"\b(?:what\s+(?:courses|programs|universities)\s+(?:are|do\s+you\s+have)|show\s+me\s+(?:courses|programs|universities)|explore|browse|available\s+(?:courses|programs)|online\s+programs?)\b",
+    re.IGNORECASE,
+)
+_STRUCTURED_FACTUAL = re.compile(
+    r"\b(?:which\s+(?:universities|university|uni)\s+(?:offers?|provides?)|"
+    r"who\s+offers?|tell\s+me\s+about|what\s+is\s+the\s+|"
+    r"is\s+.+\s+(?:approved|accredited))\b",
     re.IGNORECASE,
 )
 _UNRELATED = re.compile(
@@ -62,7 +73,12 @@ async def classify_intent(message: str, llm: Any | None = None, *, use_llm: bool
 
     heuristic = heuristic_intent(message)
     # Explicit linguistic signals are cheaper and more reliable than a network round trip.
-    if heuristic is not Intent.FACTUAL or not llm or not use_llm:
+    if (
+        heuristic is not Intent.FACTUAL
+        or _STRUCTURED_FACTUAL.search(message)
+        or not llm
+        or not use_llm
+    ):
         return heuristic
     if not getattr(llm, "intent_configured", False):
         return heuristic

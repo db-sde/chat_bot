@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
     openai_synthesis_model: str = "gpt-4.1-mini"
+    # Deterministic catalog templates are the production default. Narrative
+    # synthesis is opt-in so provider latency cannot delay ordinary lookups.
+    enable_answer_synthesis: bool = False
     intent_timeout_seconds: float = Field(default=2.5, gt=0)
     synthesis_timeout_seconds: float = Field(default=5.0, gt=0)
     llm_failure_threshold: int = Field(default=3, ge=1)

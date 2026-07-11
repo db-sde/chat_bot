@@ -28,6 +28,15 @@ class PendingClarification(StateModel):
     candidates: list[str] = Field(default_factory=list)
     slot_type: Literal["university", "course", "specialization"] | None = None
     asked_at_turn: int | None = Field(default=None, ge=0)
+    # A comparison may contain one ambiguous operand plus already-resolved
+    # operands. Preserve that bounded plan so selecting the ambiguous meaning
+    # resumes the comparison instead of degrading to a factual overview.
+    resume_intent: Literal["comparison"] | None = None
+    comparison_universities: list[str] = Field(default_factory=list)
+    comparison_categories: list[str] = Field(default_factory=list)
+    comparison_entity_ids: list[str] = Field(default_factory=list)
+    comparison_common_category: str | None = None
+    comparison_specializations: list[list[str]] = Field(default_factory=list)
 
 
 class LeadState(StateModel):
@@ -63,4 +72,3 @@ class ConversationState(StateModel):
 
 
 SessionState = ConversationState
-

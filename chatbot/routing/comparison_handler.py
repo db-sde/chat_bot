@@ -3,11 +3,22 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
+from data.accessor import safe_get
 from response.builder import build_response
-from response.cards import format_inr
+from response.cards import (
+    catalog_get_entity,
+    clean_text,
+    entity_fee,
+    entity_label,
+    entity_page_type,
+    entity_university,
+    first_value,
+    format_inr,
+    parse_money,
+)
 from schemas import ResponsePayload
 
 from .category_handler import (
@@ -41,6 +52,201 @@ def _categories_from_message(message: str, known: list[str]) -> list[str]:
     return [category for _, category in sorted(matches)]
 
 
+def _value(item: Any, name: str, default: Any = None) -> Any:
+    if isinstance(item, Mapping):
+        return item.get(name, default)
+    return getattr(item, name, default)
+
+
+def _operand_id(item: Any) -> str:
+    if isinstance(item, (str, int)):
+        return str(item)
+    return str(_value(item, "entity_id", _value(item, "id", "")) or "")
+
+
+def _unique_ids(items: Iterable[Any] | None) -> list[str]:
+    return list(dict.fromkeys(value for item in items or () if (value := _operand_id(item))))
+
+
+def _course_ids_for_universities(
+    universities: Sequence[Any] | None,
+    category: str | None,
+    category_index: Any,
+    catalog: Any,
+) -> list[str]:
+    if not universities or not category or category_index is None:
+        return []
+    result: list[str] = []
+    for university in universities:
+        university_id = _operand_id(university)
+        if not university_id:
+            continue
+        try:
+            matches = category_index.intersect(
+                category=str(category),
+                university=university_id,
+            )
+        except (AttributeError, TypeError, ValueError):
+            matches = ()
+        course_ids = [
+            entity_id
+            for entity_id in matches
+            if entity_page_type(catalog_get_entity(catalog, entity_id)) == "course"
+        ]
+        if len(course_ids) == 1:
+            result.append(course_ids[0])
+    return list(dict.fromkeys(result))
+
+
+def _course_comparison(
+    entity_ids: Sequence[str],
+    catalog: Any,
+    category: str | None,
+) -> ResponsePayload | None:
+    entities = [catalog_get_entity(catalog, entity_id) for entity_id in entity_ids]
+    entities = [entity for entity in entities if entity is not None]
+    if len(entities) < 2:
+        return None
+
+    lines: list[str] = []
+    chips: list[str] = []
+    for entity in entities[:3]:
+        university = entity_university(entity) or "University not listed"
+        program = entity_label(entity, default=display_category(category or "program"))
+        fee = entity_fee(entity)
+        duration = clean_text(first_value(entity, "duration", default=""))
+        mode = clean_text(first_value(entity, "mode", "mode_of_learning", default=""))
+        details = [f"published total fee {fee}" if fee else "published fee unavailable"]
+        if duration:
+            details.append(f"duration {duration}")
+        if mode:
+            details.append(f"mode {mode}")
+        lines.append(f"- {university} — {program}: {'; '.join(details)}.")
+        chips.append(f"Tell me about {university}")
+
+    label = display_category(category) if category else "program"
+    return build_response(
+        f"Here is the {label} comparison based on the current catalog:\n"
+        + "\n".join(lines)
+        + "\nFees can use different schedules, so confirm the final fee plan before applying.",
+        suggested_chips=chips,
+    )
+
+
+def _university_comparison(
+    universities: Sequence[Any] | None,
+    catalog: Any,
+    *,
+    allow_single: bool = False,
+) -> ResponsePayload | None:
+    entities = [catalog_get_entity(catalog, item) for item in _unique_ids(universities)]
+    entities = [entity for entity in entities if entity is not None]
+    if not entities:
+        return None
+    if len(entities) == 1 and not allow_single:
+        return None
+
+    lines: list[str] = []
+    chips: list[str] = []
+    for entity in entities[:3]:
+        label = entity_label(entity, default="University")
+        naac = clean_text(first_value(entity, "naac_grade", default=""))
+        approval = clean_text(
+            first_value(entity, "ugc_approved", "ugc_status", default="")
+        )
+        starting_fee = entity_fee(entity)
+        programs = safe_get(entity, "programs_table", []) or []
+        program_count = (
+            len(programs)
+            if isinstance(programs, Iterable) and not isinstance(programs, (str, bytes, Mapping))
+            else 0
+        )
+        details: list[str] = []
+        if naac:
+            details.append(f"NAAC {naac}")
+        if approval:
+            details.append(approval)
+        if starting_fee:
+            details.append(f"published starting fee {starting_fee}")
+        if program_count:
+            details.append(f"{program_count} listed program{'s' if program_count != 1 else ''}")
+        lines.append(
+            f"- {label}: {'; '.join(details) if details else 'published details are limited'}."
+        )
+        chips.append(f"Programs at {label}")
+
+    if len(entities) == 1:
+        return build_response(
+            "Here is the published information I can provide for the university I matched:\n"
+            + "\n".join(lines),
+            suggested_chips=chips,
+        )
+    return build_response(
+        "Here is a university-level comparison based on the current catalog:\n"
+        + "\n".join(lines)
+        + "\nFor a like-for-like decision, compare the same program at each university.",
+        suggested_chips=chips,
+    )
+
+
+def _specialization_comparison(
+    groups: Sequence[Sequence[Any]] | None,
+    catalog: Any,
+) -> ResponsePayload | None:
+    if not groups or len(groups) < 2:
+        return None
+    lines: list[str] = []
+    chips: list[str] = []
+    for group in groups[:3]:
+        entities = [catalog_get_entity(catalog, entity_id) for entity_id in _unique_ids(group)]
+        entities = [entity for entity in entities if entity is not None]
+        if not entities:
+            continue
+        label = clean_text(
+            first_value(
+                entities[0],
+                "specialization_name",
+                "spec_name",
+                default=entity_label(entities[0], default="Specialization"),
+            )
+        )
+        providers = list(
+            dict.fromkeys(
+                entity_university(entity)
+                for entity in entities
+                if entity_university(entity)
+            )
+        )
+        fees = [
+            amount
+            for entity in entities
+            if (amount := parse_money(entity_fee(entity))) is not None
+        ]
+        if fees:
+            minimum, maximum = min(fees), max(fees)
+            fee = (
+                f"published fee {format_inr(minimum)}"
+                if minimum == maximum
+                else f"published fee range {format_inr(minimum)}-{format_inr(maximum)}"
+            )
+        else:
+            fee = "published fee unavailable"
+        count = len(providers)
+        lines.append(
+            f"- {label}: {count} provider option{'s' if count != 1 else ''}; {fee}."
+        )
+        chips.append(f"Explore {label}")
+    if len(lines) < 2:
+        return None
+    return build_response(
+        "Here is a specialization-family comparison based on the current catalog:\n"
+        + "\n".join(lines)
+        + "\nProvider availability and outcomes vary, so compare the concrete "
+        "program records next.",
+        suggested_chips=chips,
+    )
+
+
 async def handle_comparison(
     state: Any = None,
     message: str = "",
@@ -48,12 +254,56 @@ async def handle_comparison(
     category_index: Any = None,
     *,
     categories: Sequence[str] | None = None,
+    universities: Sequence[Any] | None = None,
+    entity_ids: Sequence[str] | None = None,
+    common_category: str | None = None,
+    specializations: Sequence[Sequence[Any]] | None = None,
+    allow_single_university: bool = False,
     llm: Any = None,
     **_: Any,
 ) -> ResponsePayload:
-    """Compare aggregate category data without choosing a university record."""
+    """Compare concrete operands, falling back to aggregate course categories."""
 
     del llm
+    selected_entity_ids = _unique_ids(entity_ids)
+    if not selected_entity_ids:
+        selected_entity_ids = _course_ids_for_universities(
+            universities,
+            common_category,
+            category_index,
+            catalog,
+        )
+    course_payload = _course_comparison(
+        selected_entity_ids,
+        catalog,
+        common_category,
+    )
+    if course_payload is not None:
+        return course_payload
+
+    university_payload = _university_comparison(
+        universities,
+        catalog,
+        allow_single=allow_single_university,
+    )
+    if university_payload is not None:
+        return university_payload
+
+    specialization_payload = _specialization_comparison(specializations, catalog)
+    if specialization_payload is not None:
+        return specialization_payload
+
+    university_ids = _unique_ids(universities)
+    if len(university_ids) == 1:
+        entity = catalog_get_entity(catalog, university_ids[0])
+        university = entity_label(entity, default="that university")
+        scope = f" for {display_category(common_category)}" if common_category else ""
+        return build_response(
+            f"I matched {university}{scope}. Which other university would you like "
+            "to compare it with?",
+            suggested_chips=["Compare with NMIMS", "Compare with LPU", "Compare with Amity"],
+        )
+
     selected = _explicit_categories(categories)
     known = available_categories(category_index, catalog)
     if not selected:

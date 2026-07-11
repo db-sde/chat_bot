@@ -43,6 +43,7 @@ def _set_pending(
     state: object,
     candidates: tuple[Candidate, ...],
     slot_type: str,
+    update: FocusUpdateResult,
 ) -> None:
     values = [candidate.entity_id for candidate in candidates]
     turn_count = getattr(state, "turn_count", 0)
@@ -55,6 +56,26 @@ def _set_pending(
             if slot_type in {"university", "course", "specialization"}
             else "specialization",
             asked_at_turn=turn_count,
+            resume_intent=(
+                "comparison"
+                if (
+                    update.comparison_universities
+                    or update.comparison_categories
+                    or update.comparison_entity_ids
+                    or update.comparison_specializations
+                )
+                else None
+            ),
+            comparison_universities=[
+                candidate.entity_id for candidate in update.comparison_universities
+            ],
+            comparison_categories=list(update.comparison_categories),
+            comparison_entity_ids=list(update.comparison_entity_ids),
+            comparison_common_category=update.comparison_common_category,
+            comparison_specializations=[
+                [candidate.entity_id for candidate in group]
+                for group in update.comparison_specializations
+            ],
         )
     except (ImportError, TypeError, ValueError):
         pending = type(
@@ -88,7 +109,7 @@ def clarify(
         )
         candidates = tuple(update.ambiguous[slot_type])
         labels = tuple(candidate_label(candidate, indexes) for candidate in candidates)
-        _set_pending(state, candidates, slot_type)
+        _set_pending(state, candidates, slot_type, update)
         options = "; ".join(f"{index}. {label}" for index, label in enumerate(labels, 1))
         return ClarificationDecision(
             needs_clarification=True,
@@ -113,7 +134,7 @@ def clarify(
         )
         # Keep tied fuzzy candidates, but ask only about this unresolved slot.
         labels = tuple(candidate_label(candidate, indexes) for candidate in candidates)
-        _set_pending(state, candidates, slot_type)
+        _set_pending(state, candidates, slot_type, update)
         if len(labels) == 1:
             question = f"Did you mean {labels[0]}?"
         else:

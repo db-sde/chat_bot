@@ -109,6 +109,10 @@ class SessionStore:
                 raw,
             )
 
+    async def _memory_delete(self, session_id: str) -> None:
+        async with self._memory_lock:
+            self._memory.pop(session_id, None)
+
     async def get(self, session_id: str) -> ConversationState | None:
         """Return state and refresh its TTL; missing/corrupt data returns ``None``."""
 
@@ -118,12 +122,30 @@ class SessionStore:
             try:
                 key = self._key(session_id)
                 raw = await self._redis.get(key)
-                if raw is None:
-                    return None
-                await self._redis.expire(key, self.ttl_seconds)
-                return self._deserialize(raw)
             except Exception as error:
                 self._fall_back("read", error)
+            else:
+                if raw is None:
+                    await self._memory_delete(session_id)
+                    return None
+                try:
+                    value = self._deserialize(raw)
+                except Exception as error:
+                    logger.warning("Discarding invalid Redis session %s: %s", session_id, error)
+                    await self._memory_delete(session_id)
+                    return None
+                # Keep a warm mirror so an eventual Redis outage does not reset an
+                # in-flight conversation on the first failed read.
+                await self._memory_set(value)
+                try:
+                    await self._redis.expire(key, self.ttl_seconds)
+                except Exception as error:
+                    # A TTL refresh is best-effort. The record was read successfully,
+                    # so preserve it while moving to the sticky memory fallback instead
+                    # of discarding focus mid-conversation.
+                    self._fall_back("TTL refresh", error)
+                    await self._memory_set(value)
+                return value
         return await self._memory_get(session_id)
 
     async def get_or_create(self, session_id: str) -> ConversationState:
@@ -155,6 +177,7 @@ class SessionStore:
                     self._serialize(value),
                     ex=self.ttl_seconds,
                 )
+                await self._memory_set(value)
                 return
             except Exception as error:
                 self._fall_back("write", error)
@@ -168,8 +191,7 @@ class SessionStore:
                 await self._redis.delete(self._key(session_id))
             except Exception as error:
                 self._fall_back("delete", error)
-        async with self._memory_lock:
-            self._memory.pop(session_id, None)
+        await self._memory_delete(session_id)
 
     async def ping(self) -> bool:
         if self.using_memory:

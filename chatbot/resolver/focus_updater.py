@@ -18,6 +18,11 @@ class FocusUpdateResult:
     ambiguous: Mapping[str, tuple[Candidate, ...]] = field(default_factory=dict)
     medium: Mapping[str, tuple[Candidate, ...]] = field(default_factory=dict)
     comparison_categories: tuple[str, ...] = ()
+    comparison_universities: tuple[Candidate, ...] = ()
+    comparison_entity_ids: tuple[str, ...] = ()
+    comparison_common_category: str | None = None
+    comparison_specializations: tuple[tuple[Candidate, ...], ...] = ()
+    advisory_candidate_ids: tuple[str, ...] = ()
     joined_entity_ids: tuple[str, ...] = ()
 
     @property
@@ -139,6 +144,69 @@ def _build_join_candidates(
     return tuple(result)
 
 
+def _mention_groups(
+    candidates: Iterable[Candidate],
+) -> tuple[tuple[Candidate, ...], ...]:
+    """Group candidates produced by one explicit mention span.
+
+    Multiple candidates at the same span are alternative meanings (``SMU``),
+    while candidates at separate spans are independent operands (``LPU and
+    NMIMS``).  ``matched_span`` is part of the key for small mocks and legacy
+    matchers which do not populate token offsets.
+    """
+
+    groups: dict[tuple[int, int, str], list[Candidate]] = {}
+    for candidate in candidates:
+        key = (
+            candidate.start,
+            candidate.end,
+            " ".join(candidate.matched_span.casefold().split()),
+        )
+        groups.setdefault(key, []).append(candidate)
+    return tuple(
+        tuple(group)
+        for _, group in sorted(
+            groups.items(),
+            key=lambda item: (item[0][0], item[0][1], item[0][2]),
+        )
+    )
+
+
+def _same_semantic_family(
+    candidates: Iterable[Candidate], indexes: TaxonomyIndexes | None
+) -> bool:
+    """Return whether provider records represent one named specialization."""
+
+    labels = {" ".join(_label(item, indexes).casefold().split()) for item in candidates}
+    return len(labels) == 1
+
+
+def _comparison_course_entities(
+    universities: Iterable[Candidate],
+    category: str | None,
+    reverse: CategoryIndex | None,
+    indexes: TaxonomyIndexes | None,
+) -> tuple[str, ...]:
+    """Resolve one concrete course record per university, preserving operand order."""
+
+    if not category or reverse is None:
+        return ()
+    entity_ids: list[str] = []
+    for university in universities:
+        pool: set[str] = set()
+        for key in _university_keys(university, indexes):
+            pool.update(reverse.intersect(category=category, university=key))
+        if indexes is not None:
+            pool = {
+                entity_id
+                for entity_id in pool
+                if _metadata(indexes, entity_id).get("page_type") == "course"
+            }
+        if len(pool) == 1:
+            entity_ids.append(next(iter(pool)))
+    return tuple(dict.fromkeys(entity_ids))
+
+
 def update_focus(
     state: object,
     mentions: object,
@@ -220,9 +288,17 @@ def update_focus(
         _assign(focus, "specialization", None)
         _assign(focus, "entity_id", None)
 
+    selected_intent = str(intent or _value(mentions, "intent") or "").casefold()
+    is_comparison = selected_intent == "comparison"
+    is_advisory = selected_intent == "advisory"
     comparison_categories: tuple[str, ...] = ()
+    comparison_universities: tuple[Candidate, ...] = ()
+    comparison_entity_ids: tuple[str, ...] = ()
+    comparison_common_category: str | None = None
+    comparison_specializations: tuple[tuple[Candidate, ...], ...] = ()
+    advisory_candidate_ids: tuple[str, ...] = ()
     course_high = high_by_slot["course"]
-    if (intent or _value(mentions, "intent")) == "comparison" and len(course_high) >= 2:
+    if is_comparison and len(course_high) >= 2:
         comparison_categories = tuple(
             dict.fromkeys(_category(item, indexes) for item in course_high)
         )
@@ -234,10 +310,83 @@ def update_focus(
     elif len(course_high) > 1:
         ambiguous["course"] = course_high
 
-    for slot in ("university", "specialization"):
-        high = high_by_slot[slot]
-        if len(high) > 1:
-            ambiguous[slot] = high
+    university_high = high_by_slot["university"]
+    university_groups = _mention_groups(university_high)
+    if is_comparison and len(university_high) == 1:
+        comparison_universities = university_high
+        resolved["university"] = university_high
+    if len(university_high) > 1:
+        if is_comparison and len(university_groups) >= 2:
+            ambiguous_group = next(
+                (group for group in university_groups if len(group) > 1),
+                None,
+            )
+            comparison_universities = tuple(
+                group[0] for group in university_groups if len(group) == 1
+            )
+            if ambiguous_group is not None:
+                # Only the alternatives attached to the ambiguous mention belong
+                # in the clarification.  A separate resolved operand (for example
+                # LPU in "compare SMU and LPU") remains available in ``resolved``.
+                ambiguous["university"] = ambiguous_group
+                if comparison_universities:
+                    resolved["university"] = comparison_universities
+            else:
+                resolved["university"] = comparison_universities
+        else:
+            ambiguous["university"] = university_high
+
+    specialization_high = high_by_slot["specialization"]
+    specialization_groups = _mention_groups(specialization_high)
+    if len(specialization_high) > 1:
+        advisory_family = (
+            is_advisory
+            and len(specialization_groups) == 1
+            and _same_semantic_family(specialization_high, indexes)
+        )
+        comparable_families = (
+            is_comparison
+            and len(specialization_groups) >= 2
+            and all(
+                len(group) == 1 or _same_semantic_family(group, indexes)
+                for group in specialization_groups
+            )
+        )
+        if advisory_family:
+            advisory_candidate_ids = tuple(
+                dict.fromkeys(candidate.entity_id for candidate in specialization_high)
+            )
+            resolved["specialization"] = specialization_high
+        elif comparable_families:
+            comparison_specializations = specialization_groups
+            resolved["specialization"] = tuple(
+                candidate for group in specialization_groups for candidate in group
+            )
+        else:
+            ambiguous["specialization"] = specialization_high
+
+    if is_comparison and len(course_high) == 1:
+        comparison_common_category = _category(course_high[0], indexes)
+    comparison_entity_ids = _comparison_course_entities(
+        comparison_universities,
+        comparison_common_category,
+        reverse,
+        indexes,
+    )
+
+    # Explicit comparison operands form a self-contained turn.  Do not let a
+    # previously focused entity leak into their rendering or into a follow-up
+    # clarification decision.
+    if is_comparison and (
+        comparison_categories
+        or comparison_universities
+        or comparison_specializations
+        or any(len(group) > 1 for group in university_groups)
+    ):
+        _assign(focus, "university", None)
+        _assign(focus, "category", None)
+        _assign(focus, "specialization", None)
+        _assign(focus, "entity_id", None)
 
     single: dict[str, Candidate] = {
         slot: values[0]
@@ -374,6 +523,11 @@ def update_focus(
         ambiguous=ambiguous,
         medium=medium,
         comparison_categories=comparison_categories,
+        comparison_universities=comparison_universities,
+        comparison_entity_ids=comparison_entity_ids,
+        comparison_common_category=comparison_common_category,
+        comparison_specializations=comparison_specializations,
+        advisory_candidate_ids=advisory_candidate_ids,
         joined_entity_ids=joined,
     )
 

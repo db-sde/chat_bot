@@ -7,7 +7,14 @@ from typing import Any
 
 from data.accessor import safe_get
 
-from .cards import clean_text, entity_label, first_value, has_value
+from .cards import (
+    catalog_get_entity,
+    clean_text,
+    entity_fee,
+    entity_label,
+    first_value,
+    has_value,
+)
 
 
 def unavailable_answer(entity: Any, topic: str) -> str:
@@ -179,6 +186,60 @@ def jobs_answer(entity: Any) -> str:
     return f"Published career options for {subject} include {', '.join(rendered[:6])}."
 
 
+def _provider_name(entity: Any, catalog: Any = None) -> str:
+    """Resolve a provider name without exposing a linked catalog identifier."""
+
+    direct = clean_text(
+        first_value(entity, "university_name", "university_full_name", default=None)
+    )
+    if direct:
+        return direct
+
+    linked = safe_get(entity, "linked_university", None)
+    if not has_value(linked):
+        return ""
+
+    embedded = clean_text(
+        first_value(
+            linked,
+            "university_full_name",
+            "university_name",
+            "canonical_name",
+            "name",
+            default=None,
+        )
+    )
+    if embedded:
+        return embedded
+
+    reference = first_value(linked, "id", "entity_id", "slug", default=linked)
+    provider = catalog_get_entity(catalog, reference)
+    if provider is None:
+        return ""
+    return clean_text(
+        first_value(
+            provider,
+            "university_full_name",
+            "university_name",
+            "canonical_name",
+            "name",
+            default=None,
+        )
+    ) or entity_label(provider, default="")
+
+
+def provider_answer(entity: Any, catalog: Any = None) -> str:
+    """Name the published university provider, resolving linked ids when needed."""
+
+    subject = entity_label(entity)
+    provider = _provider_name(entity, catalog)
+    if not provider:
+        return unavailable_answer(entity, "provider")
+    if provider.casefold() == subject.casefold():
+        return f"The published catalog record is for {provider}."
+    return f"{subject} is offered by {provider}."
+
+
 def programs_answer(entity: Any) -> str:
     subject = entity_label(entity)
     programs = safe_get(entity, "programs_table", []) or []
@@ -207,7 +268,7 @@ def reviews_answer(entity: Any) -> str:
     return f"The published student feedback for {subject} includes: {'; '.join(rendered[:3])}."
 
 
-def about_answer(entity: Any) -> str:
+def about_answer(entity: Any, catalog: Any = None) -> str:
     subject = entity_label(entity)
     hero = clean_text(safe_get(entity, "hero_description", None), max_chars=260)
     about = clean_text(safe_get(entity, "about_content", None), max_chars=520)
@@ -218,9 +279,32 @@ def about_answer(entity: Any) -> str:
     if hero:
         return f"{subject}: {hero}"
 
-    university = clean_text(safe_get(entity, "university_name", None))
-    if university and university.casefold() != subject.casefold():
-        return f"{subject} is offered by {university}. What detail would you like to check?"
+    provider = _provider_name(entity, catalog)
+    duration = clean_text(safe_get(entity, "duration", None))
+    mode = clean_text(first_value(entity, "mode", "mode_of_learning", default=None))
+    fee = entity_fee(entity)
+    eligibility = clean_text(
+        first_value(entity, "eligibility_summary", "eligibility_content", default=None),
+        max_chars=260,
+    )
+
+    sentences: list[str] = []
+    if provider and provider.casefold() != subject.casefold():
+        sentences.append(f"{subject} is offered by {provider}.")
+
+    published: list[str] = []
+    if duration:
+        published.append(f"duration: {duration}")
+    if mode:
+        published.append(f"mode: {mode}")
+    if fee:
+        published.append(f"fee: {fee}")
+    if eligibility:
+        published.append(f"eligibility: {eligibility}")
+    if published:
+        sentences.append(f"Published details — {'; '.join(published)}.")
+    if sentences:
+        return " ".join(sentences)
     return unavailable_answer(entity, "overview")
 
 
@@ -239,11 +323,16 @@ TEMPLATE_BY_TOPIC: dict[str, Callable[[Any], str]] = {
     "jobs": jobs_answer,
     "programs": programs_answer,
     "reviews": reviews_answer,
+    "provider": provider_answer,
     "about": about_answer,
 }
 
 
-def render_topic(topic: str, entity: Any) -> str:
+def render_topic(topic: str, entity: Any, *, catalog: Any = None) -> str:
+    if topic == "provider":
+        return provider_answer(entity, catalog)
+    if topic == "about":
+        return about_answer(entity, catalog)
     template = TEMPLATE_BY_TOPIC.get(topic, about_answer)
     return template(entity)
 
@@ -253,13 +342,39 @@ def topic_from_message(message: str) -> str:
 
     normalized = f" {str(message or '').casefold()} "
     checks: tuple[tuple[str, tuple[str, ...]], ...] = (
+        (
+            "provider",
+            (
+                "which university",
+                "what university",
+                "university offers",
+                "university offer",
+                "offered by",
+                "who offers",
+                "program provider",
+            ),
+        ),
         ("emi", (" emi ", "installment", "instalment", "monthly payment")),
         ("fee", (" fee", "fees", "cost", "tuition", "price")),
         ("duration", ("duration", "how long", " years", " semesters")),
         ("eligibility", ("eligib", "qualif", "requirement", "who can apply")),
         ("mode", (" mode", "online or offline", "distance mode", "learning mode")),
         ("placements", ("placement", "hiring", "recruit", "career support")),
-        ("jobs", ("job profile", "career option", "salary", "jobs")),
+        (
+            "jobs",
+            (
+                "job profile",
+                " job ",
+                " jobs",
+                " role",
+                "career option",
+                "career opportunit",
+                "career outcome",
+                "salary",
+                "package",
+                "earning",
+            ),
+        ),
         ("syllabus", ("syllabus", "curriculum", "subjects", "semester-wise")),
         ("admission", ("admission", "how to apply", "application process", "enrol")),
         ("exam", ("exam", "proctor", "assessment")),
@@ -304,6 +419,7 @@ _TOPIC_CHIPS: dict[str, tuple[str, ...]] = {
     "jobs": ("Placements", "Fees", "Syllabus"),
     "programs": ("Fees", "Eligibility", "Accreditations"),
     "reviews": ("Programs", "Accreditations", "Fees"),
+    "provider": ("Fees", "Eligibility", "Duration"),
     "about": ("Fees", "Eligibility", "Placements", "Programs", "Accreditations"),
 }
 
@@ -337,6 +453,7 @@ __all__ = [
     "mode_answer",
     "placements_answer",
     "programs_answer",
+    "provider_answer",
     "render_topic",
     "reviews_answer",
     "suggested_chips",

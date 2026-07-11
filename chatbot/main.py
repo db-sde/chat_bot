@@ -63,6 +63,38 @@ def _looks_like_product_turn(message: str, mentions: Any) -> bool:
     )
 
 
+def _use_intent_llm(message: str, mentions: Any, state: ConversationState) -> bool:
+    """Reserve probabilistic classification for genuinely unstructured turns."""
+
+    return not (
+        _looks_like_product_turn(message, mentions)
+        or topic_from_message(message) != "about"
+        or state.focus.entity_id
+        or state.focus.category
+        or state.focus.university
+        or state.focus.specialization
+    )
+
+
+def _acknowledge_partial_match(payload: ResponsePayload, unresolved: list[str]) -> ResponsePayload:
+    if not unresolved:
+        return payload
+    missing = (
+        unresolved[0]
+        if len(unresolved) == 1
+        else ", ".join(unresolved[:-1]) + f" and {unresolved[-1]}"
+    )
+    return payload.model_copy(
+        update={
+            "text": (
+                f"I couldn't find {missing} in the published catalog. "
+                "I did match the rest of your request, so here's the available "
+                f"catalog information:\n\n{payload.text}"
+            )
+        }
+    )
+
+
 @dataclass(slots=True)
 class TurnResult:
     session_id: str
@@ -167,6 +199,8 @@ class ChatbotService:
     ) -> str | None:
         if route != "factual" or topic_from_message(message) != "about":
             return None
+        if not self.settings.enable_answer_synthesis:
+            return None
         if "personalised help" in payload.text.casefold():
             return None
         if not self.llm.synthesis_configured or not state.focus.entity_id:
@@ -174,13 +208,17 @@ class ChatbotService:
         entity = self.catalog.cache_in_state(state.focus.entity_id, state)
         if entity is None:
             return None
+        summary = safe_get(entity, "hero_description") or safe_get(entity, "about_content")
+        # Structured fields already have deterministic templates. Synthesis is
+        # reserved for publisher narrative, not triggered merely by fee+duration.
+        if not summary:
+            return None
         facts = {
             "name": safe_get(entity, "program_name")
             or safe_get(entity, "spec_name")
             or safe_get(entity, "university_full_name")
             or safe_get(entity, "university_name"),
-            "summary": safe_get(entity, "hero_description")
-            or safe_get(entity, "about_content"),
+            "summary": summary,
             "fee": safe_get(entity, "total_fee") or safe_get(entity, "starting_fee"),
             "duration": safe_get(entity, "duration"),
         }
@@ -258,7 +296,7 @@ class ChatbotService:
             # a lead reply silently steal a product question. The response remains lead-only
             # because this turn contains no current product evidence.
             intent_start = time.monotonic()
-            intent = await classify_intent(chat.message, self.llm)
+            intent = await classify_intent(chat.message, self.llm, use_llm=False)
             intent_ms = (time.monotonic() - intent_start) * 1000
             tl.info("chatbot.nlu", "intent: %s (%.0fms)", intent.value, intent_ms)
             payload = self.lead_funnel.captured_reply_response(
@@ -270,6 +308,11 @@ class ChatbotService:
             return TurnResult(session_id, state, payload, "lead")
 
         # Step 3: an offered clarification is resolved before all ordinary NLU.
+        pending_context = (
+            state.pending_clarification.model_copy(deep=True)
+            if state.pending_clarification is not None
+            else None
+        )
         pending = resolve_pending_clarification(
             chat.message,
             state,
@@ -286,9 +329,37 @@ class ChatbotService:
         )
         tl.info("chatbot.resolver", "pending_clarification: %s", pending_status)
         if pending.resolved:
-            intent = Intent.FACTUAL
+            resume_comparison = bool(
+                pending_context is not None
+                and pending_context.resume_intent == "comparison"
+            )
+            intent = Intent.COMPARISON if resume_comparison else Intent.FACTUAL
             route = select_route(state.focus, intent, state.pending_clarification)
-            payload = await self.router.dispatch(state, intent, chat.message)
+            dispatch_kwargs: dict[str, Any] = {}
+            if resume_comparison and pending_context is not None:
+                universities = list(pending_context.comparison_universities)
+                entity_ids = list(pending_context.comparison_entity_ids)
+                categories = list(pending_context.comparison_categories)
+                specializations = list(pending_context.comparison_specializations)
+                if pending.slot_type == "university" and pending.entity_id:
+                    universities.append(pending.entity_id)
+                elif pending.slot_type == "course" and state.focus.category:
+                    categories.append(state.focus.category)
+                elif pending.slot_type == "specialization" and pending.entity_id:
+                    specializations.append([pending.entity_id])
+                dispatch_kwargs = {
+                    "universities": list(dict.fromkeys(universities)),
+                    "entity_ids": list(dict.fromkeys(entity_ids)),
+                    "categories": list(dict.fromkeys(categories)),
+                    "common_category": pending_context.comparison_common_category,
+                    "specializations": specializations,
+                }
+            payload = await self.router.dispatch(
+                state,
+                intent,
+                chat.message,
+                **dispatch_kwargs,
+            )
             payload = self.lead_funnel.augment(state, payload, chat.message)
             await self._persist_result(state, payload)
             tl.info("chatbot.routing", "route: %s (clarification resolved)", route)
@@ -314,6 +385,7 @@ class ChatbotService:
             ),
             "",
         )
+        mentions = preview_mentions or extract_mentions(chat.message, self.matcher)
         preference_followup = any(
             marker in previous_assistant.casefold()
             for marker in ("what matters most", "which direction is closer")
@@ -324,6 +396,9 @@ class ChatbotService:
                 "budget",
                 "affordable",
                 "placement",
+                "career",
+                "job",
+                "salary",
                 "special",
                 "business",
                 "management",
@@ -336,12 +411,17 @@ class ChatbotService:
         intent = (
             Intent.ADVISORY
             if preference_followup
-            else await classify_intent(chat.message, self.llm)
+            else await classify_intent(
+                chat.message,
+                self.llm,
+                use_llm=_use_intent_llm(chat.message, mentions, state),
+            )
         )
+        if intent is Intent.DISCOVERY and mentions.has_explicit_mentions:
+            intent = Intent.FACTUAL
         intent_ms = (time.monotonic() - intent_start) * 1000
         tl.info("chatbot.nlu", "intent: %s (%.0fms)", intent.value, intent_ms)
 
-        mentions = preview_mentions or extract_mentions(chat.message, self.matcher)
         # Log per-slot mention results.
         for slot, candidates in [
             ("university", mentions.universities),
@@ -435,6 +515,12 @@ class ChatbotService:
                 intent,
                 chat.message,
                 categories=update.comparison_categories,
+                universities=update.comparison_universities,
+                entity_ids=update.comparison_entity_ids,
+                common_category=update.comparison_common_category,
+                specializations=update.comparison_specializations,
+                allow_single_university=bool(mentions.unresolved_terms),
+                advisory_candidate_ids=update.advisory_candidate_ids,
                 topic=topic,
             )
 
@@ -448,10 +534,18 @@ class ChatbotService:
         else:
             payload = self.lead_funnel.augment(state, payload, chat.message)
 
+        if mentions.has_explicit_mentions and mentions.unresolved_terms:
+            payload = _acknowledge_partial_match(payload, mentions.unresolved_terms)
+
         await self._persist_result(state, payload)
 
         turn_ms = (time.monotonic() - turn_start) * 1000
-        is_templated = not self._synthesis_prompt(state, chat.message, route, payload)
+        synthesis_prompt = (
+            None
+            if mentions.unresolved_terms
+            else self._synthesis_prompt(state, chat.message, route, payload)
+        )
+        is_templated = not synthesis_prompt
         tl.info(
             "chatbot.routing",
             "response: templated=%s latency=%.0fms",
@@ -470,7 +564,7 @@ class ChatbotService:
             state,
             payload,
             route,
-            self._synthesis_prompt(state, chat.message, route, payload),
+            synthesis_prompt,
         )
 
 
@@ -495,9 +589,9 @@ async def _event_stream(service: ChatbotService, result: TurnResult):
     try:
         async for token in service.llm.stream_synthesis(result.synthesis_prompt):
             tokens.append(token)
-            yield _sse("token", {"session_id": result.session_id, "token": token})
     except LLMUnavailable:
-        # The deterministic payload was already built and persisted before streaming.
+        # Nothing from a failed synthesis is emitted. The deterministic payload
+        # was already built and persisted before streaming.
         yield _payload_event(result)
         return
 
@@ -505,6 +599,10 @@ async def _event_stream(service: ChatbotService, result: TurnResult):
     if not text:
         yield _payload_event(result)
         return
+    # Buffer until the provider completes so a mid-stream failure cannot expose a
+    # partial sentence followed by a contradictory deterministic fallback.
+    for token in tokens:
+        yield _sse("token", {"session_id": result.session_id, "token": token})
     final_payload = result.payload.model_copy(update={"text": text})
     # Focus/session state was persisted before streaming. Do not write this older whole-state
     # snapshot after a slow stream: a newer turn for the same session may already exist.

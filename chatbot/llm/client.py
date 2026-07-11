@@ -27,7 +27,7 @@ VALID_INTENTS = {
 
 
 class LLMUnavailable(RuntimeError):
-    """Raised after bounded retries when an LLM provider cannot serve a request."""
+    """Raised when a bounded LLM attempt cannot serve a request."""
 
 
 class CircuitOpen(LLMUnavailable):
@@ -99,7 +99,9 @@ class LLMClient:
         if not key:
             raise LLMUnavailable("GROQ_API_KEY is not configured")
         if self._groq is None:
-            self._groq = AsyncGroq(api_key=key)
+            # The application owns the request deadline and fallback path. SDK retries
+            # would otherwise multiply that deadline before control returns to us.
+            self._groq = AsyncGroq(api_key=key, max_retries=0)
         return self._groq
 
     def _openai_client(self) -> AsyncOpenAI:
@@ -107,7 +109,7 @@ class LLMClient:
         if not key:
             raise LLMUnavailable("OPENAI_API_KEY is not configured")
         if self._openai is None:
-            self._openai = AsyncOpenAI(api_key=key)
+            self._openai = AsyncOpenAI(api_key=key, max_retries=0)
         return self._openai
 
     async def _bounded_call(
@@ -118,21 +120,17 @@ class LLMClient:
     ) -> T:
         breaker = self._breakers[provider]
         breaker.before_call()
-        last_error: Exception | None = None
-        for attempt in range(2):
-            try:
-                result = await asyncio.wait_for(operation(), timeout=timeout)
-                breaker.success()
-                return result
-            except Exception as exc:
-                # SDK exceptions intentionally collapse to one typed application error. A
-                # single retry is permitted; authentication/validation errors remain bounded.
-                last_error = exc
-                if attempt == 0:
-                    await asyncio.sleep(0.05)
-        breaker.failure()
-        LOGGER.warning("%s LLM call failed: %s", provider, last_error)
-        raise LLMUnavailable(f"{provider} LLM call unavailable") from last_error
+        try:
+            async with asyncio.timeout(timeout):
+                result = await operation()
+        except Exception as exc:
+            # Provider failures collapse to one typed application error. There is no
+            # application retry: deterministic routing/fallback can resume immediately.
+            breaker.failure()
+            LOGGER.warning("%s LLM call failed: %s", provider, exc)
+            raise LLMUnavailable(f"{provider} LLM call unavailable") from exc
+        breaker.success()
+        return result
 
     async def classify_intent(self, message: str) -> str:
         """Classify intent with Groq, returning only a supported label."""
@@ -150,18 +148,18 @@ class LLMClient:
                     {"role": "user", "content": message[:1_500]},
                 ],
             )
-            return (response.choices[0].message.content or "").strip().lower()
+            label = (response.choices[0].message.content or "").strip().lower()
+            if label not in VALID_INTENTS:
+                raise ValueError("Intent provider returned an unsupported label")
+            return label
 
-        label = await self._bounded_call("groq", timeout, operation)
-        if label not in VALID_INTENTS:
-            raise LLMUnavailable("Intent provider returned an unsupported label")
-        return label
+        return await self._bounded_call("groq", timeout, operation)
 
     def _synthesis_provider(self) -> str:
         return "openai" if getattr(self.settings, "openai_api_key", None) else "groq"
 
     async def synthesize(self, prompt: str) -> str:
-        """Return one short grounded answer, with a strict timeout and one retry."""
+        """Return one short grounded answer with one strict wall-clock deadline."""
 
         provider = self._synthesis_provider()
         timeout = float(getattr(self.settings, "llm_synthesis_timeout_seconds", 5.0))
@@ -187,12 +185,12 @@ class LLMClient:
                         {"role": "user", "content": prompt[:8_000]},
                     ],
                 )
-            return (response.choices[0].message.content or "").strip()
+            answer = (response.choices[0].message.content or "").strip()
+            if not answer:
+                raise ValueError("Synthesis provider returned an empty answer")
+            return answer
 
-        answer = await self._bounded_call(provider, timeout, operation)
-        if not answer:
-            raise LLMUnavailable("Synthesis provider returned an empty answer")
-        return answer
+        return await self._bounded_call(provider, timeout, operation)
 
     async def stream_synthesis(self, prompt: str) -> AsyncIterator[str]:
         """Yield provider deltas as they arrive; no buffer-then-flush behavior."""
@@ -205,25 +203,9 @@ class LLMClient:
 
         async def open_stream():
             if provider == "openai":
-                return await asyncio.wait_for(
-                    self._openai_client().chat.completions.create(
-                        model=getattr(
-                            self.settings, "openai_synthesis_model", "gpt-4.1-mini"
-                        ),
-                        temperature=0.2,
-                        max_tokens=220,
-                        stream=True,
-                        messages=[
-                            {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
-                            {"role": "user", "content": prompt[:8_000]},
-                        ],
-                    ),
-                    timeout=timeout,
-                )
-            return await asyncio.wait_for(
-                self._groq_client().chat.completions.create(
+                return await self._openai_client().chat.completions.create(
                     model=getattr(
-                        self.settings, "groq_synthesis_model", "llama-3.3-70b-versatile"
+                        self.settings, "openai_synthesis_model", "gpt-4.1-mini"
                     ),
                     temperature=0.2,
                     max_tokens=220,
@@ -232,33 +214,46 @@ class LLMClient:
                         {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
                         {"role": "user", "content": prompt[:8_000]},
                     ],
+                )
+            return await self._groq_client().chat.completions.create(
+                model=getattr(
+                    self.settings, "groq_synthesis_model", "llama-3.3-70b-versatile"
                 ),
-                timeout=timeout,
+                temperature=0.2,
+                max_tokens=220,
+                stream=True,
+                messages=[
+                    {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt[:8_000]},
+                ],
             )
 
-        last_error: Exception | None = None
-        for attempt in range(2):
-            try:
+        deadline = asyncio.get_running_loop().time() + timeout
+        try:
+            # One absolute deadline covers connection setup and every streamed delta.
+            # Each timeout context exits before yielding so its cancellation cannot leak into
+            # caller work performed between tokens; all pulls still share the same deadline.
+            async with asyncio.timeout_at(deadline):
                 stream = await open_stream()
-                async with asyncio.timeout(timeout):
-                    async for chunk in stream:
-                        token = chunk.choices[0].delta.content or ""
-                        if token:
-                            emitted = True
-                            yield token
-                breaker.success()
-                return
-            except Exception as exc:
-                last_error = exc
-                if not emitted and attempt == 0:
-                    await asyncio.sleep(0.05)
-                    continue
-                break
-
-        breaker.failure()
-        LOGGER.warning("%s streaming call failed: %s", provider, last_error)
-        suffix = " after output began" if emitted else ""
-        raise LLMUnavailable(f"{provider} streaming unavailable{suffix}") from last_error
+            iterator = stream.__aiter__()
+            while True:
+                try:
+                    if asyncio.get_running_loop().time() >= deadline:
+                        raise TimeoutError
+                    async with asyncio.timeout_at(deadline):
+                        chunk = await anext(iterator)
+                except StopAsyncIteration:
+                    break
+                token = chunk.choices[0].delta.content or ""
+                if token:
+                    emitted = True
+                    yield token
+        except Exception as exc:
+            breaker.failure()
+            LOGGER.warning("%s streaming call failed: %s", provider, exc)
+            suffix = " after output began" if emitted else ""
+            raise LLMUnavailable(f"{provider} streaming unavailable{suffix}") from exc
+        breaker.success()
 
     async def health(self) -> dict[str, Any]:
         """Probe configured provider APIs with a short, token-free models request."""

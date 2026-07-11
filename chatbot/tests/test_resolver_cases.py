@@ -426,7 +426,11 @@ class FakeStreamingLLM:
 @pytest.mark.asyncio
 async def test_llm_backed_sse_emits_real_deltas_before_final_payload() -> None:
     service = await ChatbotService.create(
-        Settings(redis_url=None, lead_prompt_after_turn=100),
+        Settings(
+            redis_url=None,
+            lead_prompt_after_turn=100,
+            enable_answer_synthesis=True,
+        ),
         session_store=MemorySessionStore(),
         llm=FakeStreamingLLM(),
     )
@@ -442,7 +446,11 @@ async def test_llm_backed_sse_emits_real_deltas_before_final_payload() -> None:
 @pytest.mark.asyncio
 async def test_slow_stream_cannot_overwrite_a_newer_session_turn() -> None:
     service = await ChatbotService.create(
-        Settings(redis_url=None, lead_prompt_after_turn=100),
+        Settings(
+            redis_url=None,
+            lead_prompt_after_turn=100,
+            enable_answer_synthesis=True,
+        ),
         session_store=MemorySessionStore(),
         llm=FakeStreamingLLM(),
     )

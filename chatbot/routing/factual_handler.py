@@ -119,7 +119,7 @@ async def handle_factual(
     if selected_topic == "about" and llm is not None and use_llm:
         text = await _synthesized_overview(focused_entity, llm)
     if not text:
-        text = render_topic(selected_topic, focused_entity)
+        text = render_topic(selected_topic, focused_entity, catalog=catalog)
 
     chips = suggested_chips(focused_entity, selected_topic)
     if not chips:

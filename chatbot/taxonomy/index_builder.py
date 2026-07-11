@@ -245,7 +245,10 @@ def _acronyms(name: str) -> set[str]:
         "".join(token[0] for token in filtered),
         "".join(token[0] for token in institutional),
     }
-    return {item for item in result if item}
+    # Single-letter auto-acronyms turn ordinary articles into universities (for
+    # example, "a budget" resolving to Amity). Curated one-letter aliases, if ever
+    # needed, still remain available through the alias table.
+    return {item for item in result if len(item) >= 2}
 
 
 def _freeze_set_map(values: Mapping[str, set[str]]) -> Mapping[str, frozenset[str]]:

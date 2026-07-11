@@ -104,6 +104,12 @@ async def dispatch_route(
     *,
     candidates: Sequence[Any] | None = None,
     categories: Sequence[str] | None = None,
+    universities: Sequence[Any] | None = None,
+    entity_ids: Sequence[str] | None = None,
+    common_category: str | None = None,
+    specializations: Sequence[Sequence[Any]] | None = None,
+    allow_single_university: bool = False,
+    advisory_candidate_ids: Sequence[str] | None = None,
     entity: Any = None,
     topic: str | None = None,
 ) -> ResponsePayload:
@@ -128,7 +134,20 @@ async def dispatch_route(
             slot_type=_value(pending, "slot_type"),
         )
     if route_name == "comparison":
-        return await handle_comparison(**common, categories=categories)
+        return await handle_comparison(
+            **common,
+            categories=categories,
+            universities=universities,
+            entity_ids=entity_ids,
+            common_category=common_category,
+            specializations=specializations,
+            allow_single_university=allow_single_university,
+        )
+    if route_name == "advisory":
+        return await handle_advisory(
+            **common,
+            candidate_ids=advisory_candidate_ids,
+        )
     if route_name == "factual":
         return await handle_factual(**common, entity=entity, topic=topic)
     if route_name == "knowledge":
