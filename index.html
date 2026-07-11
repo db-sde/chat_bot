@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DegreeBaba Chatbot API Explorer</title>
+    
+    <!-- Google Fonts for premium typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg: #090d16;
+            --bg-gradient: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #090d16 60%);
+            --surface: rgba(17, 24, 39, 0.7);
+            --surface-hover: rgba(31, 41, 55, 0.8);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(255, 255, 255, 0.15);
+            --text: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent-primary: #38bdf8;
+            --accent-secondary: #c084fc;
+            --accent-gradient: linear-gradient(135deg, #38bdf8 0%, #a855f7 100%);
+            --success: #4ade80;
+            --error: #f87171;
+            --warning: #fbbf24;
+            --radius-lg: 16px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
+            --glow: 0 0 20px rgba(56, 189, 248, 0.15);
+            --font-display: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+            --font-sans: 'Inter', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg);
+            background-image: var(--bg-gradient);
+            color: var(--text);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            letter-spacing: -0.01em;
+        }
+
+        /* Subtle grid background overlay */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+            background-size: 40px 40px;
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        /* Header */
+        .header {
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            background: rgba(10, 15, 30, 0.8);
+            border-bottom: 1px solid var(--border);
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            z-index: 10;
+        }
+
+        .header-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header h1 {
+            font-family: var(--font-display);
+            font-size: 1.4rem;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: all 0.3s ease;
+        }
+        .status-dot.online {
+            background: var(--success);
+            box-shadow: 0 0 10px var(--success);
+        }
+        .status-dot.offline {
+            background: var(--error);
+            box-shadow: 0 0 10px var(--error);
+        }
+
+        .server-input-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            padding: 4px 6px 4px 14px;
+            border-radius: var(--radius-md);
+            flex: 1;
+            max-width: 500px;
+            transition: border-color 0.2s;
+        }
+        .server-input-group:focus-within {
+            border-color: var(--accent-primary);
+            box-shadow: var(--glow);
+        }
+
+        .server-input-group label {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            white-space: nowrap;
+        }
+
+        .server-input-group input {
+            background: transparent;
+            border: none;
+            color: var(--text);
+            padding: 6px 0;
+            font-size: 0.9rem;
+            flex: 1;
+            font-family: monospace;
+            outline: none;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn {
+            background: var(--accent-gradient);
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-family: var(--font-sans);
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(56, 189, 248, 0.25);
+        }
+        .btn:hover {
+            transform: translateY(-1.5px);
+            box-shadow: 0 6px 16px rgba(56, 189, 248, 0.35);
+        }
+        .btn:active {
+            transform: translateY(0);
+        }
+        .btn.secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text);
+            border: 1px solid var(--border);
+            box-shadow: none;
+        }
+        .btn.secondary:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--border-hover);
+            box-shadow: none;
+        }
+        .btn.small {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            border-radius: var(--radius-sm);
+        }
+
+        /* Main Container */
+        .main {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 320px;
+            background: rgba(10, 15, 30, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-right: 1px solid var(--border);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            overflow-y: auto;
+        }
+
+        .sidebar-section h3 {
+            font-family: var(--font-display);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .quick-test {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+        .quick-test:hover {
+            border-color: var(--accent-primary);
+            background: rgba(56, 189, 248, 0.05);
+            transform: scale(1.02);
+        }
+        .quick-test .label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+            margin-bottom: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .quick-test .query {
+            font-size: 0.875rem;
+            color: var(--text);
+            line-height: 1.4;
+        }
+
+        /* Request Logs styling */
+        .log-panel {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            font-family: 'Fira Code', 'Courier New', Courier, monospace;
+            font-size: 0.75rem;
+            overflow-y: auto;
+            flex: 1;
+            min-height: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .log-entry {
+            padding: 8px;
+            border-radius: var(--radius-sm);
+            background: rgba(255, 255, 255, 0.01);
+            border-left: 3px solid var(--border);
+            animation: fadeIn 0.2s ease;
+        }
+        .log-entry.req { border-left-color: var(--accent-primary); }
+        .log-entry.res { border-left-color: var(--success); }
+        .log-entry.err { border-left-color: var(--error); background: rgba(248, 113, 113, 0.05); }
+
+        .log-time {
+            color: var(--text-muted);
+            font-size: 0.65rem;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        .log-header {
+            font-weight: 600;
+            margin-bottom: 4px;
+            word-break: break-all;
+        }
+        .log-body {
+            color: var(--text-muted);
+            word-break: break-all;
+            white-space: pre-wrap;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        /* CORS Banner & Warnings */
+        .cors-alert {
+            display: none;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.25);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            margin-bottom: 16px;
+            animation: slideDown 0.3s ease;
+        }
+        @keyframes slideDown {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .cors-alert.active {
+            display: block;
+        }
+        .cors-alert h4 {
+            font-family: var(--font-display);
+            font-size: 1.05rem;
+            color: var(--error);
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .cors-alert p {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            line-height: 1.5;
+            margin-bottom: 12px;
+        }
+        .cors-option {
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: var(--radius-md);
+            margin-bottom: 8px;
+        }
+        .cors-option-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--accent-primary);
+            margin-bottom: 6px;
+        }
+        .cors-code {
+            background: #000;
+            color: var(--success);
+            padding: 8px 12px;
+            border-radius: var(--radius-sm);
+            font-family: monospace;
+            font-size: 0.75rem;
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .copy-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: var(--text);
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .copy-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Chat Window */
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 32px;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        .messages-wrapper {
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            padding-right: 8px;
+        }
+
+        .messages {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .message {
+            max-width: 75%;
+            padding: 16px 20px;
+            border-radius: var(--radius-lg);
+            line-height: 1.6;
+            animation: fadeIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            font-size: 0.95rem;
+            word-wrap: break-word;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: var(--accent-gradient);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 15px rgba(168, 85, 247, 0.15);
+        }
+
+        .message.bot {
+            align-self: flex-start;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .message-meta {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Chips */
+        .chips-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .chip {
+            background: rgba(56, 189, 248, 0.08);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            color: var(--accent-primary);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+        }
+        .chip:hover {
+            background: var(--accent-primary);
+            color: #000;
+            transform: translateY(-1px);
+        }
+
+        /* CTA Button inside messages */
+        .cta-container {
+            margin-top: 14px;
+            display: block;
+        }
+        .cta-btn {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            border: none;
+            color: white;
+            padding: 10px 18px;
+            border-radius: var(--radius-md);
+            font-weight: 600;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 10px rgba(245, 158, 11, 0.2);
+        }
+        .cta-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 14px rgba(245, 158, 11, 0.3);
+        }
+
+        /* Typing indicator */
+        .typing-indicator {
+            display: none;
+            align-self: flex-start;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 14px 20px;
+            border-radius: var(--radius-lg);
+            border-bottom-left-radius: 4px;
+            margin-bottom: 8px;
+        }
+        .typing-indicator.active { display: block; }
+        .typing-indicator span {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: var(--accent-primary);
+            border-radius: 50%;
+            margin: 0 3px;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* Input Panel */
+        .input-panel {
+            background: rgba(10, 15, 30, 0.8);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 8px 12px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            margin-top: 16px;
+            box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .input-panel textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            padding: 12px;
+            font-size: 0.95rem;
+            resize: none;
+            height: 44px;
+            max-height: 120px;
+            font-family: inherit;
+            line-height: 1.4;
+            outline: none;
+        }
+        .input-panel textarea::placeholder { color: var(--text-muted); }
+
+        .input-panel .send-btn {
+            background: var(--accent-gradient);
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 10px rgba(56, 189, 248, 0.2);
+            flex-shrink: 0;
+        }
+        .input-panel .send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 14px rgba(56, 189, 248, 0.35);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.08); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.15); }
+
+        /* Responsive Layouts */
+        @media (max-width: 900px) {
+            .sidebar { display: none; }
+            .header { flex-direction: column; align-items: stretch; padding: 16px; }
+            .server-input-group { max-width: none; }
+            .chat-container { padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="header-logo">
+            <h1>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="url(#logoGrad)" stroke-width="2.5"><path d="M12 2a10 10 0 0 1 8 4 10 10 0 0 1 2 6c0 5.5-4.5 10-10 10S2 17.5 2 12A10 10 0 0 1 12 2zm0 4a6 6 0 1 0 0 12 6 6 0 0 0 0-12z"/></svg>
+                DegreeBaba Bot
+            </h1>
+            <svg style="width:0;height:0;position:absolute">
+                <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#38bdf8" />
+                    <stop offset="100%" stop-color="#a855f7" />
+                </linearGradient>
+            </svg>
+            <div class="status-badge">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText" style="margin-left: 4px;">Connecting</span>
+            </div>
+        </div>
+
+        <div class="server-input-group">
+            <label for="serverUrl">Endpoint:</label>
+            <!-- Defaulting to 8001 since the Python CORS proxy is running there -->
+            <input type="text" id="serverUrl" value="http://127.0.0.1:8001" placeholder="http://127.0.0.1:8001">
+        </div>
+
+        <div class="header-actions">
+            <button class="btn" onclick="checkHealth()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Health Check
+            </button>
+            <button class="btn secondary small" onclick="clearChat()">Clear Chat</button>
+        </div>
+    </div>
+
+    <div class="main">
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <h3>Catalog Quick Tests</h3>
+                <div class="quick-test" onclick="sendQuick('What is the fee for NMIMS MBA?')">
+                    <div class="label">Factual Query</div>
+                    <div class="query">"What is the fee for NMIMS MBA?"</div>
+                </div>
+                <div class="quick-test" onclick="sendQuick('Hi, I am looking for a course')">
+                    <div class="label">Advisory Lead</div>
+                    <div class="query">"Hi, I am looking for a course"</div>
+                </div>
+            </div>
+
+            <div class="sidebar-section" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                <h3>Execution Inspector</h3>
+                <div class="log-panel" id="logPanel"></div>
+            </div>
+        </aside>
+
+        <div class="chat-container">
+            <!-- CORS diagnostic alert banner -->
+            <div class="cors-alert" id="corsAlert">
+                <h4>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    CORS Connection Issue Detected
+                </h4>
+                <p>Browsers restrict requests to localhost servers from other origins unless CORS headers are returned. We have set up three ways to get connected:</p>
+                
+                <div class="cors-option">
+                    <div class="cors-option-title">Option A: Python CORS Proxy (Running)</div>
+                    <p style="margin-bottom:0">We started a local proxy server on port <b>8001</b> that adds the missing headers. Ensure your endpoint above is set to <code>http://127.0.0.1:8001</code>.</p>
+                </div>
+                
+                <div class="cors-option">
+                    <div class="cors-option-title">Option B: Browser Extension (Recommended)</div>
+                    <p style="margin-bottom:0">Install the Chrome extension <a href="https://chromewebstore.google.com/detail/allow-cors-access-control/lhbhbcehphbhgbnphjjeajiejccbopbk" target="_blank" style="color:var(--accent-primary);text-decoration:none;font-weight:600">Allow CORS: Access-Control-Allow-Origin</a> and activate it.</p>
+                </div>
+
+                <div class="cors-option">
+                    <div class="cors-option-title">Option C: Disable Chrome Web Security (macOS)</div>
+                    <div class="cors-code">
+                        <span>open -n -a /Applications/Google\ Chrome.app --args --user-data-dir="/tmp/chrome_dev_test" --disable-web-security</span>
+                        <button class="copy-btn" onclick="copyCorsCommand(this)">Copy</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="messages-wrapper">
+                <div class="messages" id="messages">
+                    <div class="message bot">
+                        <div>👋 Welcome to the DegreeBaba catalog explorer assistant! Ask any questions about university, course, eligibility, specializations, or fee details.</div>
+                        <div class="message-meta">
+                            <span>System</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="typing-indicator" id="typingIndicator">
+                <span></span><span></span><span></span>
+            </div>
+
+            <div class="input-panel">
+                <textarea 
+                    id="messageInput" 
+                    placeholder="Ask about NMIMS, BBA, courses, eligibility or fees..." 
+                    rows="1"
+                    onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendMessage();}"
+                ></textarea>
+                <button class="send-btn" onclick="sendMessage()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const serverUrlInput = document.getElementById('serverUrl');
+        const messagesEl = document.getElementById('messages');
+        const messagesWrapper = document.querySelector('.messages-wrapper');
+        const typingEl = document.getElementById('typingIndicator');
+        const inputEl = document.getElementById('messageInput');
+        const logPanel = document.getElementById('logPanel');
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const corsAlert = document.getElementById('corsAlert');
+
+        // Session ID persistence
+        let sessionId = sessionStorage.getItem('degreebaba_session_id') || '';
+
+        function getBaseUrl() {
+            return serverUrlInput.value.replace(/\/$/, '');
+        }
+
+        function log(type, url, details = '') {
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            
+            let headerText = '';
+            if (type === 'req') headerText = `📤 Request: ${url}`;
+            else if (type === 'res') headerText = `📥 Response: ${url}`;
+            else headerText = `❌ Error: ${url}`;
+
+            entry.innerHTML = `
+                <div class="log-time">${time}</div>
+                <div class="log-header">${escapeHtml(headerText)}</div>
+                ${details ? `<div class="log-body">${escapeHtml(details)}</div>` : ''}
+            `;
+            logPanel.insertBefore(entry, logPanel.firstChild);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function copyCorsCommand(btn) {
+            const code = btn.previousElementSibling.textContent;
+            navigator.clipboard.writeText(code);
+            btn.textContent = 'Copied!';
+            setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+        }
+
+        function addMessage(text, sender, meta = '', chips = [], cta = null) {
+            const msg = document.createElement('div');
+            msg.className = `message ${sender}`;
+            
+            let contentHTML = `<div>${escapeHtml(text)}</div>`;
+            
+            // Add suggested chips
+            if (chips && chips.length > 0) {
+                contentHTML += `<div class="chips-container">`;
+                chips.forEach(chipText => {
+                    contentHTML += `<span class="chip" onclick="sendQuick('${chipText.replace(/'/g, "\\'")}')">${escapeHtml(chipText)}</span>`;
+                });
+                contentHTML += `</div>`;
+            }
+
+            // Add call to action button
+            if (cta && cta.label) {
+                contentHTML += `
+                    <div class="cta-container">
+                        <button class="cta-btn" onclick="handleCta('${cta.action}')">
+                            <span>${escapeHtml(cta.label)}</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                        </button>
+                    </div>
+                `;
+            }
+
+            msg.innerHTML = contentHTML + `
+                <div class="message-meta">
+                    <span>${sender === 'user' ? 'You' : 'DegreeBaba Assistant'}</span>
+                    ${meta ? `<span style="opacity: 0.75">&bull; ${escapeHtml(meta)}</span>` : ''}
+                </div>
+            `;
+            
+            messagesEl.appendChild(msg);
+            messagesWrapper.scrollTop = messagesWrapper.scrollHeight;
+            return msg;
+        }
+
+        function handleCta(action) {
+            if (action === 'lead_capture' || action === 'start_lead_capture') {
+                sendQuick("Talk to a counsellor");
+            } else {
+                addMessage("Initiating support context...", "bot", "System");
+            }
+        }
+
+        function clearChat() {
+            messagesEl.innerHTML = '';
+            sessionStorage.removeItem('degreebaba_session_id');
+            sessionId = '';
+            log('req', 'System', 'Conversation context reset, session cleared.');
+            addMessage("👋 Welcome! Chat cleared. Start typing your query below.", "bot", "System");
+        }
+
+        async function checkHealth(silent = false) {
+            const baseUrl = getBaseUrl();
+            const url = `${baseUrl}/health`;
+            if (!silent) log('req', 'GET /health');
+            
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                if (!silent) log('res', 'GET /health', JSON.stringify(data, null, 2));
+                
+                if (res.ok && (data.status === 'ok' || data.status === 'degraded')) {
+                    statusDot.className = 'status-dot online';
+                    statusText.textContent = data.status === 'ok' ? 'Healthy' : 'Degraded';
+                    corsAlert.classList.remove('active');
+                    return true;
+                } else {
+                    statusDot.className = 'status-dot offline';
+                    statusText.textContent = 'Unreachable';
+                    return false;
+                }
+            } catch (err) {
+                statusDot.className = 'status-dot offline';
+                statusText.textContent = 'Offline';
+                if (!silent) log('err', 'GET /health', err.message);
+                
+                // Show CORS warning
+                corsAlert.classList.add('active');
+                return false;
+            }
+        }
+
+        function sendQuick(query) {
+            inputEl.value = query;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const message = inputEl.value.trim();
+            if (!message) return;
+
+            inputEl.value = '';
+            addMessage(message, 'user');
+            typingEl.classList.add('active');
+
+            const baseUrl = getBaseUrl();
+            const url = `${baseUrl}/chat`;
+            const payload = { message };
+            if (sessionId) {
+                payload.session_id = sessionId;
+            }
+            const body = JSON.stringify(payload);
+
+            log('req', 'POST /chat', body);
+
+            // Create streaming placeholder
+            const botMsg = addMessage('Thinking...', 'bot', 'analyzing...');
+            const textContainer = botMsg.querySelector('div');
+            
+            let fullResponseText = '';
+            let chips = [];
+            let cta = null;
+            let decoder = new TextDecoder();
+            let sseBuffer = '';
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: body
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+                }
+
+                corsAlert.classList.remove('active');
+                const reader = response.body.getReader();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    sseBuffer += decoder.decode(value, { stream: true });
+                    
+                    // Parse Server-Sent Events from the buffered text
+                    let boundary = sseBuffer.indexOf('\n\n');
+                    while (boundary !== -1) {
+                        const messageBlock = sseBuffer.substring(0, boundary);
+                        sseBuffer = sseBuffer.substring(boundary + 2);
+
+                        let eventType = '';
+                        let dataStr = '';
+                        const lines = messageBlock.split('\n');
+                        
+                        for (const line of lines) {
+                            if (line.startsWith('event:')) {
+                                eventType = line.substring(6).trim();
+                            } else if (line.startsWith('data:')) {
+                                dataStr = line.substring(5).trim();
+                            }
+                        }
+
+                        if (eventType && dataStr) {
+                            try {
+                                const parsed = JSON.parse(dataStr);
+                                
+                                if (parsed.session_id) {
+                                    sessionId = parsed.session_id;
+                                    sessionStorage.setItem('degreebaba_session_id', sessionId);
+                                }
+
+                                if (eventType === 'token' && parsed.token) {
+                                    if (fullResponseText === 'Thinking...') {
+                                        fullResponseText = '';
+                                    }
+                                    fullResponseText += parsed.token;
+                                    textContainer.textContent = fullResponseText;
+                                    messagesWrapper.scrollTop = messagesWrapper.scrollHeight;
+                                    
+                                } else if (eventType === 'response') {
+                                    fullResponseText = parsed.text || '';
+                                    chips = parsed.suggested_chips || [];
+                                    cta = parsed.cta || null;
+                                }
+                            } catch (e) {
+                                console.warn("Failed to parse SSE JSON block", e);
+                            }
+                        }
+                        
+                        boundary = sseBuffer.indexOf('\n\n');
+                    }
+                }
+
+                // Finalize streaming output
+                log('res', 'POST /chat', `Complete! Text length: ${fullResponseText.length}`);
+                
+                // Replace message contents with the structured response including chips and CTA
+                let finalHTML = `<div>${escapeHtml(fullResponseText)}</div>`;
+                
+                if (chips && chips.length > 0) {
+                    finalHTML += `<div class="chips-container">`;
+                    chips.forEach(chipText => {
+                        finalHTML += `<span class="chip" onclick="sendQuick('${chipText.replace(/'/g, "\\'")}')">${escapeHtml(chipText)}</span>`;
+                    });
+                    finalHTML += `</div>`;
+                }
+
+                if (cta && cta.label) {
+                    finalHTML += `
+                        <div class="cta-container">
+                            <button class="cta-btn" onclick="handleCta('${cta.action}')">
+                                <span>${escapeHtml(cta.label)}</span>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+                            </button>
+                        </div>
+                    `;
+                }
+
+                botMsg.innerHTML = finalHTML + `
+                    <div class="message-meta">
+                        <span>DegreeBaba Assistant</span>
+                        <span style="opacity: 0.75">&bull; ready</span>
+                    </div>
+                `;
+                messagesWrapper.scrollTop = messagesWrapper.scrollHeight;
+
+            } catch (err) {
+                log('err', 'POST /chat', err.message);
+                textContainer.innerHTML = `<span style="color:var(--error)">⚠️ Connect Error: ${escapeHtml(err.message)}</span>`;
+                corsAlert.classList.add('active');
+            } finally {
+                typingEl.classList.remove('active');
+                checkHealth(true); // check status silently to keep indicators in sync
+            }
+        }
+
+        // Initialize health check
+        setTimeout(() => checkHealth(true), 500);
+    </script>
+</body>
+</html>
