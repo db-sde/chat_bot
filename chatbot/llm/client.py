@@ -16,7 +16,14 @@ from llm.prompts import INTENT_SYSTEM_PROMPT, SYNTHESIS_SYSTEM_PROMPT
 
 LOGGER = logging.getLogger(__name__)
 T = TypeVar("T")
-VALID_INTENTS = {"factual", "comparison", "advisory", "discovery", "chitchat"}
+VALID_INTENTS = {
+    "factual",
+    "comparison",
+    "advisory",
+    "discovery",
+    "chitchat",
+    "unrelated",
+}
 
 
 class LLMUnavailable(RuntimeError):

@@ -8,7 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 PageType = Literal["university", "course", "specialization"]
 SlotType = Literal["university", "course", "specialization"]
-Intent = Literal["factual", "comparison", "advisory", "discovery", "chitchat"]
+Intent = Literal[
+    "factual",
+    "comparison",
+    "advisory",
+    "discovery",
+    "chitchat",
+    "unrelated",
+]
 Confidence = Literal["HIGH", "MEDIUM"]
 
 

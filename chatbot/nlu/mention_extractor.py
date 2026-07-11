@@ -23,6 +23,14 @@ REFERENCE_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
         "entity",
         re.compile(r"\b(?:it|this\s+one|that\s+one|this\s+program)\b", re.IGNORECASE),
     ),
+    (
+        "course",
+        re.compile(
+            r"\b(?:for\s+)?which\s+(?:uni(?:versity)?|universities)\b|"
+            r"\bwho\s+offers\s+(?:this|it)\b",
+            re.IGNORECASE,
+        ),
+    ),
 )
 
 
@@ -66,10 +74,28 @@ def extract_mentions(message: str, matcher: Any) -> MentionResult:
     """Resolve all slot types independently and retain every candidate."""
 
     tokens = tokenize(message)
+    courses = list(matcher.resolve_slot(tokens, "course"))
+    specializations = list(matcher.resolve_slot(tokens, "specialization"))
+    high_category_spans = [
+        (candidate.start, candidate.end)
+        for candidate in courses
+        if getattr(candidate, "confidence", None) == "HIGH"
+    ]
+    # Category scope wins only where its matched interval contains the specialization
+    # interval. Disjoint evidence such as "MBA Marketing" must remain independently usable.
+    specializations = [
+        candidate
+        for candidate in specializations
+        if not any(
+            start <= getattr(candidate, "start", 0)
+            and getattr(candidate, "end", 0) <= end
+            for start, end in high_category_spans
+        )
+    ]
     return MentionResult(
         universities=list(matcher.resolve_slot(tokens, "university")),
-        courses=list(matcher.resolve_slot(tokens, "course")),
-        specializations=list(matcher.resolve_slot(tokens, "specialization")),
+        courses=courses,
+        specializations=specializations,
         reference=detect_reference(message),
         tokens=tokens,
     )

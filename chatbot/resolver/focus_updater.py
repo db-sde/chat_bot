@@ -47,6 +47,8 @@ def _coerce_candidate(item: object, slot_type: str) -> Candidate:
         slot_type=slot_type,  # type: ignore[arg-type]
         canonical_name=canonical,
         score=_value(item, "score"),
+        start=int(_value(item, "start", 0)),
+        end=int(_value(item, "end", 0)),
     )
 
 

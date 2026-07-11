@@ -44,6 +44,24 @@ from taxonomy.index_builder import TaxonomyIndexes, build_indexes
 
 LOGGER = logging.getLogger(__name__)
 
+_PRODUCT_LANGUAGE_RE = re.compile(
+    r"\b(?:about|accreditation|admission|career|choose|compare|course|degree|"
+    r"duration|eligibility|explain|fees?|guidance|help|online|placement|program|"
+    r"ratings?|reviews?|speciali[sz]ation|tell|uni(?:versity)?|offers?|validity|"
+    r"what|which|who|why|how|mba|mca|bba|bca)\b",
+    re.IGNORECASE,
+)
+
+
+def _looks_like_product_turn(message: str, mentions: Any) -> bool:
+    return bool(
+        _PRODUCT_LANGUAGE_RE.search(message)
+        or "?" in message
+        or knowledge_topic(message)
+        or getattr(mentions, "has_explicit_mentions", False)
+        or getattr(mentions, "reference", None)
+    )
+
 
 @dataclass(slots=True)
 class TurnResult:
@@ -198,6 +216,59 @@ class ChatbotService:
             tl.info("chatbot.routing", "route: lead (callback)")
             return TurnResult(session_id, state, payload, "lead")
 
+        # A pending lead field gets first refusal before catalog clarification or intent
+        # classification. Validation is non-mutating until entity/product evidence has had
+        # a chance to protect name-shaped queries such as "Sikkim".
+        preview_mentions = None
+        captured_pending_fields: list[str] = []
+        captured_standalone = False
+        pending_answer = self.lead_funnel.inspect_pending_answer(state, chat.message)
+        if pending_answer is not None:
+            preview_mentions = extract_mentions(chat.message, self.matcher)
+            product_turn = _looks_like_product_turn(chat.message, preview_mentions)
+            deferral = self.lead_funnel.is_deferral(chat.message)
+            name_is_product = pending_answer.field == "name" and product_turn
+
+            if pending_answer.valid and not deferral and not name_is_product:
+                captured_pending_fields = self.lead_funnel.commit_pending_answer(
+                    state,
+                    pending_answer,
+                )
+                # Persist the lead snapshot before any downstream NLU/routing failure can
+                # diverge session state from the CRM event that was just scheduled.
+                await self.session_store.set(state)
+                captured_standalone = not product_turn
+                tl.info(
+                    "chatbot.leads",
+                    "pending %s captured before NLU",
+                    pending_answer.field,
+                )
+            elif not product_turn and not deferral:
+                payload = self.lead_funnel.invalid_pending_response(pending_answer.field)
+                await self._persist_result(state, payload)
+                tl.info(
+                    "chatbot.routing",
+                    "route: lead (invalid pending %s)",
+                    pending_answer.field,
+                )
+                return TurnResult(session_id, state, payload, "lead")
+
+        if captured_standalone:
+            # Still exercise intent/entity NLU so a future recognizer improvement cannot make
+            # a lead reply silently steal a product question. The response remains lead-only
+            # because this turn contains no current product evidence.
+            intent_start = time.monotonic()
+            intent = await classify_intent(chat.message, self.llm)
+            intent_ms = (time.monotonic() - intent_start) * 1000
+            tl.info("chatbot.nlu", "intent: %s (%.0fms)", intent.value, intent_ms)
+            payload = self.lead_funnel.captured_reply_response(
+                state,
+                captured_pending_fields,
+            )
+            await self._persist_result(state, payload)
+            tl.info("chatbot.routing", "route: lead (pending answer captured)")
+            return TurnResult(session_id, state, payload, "lead")
+
         # Step 3: an offered clarification is resolved before all ordinary NLU.
         pending = resolve_pending_clarification(
             chat.message,
@@ -233,33 +304,6 @@ class ChatbotService:
             await self._persist_result(state, payload)
             tl.info("chatbot.routing", "route: clarification (still pending)")
             return TurnResult(session_id, state, payload, "clarification")
-
-        # A direct answer to the lead funnel remains a lead-only turn. Product questions
-        # take the normal path and the lead ask is re-surfaced later.
-        lead_reply_candidate = self.lead_funnel.is_standalone_lead_reply(
-            state,
-            chat.message,
-            allow_lowercase_name=True,
-        )
-        product_markers = re.search(
-            r"\b(?:about|accreditation|admission|career|choose|compare|course|degree|"
-            r"duration|eligibility|explain|fees?|guidance|help|online|placement|program|"
-            r"speciali[sz]ation|tell|university|validity|what|which|why|how)\b",
-            chat.message,
-            re.IGNORECASE,
-        )
-        preview_mentions = (
-            extract_mentions(chat.message, self.matcher) if lead_reply_candidate else None
-        )
-        lead_reply_is_product = bool(
-            product_markers
-            or knowledge_topic(chat.message)
-            or (preview_mentions and preview_mentions.has_explicit_mentions)
-        )
-        if lead_reply_candidate and not lead_reply_is_product:
-            payload = self.lead_funnel.lead_reply_response(state, chat.message)
-            await self._persist_result(state, payload)
-            return TurnResult(session_id, state, payload, "lead")
 
         # Step 4: intent and three slot matchers remain independent until focus arbitration.
         previous_assistant = next(
@@ -297,7 +341,7 @@ class ChatbotService:
         intent_ms = (time.monotonic() - intent_start) * 1000
         tl.info("chatbot.nlu", "intent: %s (%.0fms)", intent.value, intent_ms)
 
-        mentions = extract_mentions(chat.message, self.matcher)
+        mentions = preview_mentions or extract_mentions(chat.message, self.matcher)
         # Log per-slot mention results.
         for slot, candidates in [
             ("university", mentions.universities),
@@ -349,24 +393,13 @@ class ChatbotService:
             category_index=self.indexes.category_index,
         )
 
-        # --- Bug 2.3 fix: off-topic turns must not reuse stale focus ---
-        # When no entities are mentioned and the message isn't referential,
-        # distinguish bare follow-ups ("what is the fee?") from off-topic
-        # messages ("what is the value of pi?") using domain keywords.
-        # The heuristic intent classifier defaults to FACTUAL for everything
-        # it doesn't recognise, so intent alone cannot distinguish off-topic.
-        if (
-            not mentions.has_explicit_mentions
-            and not mentions.reference
-            and topic_from_message(chat.message) == "about"
-            and not domain_topic
-        ):
-            # "about" is the default/fallback topic — no domain keyword matched.
-            # This is genuinely off-topic; clear focus to prevent stale answers.
+        # Only a confident unrelated signal may discard catalog focus. Entityless factual,
+        # comparison, discovery, and advisory follow-ups inherit focus normally.
+        if intent is Intent.UNRELATED:
             state.focus.clear()
             tl.info(
                 "chatbot.resolver",
-                "focus: cleared (off-topic, no entities, no domain keywords)",
+                "focus: cleared (intent=unrelated)",
             )
 
         decision = clarify(state, update, indexes=self.indexes)

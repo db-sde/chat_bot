@@ -15,6 +15,7 @@ class Intent(StrEnum):
     ADVISORY = "advisory"
     DISCOVERY = "discovery"
     CHITCHAT = "chitchat"
+    UNRELATED = "unrelated"
 
 
 _CHITCHAT = re.compile(
@@ -33,6 +34,12 @@ _DISCOVERY = re.compile(
     r"\b(?:what\s+(?:courses|programs|universities)\s+(?:are|do\s+you\s+have)|show\s+me\s+(?:courses|programs|universities)|explore|browse|available\s+(?:courses|programs)|online\s+programs?)\b",
     re.IGNORECASE,
 )
+_UNRELATED = re.compile(
+    r"\b(?:value\s+of\s+pi|capital\s+of\s+[a-z]+|weather\s+(?:in|for)|"
+    r"cricket\s+score|tell\s+me\s+a\s+joke|recipe\s+for|who\s+is\s+the\s+"
+    r"(?:president|prime\s+minister)|solve\s+(?:this\s+)?(?:equation|integral))\b",
+    re.IGNORECASE,
+)
 
 
 def heuristic_intent(message: str) -> Intent:
@@ -45,6 +52,8 @@ def heuristic_intent(message: str) -> Intent:
         return Intent.ADVISORY
     if _DISCOVERY.search(text):
         return Intent.DISCOVERY
+    if _UNRELATED.search(text):
+        return Intent.UNRELATED
     return Intent.FACTUAL
 
 

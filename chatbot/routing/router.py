@@ -62,6 +62,8 @@ def select_route(
         return "advisory"
     if selected_intent == "comparison":
         return "comparison"
+    if selected_intent in {"discovery", "chitchat"}:
+        return "discovery"
 
     entity_id = _value(focus, "entity_id")
     university = _value(focus, "university")
@@ -75,8 +77,6 @@ def select_route(
     if university or specialization:
         return "factual"
 
-    if selected_intent in {"discovery", "chitchat"}:
-        return "discovery"
     if selected_intent == "factual":
         return "knowledge"
     return "fallback"

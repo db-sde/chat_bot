@@ -21,6 +21,8 @@ class Candidate:
     slot_type: SlotType
     canonical_name: str
     score: float | None = None
+    start: int = 0
+    end: int = 0
 
 
 def _candidate_key(candidate: Candidate) -> tuple[int, int, int, float, str, str]:
@@ -67,6 +69,8 @@ class EntityMatcher:
                     slot_type=slot_type,
                     canonical_name=self.indexes.entity_names.get(entity_id, entity_id),
                     score=match.score,
+                    start=match.start,
+                    end=match.end,
                 )
                 previous = best_by_id.get(entity_id)
                 if previous is None or _candidate_key(candidate) < _candidate_key(previous):

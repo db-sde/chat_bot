@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from leads.crm_schema import CRMLeadEvent
@@ -12,7 +13,14 @@ from schemas import CTA, ResponsePayload
 
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[\s-]?)?([6-9]\d{9})(?!\d)")
+# A requested phone number is validated by the shape promised in the prompt. Keep the
+# stricter Indian-mobile pattern above for unsolicited numbers found in ordinary prose.
+PROMPTED_PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[\s-]?)?(\d{10})(?!\d)")
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z .'-]{1,49}$")
+LEAD_DEFERRAL_RE = re.compile(
+    r"^\s*(?:skip|not\s+now|maybe\s+later|later|no\s+thanks?|prefer\s+not\s+to)\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
 QUESTION_WORDS = {
     "about",
     "amity",
@@ -50,6 +58,29 @@ FIELD_ASKS = {
     "phone": "What phone number can our counsellor reach you on?",
     "email": "What email address should we send the details to?",
 }
+INVALID_FIELD_ASKS = {
+    "name": (
+        "That doesn't look like a valid name — could you share the name you'd like "
+        "our counsellor to use?"
+    ),
+    "phone": "That doesn't look like a valid phone number — could you share a 10-digit number?",
+    "email": (
+        "That doesn't look like a valid email address — could you share an address "
+        "such as name@example.com?"
+    ),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class PendingLeadAnswer:
+    """A non-mutating validation result for the field currently awaiting an answer."""
+
+    field: str
+    values: dict[str, str]
+
+    @property
+    def valid(self) -> bool:
+        return self.field in self.values
 
 
 class LeadFunnel:
@@ -79,12 +110,19 @@ class LeadFunnel:
     ) -> dict[str, str]:
         captured: dict[str, str] = {}
         email = EMAIL_RE.search(message)
-        phone = PHONE_RE.search(re.sub(r"[()\s-]", "", message))
+        compact_message = re.sub(r"[()\s-]", "", message)
+        phone_pattern = PROMPTED_PHONE_RE if expected == "phone" else PHONE_RE
+        phone = phone_pattern.search(compact_message)
         if email:
             captured["email"] = email.group(0).lower()
         if phone:
             captured["phone"] = phone.group(1)
-        if expected == "name" and allow_name and not captured:
+        if (
+            expected == "name"
+            and allow_name
+            and not captured
+            and not LEAD_DEFERRAL_RE.fullmatch(message)
+        ):
             explicit_name_prefix = bool(
                 re.match(r"^(?:i(?:'m| am)|my name is|this is)\s+", message.strip(), flags=re.I)
             )
@@ -112,6 +150,86 @@ class LeadFunnel:
             ):
                 captured["name"] = " ".join(part.capitalize() for part in value.split())
         return captured
+
+    def inspect_pending_answer(
+        self,
+        state: Any,
+        message: str,
+        *,
+        allow_lowercase_name: bool = True,
+    ) -> PendingLeadAnswer | None:
+        """Validate a pending field without mutating the session or firing the webhook."""
+
+        expected = getattr(state.lead, "last_asked_field", None)
+        if not expected:
+            return None
+        return PendingLeadAnswer(
+            field=expected,
+            values=self._extract(
+                message,
+                expected,
+                allow_lowercase_name=allow_lowercase_name,
+            ),
+        )
+
+    @staticmethod
+    def is_deferral(message: str) -> bool:
+        """Return whether the user explicitly deferred an outstanding lead question."""
+
+        return bool(LEAD_DEFERRAL_RE.fullmatch(message))
+
+    def commit_pending_answer(
+        self,
+        state: Any,
+        answer: PendingLeadAnswer,
+    ) -> list[str]:
+        """Commit a previously inspected valid answer and publish its CRM snapshot."""
+
+        if not answer.valid:
+            return []
+        changed: list[str] = []
+        for field, value in answer.values.items():
+            if value and getattr(state.lead, field, None) != value:
+                setattr(state.lead, field, value)
+                changed.append(field)
+        state.lead.last_asked_field = None
+        if changed:
+            self._schedule_push(state, changed)
+        return changed
+
+    @staticmethod
+    def invalid_pending_response(field: str) -> ResponsePayload:
+        """Build the field-specific retry that must never fall through to discovery."""
+
+        return ResponsePayload(
+            text=INVALID_FIELD_ASKS[field],
+            suggested_chips=[],
+            cta=CTA(label="Talk to a counsellor", action="lead_capture"),
+        )
+
+    def captured_reply_response(
+        self,
+        state: Any,
+        changed: list[str],
+    ) -> ResponsePayload:
+        """Acknowledge an already committed standalone answer without re-extracting it."""
+
+        field = self._next_missing(state.lead)
+        if field:
+            state.lead.last_asked_field = field
+            saved = changed[0] if changed else "detail"
+            text = f"Thanks, I've saved your {saved}. {FIELD_ASKS[field]}"
+        else:
+            state.lead.last_asked_field = None
+            text = (
+                "Thanks — I have your details. "
+                "A DegreeBaba counsellor can contact you shortly."
+            )
+        return ResponsePayload(
+            text=text,
+            suggested_chips=[],
+            cta=CTA(label="Continue exploring", action="continue_chat"),
+        )
 
     def capture(
         self,

@@ -84,7 +84,11 @@ def match_ngrams(
     matches: list[SpanMatch] = []
     covered: set[int] = set()
 
-    for size in (3, 2, 1):
+    longest_alias = max(
+        (len(alias.split()) for alias in indexes.alias_index.get(slot_type, {})),
+        default=3,
+    )
+    for size in range(min(len(tokens), max(3, longest_alias)), 0, -1):
         if len(tokens) < size:
             continue
         for start in range(len(tokens) - size + 1):
@@ -96,6 +100,10 @@ def match_ngrams(
             layer = 1
             score: float | None = None
             confidence = "HIGH"
+            # Canonical/ngram/fuzzy indexes are deliberately bounded to three tokens.
+            # Longer spans exist only for exact curated aliases such as the full MBA name.
+            if size > 3 and not entity_ids:
+                continue
             if not entity_ids:
                 entity_ids = indexes.acronym_index.get(slot_type, {}).get(span.replace(" ", ""))
                 layer = 2
