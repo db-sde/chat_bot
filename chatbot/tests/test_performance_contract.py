@@ -17,7 +17,7 @@ class CountingLLM:
         self.intent_calls = 0
         self.stream_calls = 0
 
-    async def classify_intent(self, message: str) -> str:
+    async def decide_action_tiny(self, message: str, _mention_summary: str):
         self.intent_calls += 1
         raise AssertionError(f"unexpected classifier call: {message}")
 
@@ -35,7 +35,6 @@ class CountingLLM:
     "message",
     [
         "Tell me about manipal japiur",
-        "monypal university",
         "Tell me about NMIMS MBA Marketing",
         "Which universities offer MCA?",
     ],

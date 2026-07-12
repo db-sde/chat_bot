@@ -18,6 +18,7 @@ from taxonomy.index_builder import build_indexes
 async def service():
     settings = Settings(
         redis_url=None,
+        gemini_api_key=None,
         groq_api_key=None,
         openai_api_key=None,
         lead_prompt_after_turn=100,
@@ -477,6 +478,21 @@ def test_http_endpoints_serve_sse_health_and_reindex() -> None:
         health = client.get("/health")
         assert health.status_code == 200
         assert {"redis", "database", "llm"} <= set(health.json()["dependencies"])
+
+        metrics = client.get("/metrics")
+        assert metrics.status_code == 200
+        assert metrics.json()["total_messages"] >= 1
+        assert {
+            "action_from_deterministic_rule",
+            "action_from_heuristic_regex",
+            "action_from_gemini",
+        } <= set(metrics.json())
+        reset = client.post("/admin/metrics/reset")
+        assert reset.status_code == 200
+        assert reset.json()["total_messages"] == 0
+        assert reset.json()["action_from_deterministic_rule"] == 0
+        assert reset.json()["action_from_heuristic_regex"] == 0
+        assert reset.json()["action_from_gemini"] == 0
 
         reindex = client.post("/admin/reindex")
         assert reindex.status_code == 200

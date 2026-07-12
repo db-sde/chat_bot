@@ -1,0 +1,719 @@
+{
+  "generated_at": "2026-07-12T01:04:23.731809",
+  "base_url": "http://127.0.0.1:8000",
+  "single_turn_results": [
+    {
+      "suite": "CATEGORY",
+      "question": "Tell me about MBA",
+      "status": 200,
+      "latency_ms": 842,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "MBA fees",
+      "status": 200,
+      "latency_ms": 837,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "MBA eligibility",
+      "status": 200,
+      "latency_ms": 567,
+      "response": "Published MBA eligibility varies by university: Amity University Online: Bachelor's degree; Jain University Online: Graduation from a recognized university; Lovely Professional University: Bachelor's degree in any discipline; Manipal University Jaipur: Bachelor's degree with minimum qualifying marks; NMIMS Online: Graduation from a recognized university. Check the final university record before applying."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "Which universities offer MBA?",
+      "status": 200,
+      "latency_ms": 460,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "Tell me about MCA",
+      "status": 200,
+      "latency_ms": 438,
+      "response": "MCA is available from IGNOU, Lovely Professional University, Manipal University Jaipur. Across records with comparable fee data, the published range is about INR 50,800 to INR 1,58,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "MCA fees",
+      "status": 200,
+      "latency_ms": 496,
+      "response": "MCA is available from IGNOU, Lovely Professional University, Manipal University Jaipur. Across records with comparable fee data, the published range is about INR 50,800 to INR 1,58,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "MCA eligibility",
+      "status": 200,
+      "latency_ms": 433,
+      "response": "Published MCA eligibility varies by university: IGNOU: Bachelor's degree with Mathematics; Lovely Professional University: Graduation with Mathematics; Manipal University Jaipur: Bachelor's degree with Mathematics. Check the final university record before applying."
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about LPU",
+      "status": 200,
+      "latency_ms": 2011,
+      "response": "Lovely Professional University Online is a UGC-entitled online university offering career-focused degree programs. The fee is INR 32,000 per semester."
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about NMIMS",
+      "status": 200,
+      "latency_ms": 1831,
+      "response": "Narsee Monjee Institute of Management Studies Online offers management and technology programs through its online learning division. The fee for these programs is INR 48,000 per semester."
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about Amity",
+      "status": 200,
+      "latency_ms": 1724,
+      "response": "Amity University Online offers flexible online degrees supported by live classes and digital learning resources. The fee is INR 42,500 per semester."
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about Jain University",
+      "status": 200,
+      "latency_ms": 1559,
+      "response": "Jain University Online offers industry-aligned online degrees from a deemed-to-be university. The fee is INR 40,000 per semester. No other details are available."
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about IGNOU",
+      "status": 200,
+      "latency_ms": 1696,
+      "response": "Indira Gandhi National Open University (IGNOU) is India's national open university offering affordable distance and online programs. The fee for courses is INR 15,500 per semester."
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about Manipal University Jaipur",
+      "status": 200,
+      "latency_ms": 1355,
+      "response": "Manipal University Jaipur Online offers online degrees in management and computer applications. The fee is INR 39,500 per semester. No other details are available."
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about Sikkim Manipal University",
+      "status": 200,
+      "latency_ms": 1495,
+      "response": "Sikkim Manipal University Online is an established Manipal-family university offering accessible online education. The fee is INR 27,500 per semester."
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about SMU",
+      "status": 200,
+      "latency_ms": 336,
+      "response": "I found a few matches. Which one did you mean? 1. Sikkim Manipal University Online; 2. Srinivas Management University"
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What is the NAAC grade of NMIMS Online?",
+      "status": 200,
+      "latency_ms": 353,
+      "response": "The published accreditation details for Narsee Monjee Institute of Management Studies Online are: NAAC grade A+; UGC Entitled."
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "Is Amity Online UGC approved?",
+      "status": 200,
+      "latency_ms": 364,
+      "response": "The published accreditation details for Amity University Online are: NAAC grade A+; UGC Entitled."
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What is the fee structure of LPU?",
+      "status": 200,
+      "latency_ms": 365,
+      "response": "The published starting fee for Lovely Professional University Online is INR 32,000 per semester."
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What programs does NMIMS offer?",
+      "status": 200,
+      "latency_ms": 402,
+      "response": "I can help you explore online programs, compare course categories, or check fees, eligibility, and duration for a university. Which category would you like to start with?"
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What is the starting fee at Jain University?",
+      "status": 200,
+      "latency_ms": 363,
+      "response": "The published starting fee for Jain University Online is INR 40,000 per semester."
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What is the accreditation of IGNOU?",
+      "status": 200,
+      "latency_ms": 386,
+      "response": "The published accreditation details for Indira Gandhi National Open University are: NAAC grade A++; Central University."
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about LPU MBA",
+      "status": 200,
+      "latency_ms": 1556,
+      "response": "LPU offers a two-year Online MBA program focused on practical management learning. The total fee for this program is INR 1,60,000. It is designed to be completed fully online over a duration of two years."
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about NMIMS MBA",
+      "status": 200,
+      "latency_ms": 2039,
+      "response": "NMIMS offers an Online MBA program with a duration of 2 years. The total fee for this program is INR 1,96,000. Further details about eligibility or specializations are not available."
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about Amity MBA",
+      "status": 200,
+      "latency_ms": 2316,
+      "response": "Amity offers an Online MBA program with a duration of 2 years. The total fee for this program is INR 1,99,000. No other details are available."
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about Jain MBA",
+      "status": 200,
+      "latency_ms": 3536,
+      "response": "Jain offers an Online MBA program with a duration of 2 years. The total fee for this program is INR 1,96,000. No other details are available."
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about LPU MCA",
+      "status": 200,
+      "latency_ms": 2584,
+      "response": "LPU offers an Online MCA program with a duration of 2 years. The total fee for this course is INR 1,40,000."
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about IGNOU MCA",
+      "status": 200,
+      "latency_ms": 2999,
+      "response": "IGNOU offers an Online MCA program with a duration of 2 years. The total fee for the course is INR 50,800. Further details about eligibility or admission are not available."
+    },
+    {
+      "suite": "COURSES",
+      "question": "What is the fee for LPU MBA?",
+      "status": 200,
+      "latency_ms": 1354,
+      "response": "The published total fee for Online MBA is INR 1,60,000; the listed starting fee is INR 32,000 per semester."
+    },
+    {
+      "suite": "COURSES",
+      "question": "What is the eligibility for NMIMS MBA?",
+      "status": 200,
+      "latency_ms": 706,
+      "response": "For Online MBA, the published eligibility is: Graduation from a recognized university."
+    },
+    {
+      "suite": "COURSES",
+      "question": "What is the duration of Amity MBA?",
+      "status": 200,
+      "latency_ms": 423,
+      "response": "The published duration for Online MBA is 2 Years."
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about MBA Marketing",
+      "status": 200,
+      "latency_ms": 373,
+      "response": "I found a few matches. Which one did you mean? 1. Marketing at Amity University Online; 2. Marketing at Jain University Online; 3. Marketing at Lovely Professional University; 4. Marketing at Manipal University Jaipur; 5. Marketing at NMIMS Online"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about Marketing specialization",
+      "status": 200,
+      "latency_ms": 461,
+      "response": "I found a few matches. Which one did you mean? 1. Marketing at Amity University Online; 2. Marketing at Jain University Online; 3. Marketing at Lovely Professional University; 4. Marketing at Manipal University Jaipur; 5. Marketing at NMIMS Online"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about LPU MBA Marketing",
+      "status": 200,
+      "latency_ms": 4665,
+      "response": "LPU offers an MBA in Marketing with a duration of 2 years. The total fee for the program is INR 1,60,000. No other details are available."
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about NMIMS MBA Marketing",
+      "status": 200,
+      "latency_ms": 10647,
+      "response": "Marketing is offered by NMIMS Online. What detail would you like to check?"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about Jain MBA Finance",
+      "status": 200,
+      "latency_ms": 1763,
+      "response": "Jain MBA in Finance Management is a 2-year program. The total fee for the course is INR 1,96,000. No other details are available."
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about NMIMS MBA Analytics",
+      "status": 200,
+      "latency_ms": 1348,
+      "response": "NMIMS offers an MBA in Business Analytics with a duration of 2 years. The total fee for the program is INR 1,96,000. No other details are available."
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about HR specialization",
+      "status": 200,
+      "latency_ms": 1374,
+      "response": "Human Resource Management is a specialization focused on managing employee relations and organizational development. The course duration is 2 years. The total fee for this specialization is INR 1,60,000."
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Which university offers Marketing specialization?",
+      "status": 200,
+      "latency_ms": 846,
+      "response": "I found a few matches. Which one did you mean? 1. Marketing at Amity University Online; 2. Marketing at Jain University Online; 3. Marketing at Lovely Professional University; 4. Marketing at Manipal University Jaipur; 5. Marketing at NMIMS Online"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Which university offers Finance specialization?",
+      "status": 200,
+      "latency_ms": 2797,
+      "response": "The Finance Management specialization is offered as a 2-year program with a fee of INR 1,96,000. The specific university name is not provided."
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare LPU and NMIMS",
+      "status": 200,
+      "latency_ms": 10,
+      "response": "I found a few matches. Which one did you mean? 1. Lovely Professional University Online; 2. Narsee Monjee Institute of Management Studies Online"
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare MBA fees of LPU and NMIMS",
+      "status": 200,
+      "latency_ms": 6,
+      "response": "I found a few matches. Which one did you mean? 1. Lovely Professional University Online; 2. Narsee Monjee Institute of Management Studies Online"
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare LPU MBA and NMIMS MBA",
+      "status": 200,
+      "latency_ms": 4,
+      "response": "I found a few matches. Which one did you mean? 1. Lovely Professional University Online; 2. Narsee Monjee Institute of Management Studies Online"
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare Amity MBA and Jain MBA",
+      "status": 200,
+      "latency_ms": 3,
+      "response": "I found a few matches. Which one did you mean? 1. Amity University Online; 2. Jain University Online"
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare MBA and MCA",
+      "status": 200,
+      "latency_ms": 3,
+      "response": "Here is a category-level comparison based on the current catalog:\n- MBA: 5 university options; published fee range INR 1,60,000-INR 1,99,000.\n- MCA: 3 university options; published fee range INR 50,800-INR 1,58,000.\nFees can use different schedules, so check the final program record before applying."
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare Marketing and Finance",
+      "status": 200,
+      "latency_ms": 3,
+      "response": "I found a few matches. Which one did you mean? 1. Finance Management at Jain University Online; 2. Marketing at Amity University Online; 3. Marketing at Jain University Online; 4. Marketing at Lovely Professional University; 5. Marketing at Manipal University Jaipur; 6. Marketing at NMIMS Online"
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Show all MBA programs",
+      "status": 200,
+      "latency_ms": 752,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Show all MCA programs",
+      "status": 200,
+      "latency_ms": 415,
+      "response": "MCA is available from IGNOU, Lovely Professional University, Manipal University Jaipur. Across records with comparable fee data, the published range is about INR 50,800 to INR 1,58,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Show MBA specializations",
+      "status": 200,
+      "latency_ms": 274,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Which universities offer MBA?",
+      "status": 200,
+      "latency_ms": 269,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Which universities offer MCA?",
+      "status": 200,
+      "latency_ms": 376,
+      "response": "I can help you explore online programs, compare course categories, or check fees, eligibility, and duration for a university. Which category would you like to start with?"
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "I have completed graduation. Which online MBA options are available?",
+      "status": 200,
+      "latency_ms": 5068,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "I want an MBA in Marketing. What are my options?",
+      "status": 200,
+      "latency_ms": 575,
+      "response": "I found a few matches. Which one did you mean? 1. Marketing at Amity University Online; 2. Marketing at Jain University Online; 3. Marketing at Lovely Professional University; 4. Marketing at Manipal University Jaipur; 5. Marketing at NMIMS Online"
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Suggest an affordable Online MBA",
+      "status": 200,
+      "latency_ms": 10,
+      "response": "Based only on the currently published fees, the lower-cost MBA options I found are Lovely Professional University (INR 1,60,000), Manipal University Jaipur (INR 1,75,000), Jain University Online (INR 1,96,000). Please compare the full fee schedule before applying."
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Which Online MBA is best for Marketing?",
+      "status": 200,
+      "latency_ms": 2326,
+      "response": "I found a few matches. Which one did you mean? 1. Marketing at Amity University Online; 2. Marketing at Jain University Online; 3. Marketing at Lovely Professional University; 4. Marketing at Manipal University Jaipur; 5. Marketing at NMIMS Online"
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Which university has the highest accreditation and reasonable fees?",
+      "status": 200,
+      "latency_ms": 2380,
+      "response": "I can narrow the catalog with one preference. Which direction is closer to your goal: business and management, or technology and software?"
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Which MBA should I choose?",
+      "status": 200,
+      "latency_ms": 2352,
+      "response": "I can narrow the published MBA options for you. What matters most: lower fees, a preferred specialization, or placement support?"
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Which specialization has the best career opportunities?",
+      "status": 200,
+      "latency_ms": 2380,
+      "response": "I can narrow the catalog with one preference. Which direction is closer to your goal: business and management, or technology and software?"
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "I have a budget of 1.8 lakh. Which MBA should I choose?",
+      "status": 200,
+      "latency_ms": 2357,
+      "response": "Based only on the currently published fees, the lower-cost MBA options I found are Lovely Professional University (INR 1,60,000), Manipal University Jaipur (INR 1,75,000), Jain University Online (INR 1,96,000). Please compare the full fee schedule before applying."
+    },
+    {
+      "suite": "LEADS",
+      "question": "Call me",
+      "status": 200,
+      "latency_ms": 6,
+      "response": "Absolutely — I can help arrange that. What name should our counsellor use?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "I need counselling",
+      "status": 200,
+      "latency_ms": 2358,
+      "response": "I can help you explore online programs, compare course categories, or check fees, eligibility, and duration for a university. Which category would you like to start with?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "Can someone contact me?",
+      "status": 200,
+      "latency_ms": 6,
+      "response": "Absolutely — I can help arrange that. What name should our counsellor use?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "I need admission guidance",
+      "status": 200,
+      "latency_ms": 2358,
+      "response": "I can help you explore online programs, compare course categories, or check fees, eligibility, and duration for a university. Which category would you like to start with?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "Talk to an advisor",
+      "status": 200,
+      "latency_ms": 2330,
+      "response": "I can narrow the catalog with one preference. Which direction is closer to your goal: business and management, or technology and software?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "Help me choose a university",
+      "status": 200,
+      "latency_ms": 8,
+      "response": "I can narrow the catalog with one preference. Which direction is closer to your goal: business and management, or technology and software?"
+    },
+    {
+      "suite": "TYPOS",
+      "question": "Tell me about manipal japiur",
+      "status": 200,
+      "latency_ms": 6258,
+      "response": "Manipal University Jaipur Online offers online degrees in management and computer applications. The fee is INR 39,500 per semester. No other details are available."
+    },
+    {
+      "suite": "TYPOS",
+      "question": "Tell me about igno",
+      "status": 200,
+      "latency_ms": 234,
+      "response": "I couldn't confidently match that to the published catalog. Could you share a university name, a course such as MBA or MCA, or a specialization?"
+    },
+    {
+      "suite": "TYPOS",
+      "question": "Tell me about jian university",
+      "status": 200,
+      "latency_ms": 2271,
+      "response": "Did you mean Jain University Online?"
+    },
+    {
+      "suite": "TYPOS",
+      "question": "lpu mba markting",
+      "status": 200,
+      "latency_ms": 3369,
+      "response": "LPU offers an MBA in Marketing with a duration of 2 years. The total fee for the program is INR 1,60,000."
+    },
+    {
+      "suite": "TYPOS",
+      "question": "nmims mba analitics",
+      "status": 200,
+      "latency_ms": 2391,
+      "response": "Did you mean Business Analytics at NMIMS Online? I've already got Narsee Monjee Institute of Management Studies Online + MBA ready."
+    },
+    {
+      "suite": "TYPOS",
+      "question": "monypal university",
+      "status": 200,
+      "latency_ms": 5062,
+      "response": "I couldn't confidently match that to the published catalog. Could you share a university name, a course such as MBA or MCA, or a specialization?"
+    },
+    {
+      "suite": "TYPOS",
+      "question": "tell me about lpuu",
+      "status": 200,
+      "latency_ms": 2950,
+      "response": "Did you mean Lovely Professional University Online?"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "Tell me about Marketing",
+      "status": 200,
+      "latency_ms": 2315,
+      "response": "I found a few matches. Which one did you mean? 1. Marketing at Amity University Online; 2. Marketing at Jain University Online; 3. Marketing at Lovely Professional University; 4. Marketing at Manipal University Jaipur; 5. Marketing at NMIMS Online"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "MBA Marketing",
+      "status": 200,
+      "latency_ms": 4957,
+      "response": "I found a few matches. Which one did you mean? 1. Marketing at Amity University Online; 2. Marketing at Jain University Online; 3. Marketing at Lovely Professional University; 4. Marketing at Manipal University Jaipur; 5. Marketing at NMIMS Online"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "Tell me about SMU",
+      "status": 200,
+      "latency_ms": 2386,
+      "response": "I found a few matches. Which one did you mean? 1. Sikkim Manipal University Online; 2. Srinivas Management University"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "Which university offers Marketing specialization?",
+      "status": 200,
+      "latency_ms": 2239,
+      "response": "I found a few matches. Which one did you mean? 1. Marketing at Amity University Online; 2. Marketing at Jain University Online; 3. Marketing at Lovely Professional University; 4. Marketing at Manipal University Jaipur; 5. Marketing at NMIMS Online"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "Tell me about Finance",
+      "status": 200,
+      "latency_ms": 3585,
+      "response": "Finance Management is a 2-year course. The total fee for the program is INR 1,96,000. No other details are available."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about IIT Bombay Online MBA",
+      "status": 200,
+      "latency_ms": 2247,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about Harvard MBA",
+      "status": 200,
+      "latency_ms": 5064,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about Oxford Online MBA",
+      "status": 200,
+      "latency_ms": 4938,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about BCA",
+      "status": 200,
+      "latency_ms": 2361,
+      "response": "I couldn't confidently match that to the published catalog. Could you share a university name, a course such as MBA or MCA, or a specialization?"
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about MBA in Artificial Intelligence",
+      "status": 200,
+      "latency_ms": 2300,
+      "response": "MBA is available from Amity University Online, Jain University Online, Lovely Professional University, Manipal University Jaipur, NMIMS Online. Across records with comparable fee data, the published range is about INR 1,60,000 to INR 1,99,000. I haven't selected one university for you."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Compare Harvard and LPU",
+      "status": 200,
+      "latency_ms": 7,
+      "response": "Which two course categories would you like me to compare?"
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about XYZ University",
+      "status": 200,
+      "latency_ms": 2296,
+      "response": "I couldn't confidently match that to the published catalog. Could you share a university name, a course such as MBA or MCA, or a specialization?"
+    }
+  ],
+  "multi_turn_results": [
+    {
+      "conversation_number": 1,
+      "session_id": "test_f0f694b7",
+      "turns": [
+        {
+          "message": "Tell me about NMIMS MBA",
+          "status": 200,
+          "latency_ms": 3715,
+          "response": "NMIMS offers an Online MBA program with a duration of 2 years. The total fee for this program is INR 1,96,000. Further details about eligibility or specializations are not available."
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 5010,
+          "response": "The published total fee for Online MBA is INR 1,96,000; the listed starting fee is INR 49,000 per semester."
+        },
+        {
+          "message": "What is the eligibility?",
+          "status": 200,
+          "latency_ms": 2221,
+          "response": "For Online MBA, the published eligibility is: Graduation from a recognized university."
+        },
+        {
+          "message": "What is the duration?",
+          "status": 200,
+          "latency_ms": 2258,
+          "response": "The published duration for Online MBA is 2 Years.\n\nIf you'd like personalised help, what name should our counsellor use?"
+        }
+      ]
+    },
+    {
+      "conversation_number": 2,
+      "session_id": "test_462cd3fa",
+      "turns": [
+        {
+          "message": "Tell me about LPU MBA",
+          "status": 200,
+          "latency_ms": 5939,
+          "response": "LPU offers a two-year Online MBA program focused on practical management learning. The total fee for this program is INR 1,60,000. It is designed to be completed fully online over a duration of two years."
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 2332,
+          "response": "The published total fee for Online MBA is INR 1,60,000; the listed starting fee is INR 32,000 per semester."
+        },
+        {
+          "message": "What is the duration?",
+          "status": 200,
+          "latency_ms": 5064,
+          "response": "The published duration for Online MBA is 2 Years."
+        }
+      ]
+    },
+    {
+      "conversation_number": 3,
+      "session_id": "test_190d7e86",
+      "turns": [
+        {
+          "message": "Tell me about NMIMS MBA",
+          "status": 200,
+          "latency_ms": 6146,
+          "response": "NMIMS offers an Online MBA program with a duration of 2 years. The total fee for this program is INR 1,96,000. Further details about eligibility or specializations are not available."
+        },
+        {
+          "message": "Tell me about LPU MBA",
+          "status": 200,
+          "latency_ms": 5962,
+          "response": "LPU offers a two-year Online MBA program focused on practical management learning. The total fee for this course is INR 1,60,000. It is designed for students seeking flexible, online education in management."
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 5064,
+          "response": "The published total fee for Online MBA is INR 1,60,000; the listed starting fee is INR 32,000 per semester."
+        }
+      ]
+    },
+    {
+      "conversation_number": 4,
+      "session_id": "test_fed91210",
+      "turns": [
+        {
+          "message": "Tell me about MBA Marketing",
+          "status": 200,
+          "latency_ms": 2889,
+          "response": "I found a few matches. Which one did you mean? 1. Marketing at Amity University Online; 2. Marketing at Jain University Online; 3. Marketing at Lovely Professional University; 4. Marketing at Manipal University Jaipur; 5. Marketing at NMIMS Online"
+        },
+        {
+          "message": "LPU MBA Marketing",
+          "status": 200,
+          "latency_ms": 3435,
+          "response": "LPU offers an MBA in Marketing with a duration of 2 years. The total fee for the program is INR 1,60,000."
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 2304,
+          "response": "The published total fee for Marketing is INR 1,60,000."
+        }
+      ]
+    },
+    {
+      "conversation_number": 5,
+      "session_id": "test_0167d18a",
+      "turns": [
+        {
+          "message": "Tell me about Jain MBA Finance",
+          "status": 200,
+          "latency_ms": 3264,
+          "response": "Jain MBA in Finance is called Finance Management. The course duration is 2 years. The total fee for the program is INR 1,96,000."
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 2293,
+          "response": "The published total fee for Finance Management is INR 1,96,000."
+        },
+        {
+          "message": "What jobs can I get?",
+          "status": 200,
+          "latency_ms": 2318,
+          "response": "I can help you explore online programs, compare course categories, or check fees, eligibility, and duration for a university. Which category would you like to start with?"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "single_turn_count": 83,
+    "multi_turn_conversations": 5
+  }
+}

@@ -4,9 +4,11 @@ import pytest
 import pytest_asyncio
 
 from config import Settings
+from llm.client import GeminiDecision
 from main import ChatbotService
-from nlu.intent import Intent, heuristic_intent
+from nlu.intent import Intent, catalog_intent
 from nlu.mention_extractor import tokenize
+from resilience.intent_metrics import IntentMetrics
 from schemas import ChatRequest
 from session.store import MemorySessionStore
 
@@ -18,7 +20,7 @@ class ExplodingIntentLLM:
     def __init__(self) -> None:
         self.intent_calls = 0
 
-    async def classify_intent(self, message: str) -> str:
+    async def decide_action_tiny(self, message: str, _mention_summary: str) -> GeminiDecision:
         self.intent_calls += 1
         raise AssertionError(f"structured turn unexpectedly called intent LLM: {message}")
 
@@ -74,15 +76,40 @@ async def test_mixed_known_unknown_acknowledges_missing_qualifier(
 
 
 @pytest.mark.asyncio
-async def test_pure_negative_still_uses_existing_no_match_path(deterministic_service) -> None:
-    service, llm = deterministic_service
+async def test_pure_negative_still_uses_existing_no_match_path() -> None:
+    class UnresolvedIntentLLM(ExplodingIntentLLM):
+        async def decide_action_tiny(
+            self,
+            message: str,
+            _mention_summary: str,
+        ) -> GeminiDecision:
+            self.intent_calls += 1
+            return GeminiDecision("unsupported_entity", "XYZ University", False)
 
-    result = await turn(service, "Tell me about XYZ University", "pure-negative")
+    llm = UnresolvedIntentLLM()
+    metrics = IntentMetrics()
+    service = await ChatbotService.create(
+        Settings(
+            redis_url=None,
+            groq_api_key=None,
+            openai_api_key=None,
+            lead_prompt_after_turn=100,
+        ),
+        session_store=MemorySessionStore(),
+        llm=llm,
+        intent_metrics=metrics,
+    )
+    try:
+        result = await turn(service, "Tell me about XYZ University", "pure-negative")
+    finally:
+        await service.close()
 
     assert result.route == "fallback"
-    assert "couldn't confidently match" in result.payload.text
+    assert "couldn't find a match" in result.payload.text
+    assert "XYZ University" in result.payload.text
     assert "I did match" not in result.payload.text
-    assert llm.intent_calls == 0
+    assert llm.intent_calls == 1
+    assert metrics.snapshot()["llm_intent_calls"] == 1
 
 
 @pytest.mark.asyncio
@@ -125,9 +152,8 @@ async def test_one_letter_article_is_not_an_amity_acronym(deterministic_service)
     [
         ("Which university is better, LPU or NMIMS?", Intent.COMPARISON),
         ("Which Online MBA is best for Marketing?", Intent.ADVISORY),
-        ("Which specialization has the best career opportunities?", Intent.ADVISORY),
         ("I have a budget of 1.8 lakh. Which MBA should I choose?", Intent.ADVISORY),
     ],
 )
-def test_structured_intents_are_local(message: str, expected: Intent) -> None:
-    assert heuristic_intent(message) is expected
+def test_high_match_catalog_intents_are_local(message: str, expected: Intent) -> None:
+    assert catalog_intent(message) is expected

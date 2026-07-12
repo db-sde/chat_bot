@@ -3,27 +3,72 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
+from google import genai
+from google.genai import types as genai_types
 from groq import AsyncGroq
 from openai import AsyncOpenAI
 
-from llm.prompts import INTENT_SYSTEM_PROMPT, SYNTHESIS_SYSTEM_PROMPT
+from llm.prompts import SYNTHESIS_SYSTEM_PROMPT
 
 LOGGER = logging.getLogger(__name__)
 T = TypeVar("T")
-VALID_INTENTS = {
-    "factual",
-    "comparison",
-    "advisory",
+_GEMINI_MIN_TRANSPORT_TIMEOUT_MS = 10_000
+GEMINI_DECISION_ACTIONS = {
+    "recommend",
     "discovery",
-    "chitchat",
+    "clarify",
+    "callback",
     "unrelated",
+    "unsupported_entity",
 }
+_DECISION_KEYS = {"action", "entity", "needs_clarification"}
+_GEMINI_DECISION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["action", "entity", "needs_clarification"],
+    "properties": {
+        "action": {
+            "type": "string",
+            "enum": sorted(GEMINI_DECISION_ACTIONS),
+            "description": (
+                "Use callback when the user expresses confusion, asks for guidance or "
+                "help deciding, or wants human assistance. Use clarify only for catalog "
+                "entity or selection ambiguity. Use unsupported_entity when the message "
+                "names an entity absent from Resolved so far. Use discovery only to browse "
+                "catalog options without a missing named entity."
+            ),
+        },
+        "entity": {
+            "type": ["string", "null"],
+            "description": (
+                "The missing named entity only for unsupported_entity; otherwise null."
+            ),
+        },
+        "needs_clarification": {
+            "type": "boolean",
+            "description": "True only when action is clarify.",
+        },
+    },
+}
+_CATALOG_FIELD_RE = re.compile(
+    r'"(?:fee|price|cost|duration|naac|grade|eligibility|placement|salary|'
+    r'accreditation|ranking)"\s*:',
+    re.IGNORECASE,
+)
+_CATALOG_VALUE_RE = re.compile(
+    r"(?:₹\s*\d|\bINR\s*[\d,]|\b\d+(?:\.\d+)?\s*"
+    r"(?:years?|months?|semesters?|terms?|lpa)\b|\bNAAC\b|"
+    r"\bgrade\s+[A-D](?:\+{1,2})?\b)",
+    re.IGNORECASE,
+)
 
 
 class LLMUnavailable(RuntimeError):
@@ -32,6 +77,80 @@ class LLMUnavailable(RuntimeError):
 
 class CircuitOpen(LLMUnavailable):
     """Raised while a provider's circuit breaker is cooling down."""
+
+
+class LLMTimeout(LLMUnavailable):
+    """Raised when the provider exceeds the single bounded attempt."""
+
+
+class LLMParseFailure(LLMUnavailable):
+    """Raised when a decision response is not valid strict JSON."""
+
+
+class LLMDecisionSchemaFailure(LLMParseFailure):
+    """Raised when parsed decision JSON violates the exact local schema."""
+
+
+class LLMCatalogContentFailure(LLMParseFailure):
+    """Raised when a decision response attempts to originate catalog-like facts."""
+
+
+@dataclass(frozen=True, slots=True)
+class GeminiDecision:
+    """Strictly validated routing decision returned by Gemini."""
+
+    action: str
+    entity: str | None
+    needs_clarification: bool
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise LLMDecisionSchemaFailure(f"duplicate decision field: {key}")
+        value[key] = item
+    return value
+
+
+def _parse_gemini_decision(raw: str) -> GeminiDecision:
+    if _CATALOG_FIELD_RE.search(raw) or _CATALOG_VALUE_RE.search(raw):
+        raise LLMCatalogContentFailure(
+            "Gemini decision contained suspected catalog-like content"
+        )
+    try:
+        parsed = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
+    except LLMParseFailure:
+        raise
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise LLMParseFailure("Gemini decision was not one JSON object") from exc
+    if not isinstance(parsed, dict):
+        raise LLMDecisionSchemaFailure("Gemini decision must be a JSON object")
+    if set(parsed) != _DECISION_KEYS:
+        raise LLMDecisionSchemaFailure("Gemini decision fields did not match the schema")
+
+    action = parsed["action"]
+    entity = parsed["entity"]
+    needs_clarification = parsed["needs_clarification"]
+    if not isinstance(action, str) or action not in GEMINI_DECISION_ACTIONS:
+        raise LLMDecisionSchemaFailure("Gemini decision action was not allowed")
+    if entity is not None and (
+        not isinstance(entity, str) or not entity or entity != entity.strip()
+    ):
+        raise LLMDecisionSchemaFailure("Gemini decision entity must be a name or null")
+    if type(needs_clarification) is not bool:
+        raise LLMDecisionSchemaFailure(
+            "Gemini decision needs_clarification must be boolean"
+        )
+    if action == "unsupported_entity" and entity is None:
+        raise LLMDecisionSchemaFailure("unsupported_entity requires an entity name")
+    if action != "unsupported_entity" and entity is not None:
+        raise LLMDecisionSchemaFailure("only unsupported_entity may include an entity")
+    if needs_clarification is not (action == "clarify"):
+        raise LLMDecisionSchemaFailure(
+            "needs_clarification must agree with the clarify action"
+        )
+    return GeminiDecision(action, entity, needs_clarification)
 
 
 @dataclass(slots=True)
@@ -64,7 +183,7 @@ class CircuitBreaker:
 
 @dataclass(slots=True)
 class LLMClient:
-    """Wrap Groq and OpenAI behind a bounded, failure-aware interface.
+    """Wrap Gemini, Groq, and OpenAI behind bounded provider interfaces.
 
     Clients are created lazily so local development and the test suite work without API keys.
     Settings are accessed by attribute to keep this wrapper compatible with test settings.
@@ -73,6 +192,7 @@ class LLMClient:
     settings: Any
     _groq: AsyncGroq | None = field(default=None, init=False, repr=False)
     _openai: AsyncOpenAI | None = field(default=None, init=False, repr=False)
+    _gemini: genai.Client | None = field(default=None, init=False, repr=False)
     _breakers: dict[str, CircuitBreaker] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -81,11 +201,12 @@ class LLMClient:
         self._breakers = {
             "groq": CircuitBreaker(threshold, cooldown),
             "openai": CircuitBreaker(threshold, cooldown),
+            "gemini": CircuitBreaker(threshold, cooldown),
         }
 
     @property
     def intent_configured(self) -> bool:
-        return bool(getattr(self.settings, "groq_api_key", None))
+        return bool(getattr(self.settings, "gemini_api_key", None))
 
     @property
     def synthesis_configured(self) -> bool:
@@ -112,6 +233,24 @@ class LLMClient:
             self._openai = AsyncOpenAI(api_key=key, max_retries=0)
         return self._openai
 
+    def _gemini_client(self) -> genai.Client:
+        key = getattr(self.settings, "gemini_api_key", None)
+        if not key:
+            raise LLMUnavailable("GEMINI_API_KEY is not configured")
+        if self._gemini is None:
+            timeout_ms = int(getattr(self.settings, "gemini_intent_timeout_ms", 1400))
+            self._gemini = genai.Client(
+                api_key=key,
+                http_options=genai_types.HttpOptions(
+                    # Gemini rejects server deadlines below 10 seconds. The
+                    # classifier's outer asyncio deadline below still enforces
+                    # the configured 1.2-1.5s application cutoff exactly.
+                    timeout=max(timeout_ms, _GEMINI_MIN_TRANSPORT_TIMEOUT_MS),
+                    retry_options=genai_types.HttpRetryOptions(attempts=1),
+                ),
+            )
+        return self._gemini
+
     async def _bounded_call(
         self,
         provider: str,
@@ -132,28 +271,68 @@ class LLMClient:
         breaker.success()
         return result
 
-    async def classify_intent(self, message: str) -> str:
-        """Classify intent with Groq, returning only a supported label."""
+    async def decide_action_tiny(
+        self,
+        message: str,
+        mention_summary: str,
+    ) -> GeminiDecision:
+        """Choose one unresolved-turn action with a bounded strict-JSON request."""
 
-        model = getattr(self.settings, "groq_intent_model", "llama-3.1-8b-instant")
-        timeout = float(getattr(self.settings, "llm_intent_timeout_seconds", 2.5))
+        breaker = self._breakers["gemini"]
+        breaker.before_call()
+        timeout_ms = int(getattr(self.settings, "gemini_intent_timeout_ms", 1400))
+        model = str(
+            getattr(self.settings, "gemini_model", "gemini-3.1-flash-lite")
+        )
+        prompt = (
+            "Given this message and what was found in the catalog, decide the action.\n\n"
+            f"Message: {json.dumps(message, ensure_ascii=False)}\n"
+            f"Resolved so far: {mention_summary}\n\n"
+            "Return ONLY this JSON, no other text:\n"
+            '{"action": "<one of: recommend, discovery, clarify, callback, '
+            'unsupported_entity, unrelated>",\n'
+            ' "entity": "<name mentioned but not found in catalog, or null>",\n'
+            ' "needs_clarification": <true|false>}'
+        )
+        try:
+            async with asyncio.timeout(timeout_ms / 1000):
+                response = await self._gemini_client().aio.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=genai_types.GenerateContentConfig(
+                        temperature=0,
+                        max_output_tokens=96,
+                        response_mime_type="application/json",
+                        response_json_schema=_GEMINI_DECISION_SCHEMA,
+                    ),
+                )
+            decision = _parse_gemini_decision(response.text or "")
+        except CircuitOpen:
+            raise
+        except LLMParseFailure:
+            breaker.failure()
+            raise
+        except TimeoutError as exc:
+            breaker.failure()
+            raise LLMTimeout("Gemini action decision timed out") from exc
+        except Exception as exc:
+            breaker.failure()
+            if isinstance(exc, LLMUnavailable):
+                raise
+            raise LLMUnavailable("Gemini action decision unavailable") from exc
+        breaker.success()
+        return decision
 
-        async def operation() -> str:
-            response = await self._groq_client().chat.completions.create(
-                model=model,
-                temperature=0,
-                max_tokens=8,
-                messages=[
-                    {"role": "system", "content": INTENT_SYSTEM_PROMPT},
-                    {"role": "user", "content": message[:1_500]},
-                ],
-            )
-            label = (response.choices[0].message.content or "").strip().lower()
-            if label not in VALID_INTENTS:
-                raise ValueError("Intent provider returned an unsupported label")
-            return label
+    async def close(self) -> None:
+        """Close the pooled Gemini async and sync transports."""
 
-        return await self._bounded_call("groq", timeout, operation)
+        if self._gemini is None:
+            return
+        try:
+            await self._gemini.aio.aclose()
+        finally:
+            self._gemini.close()
+            self._gemini = None
 
     def _synthesis_provider(self) -> str:
         return "openai" if getattr(self.settings, "openai_api_key", None) else "groq"
@@ -259,11 +438,11 @@ class LLMClient:
         """Probe configured provider APIs with a short, token-free models request."""
 
         async def probe(name: str) -> str:
-            configured = (
-                self.intent_configured
-                if name == "groq"
-                else bool(getattr(self.settings, "openai_api_key", None))
-            )
+            configured = {
+                "gemini": self.intent_configured,
+                "groq": bool(getattr(self.settings, "groq_api_key", None)),
+                "openai": bool(getattr(self.settings, "openai_api_key", None)),
+            }[name]
             if not configured:
                 return "not_configured"
             if self._breakers[name].opened_at is not None:
@@ -271,13 +450,30 @@ class LLMClient:
             try:
                 if name == "groq":
                     await asyncio.wait_for(self._groq_client().models.list(), timeout=1.0)
-                else:
+                elif name == "openai":
                     await asyncio.wait_for(self._openai_client().models.list(), timeout=1.0)
+                else:
+                    await asyncio.wait_for(
+                        self._gemini_client().aio.models.get(
+                            model=str(
+                                getattr(
+                                    self.settings,
+                                    "gemini_model",
+                                    "gemini-3.1-flash-lite",
+                                )
+                            )
+                        ),
+                        timeout=1.0,
+                    )
                 return "ok"
             except Exception:
                 return "down"
 
-        groq, openai = await asyncio.gather(probe("groq"), probe("openai"))
-        providers = {"groq": groq, "openai": openai}
+        gemini, groq, openai = await asyncio.gather(
+            probe("gemini"),
+            probe("groq"),
+            probe("openai"),
+        )
+        providers = {"gemini": gemini, "groq": groq, "openai": openai}
         degraded = any(value in {"down", "circuit_open"} for value in providers.values())
         return {"status": "degraded" if degraded else "ok", "providers": providers}

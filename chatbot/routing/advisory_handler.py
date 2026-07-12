@@ -73,7 +73,9 @@ def parse_budget(message: str) -> float | None:
     return None
 
 
-def _preference(message: str) -> str | None:
+def advisory_preference(message: str) -> str | None:
+    """Return a bounded, response-level preference already stated by the user."""
+
     text = message.casefold()
     if any(marker in text for marker in ("accredit", "naac", "recognition")) and any(
         marker in text for marker in ("fee", "cost", "affordable", "reasonable")
@@ -415,7 +417,7 @@ async def handle_advisory(
         message, category_index, catalog
     )
     category = str(category) if category else None
-    preference = _preference(message)
+    preference = advisory_preference(message)
     budget = parse_budget(message) if preference == "fees" else None
     references = advisory_candidate_ids or candidate_ids or candidates
     shortlisted = _candidate_entities(catalog, references)
@@ -503,4 +505,4 @@ async def handle_advisory(
 
 handle = handle_advisory
 
-__all__ = ["handle", "handle_advisory", "parse_budget"]
+__all__ = ["advisory_preference", "handle", "handle_advisory", "parse_budget"]

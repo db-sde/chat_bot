@@ -64,11 +64,13 @@ class Settings(BaseSettings):
 
     groq_api_key: str | None = None
     groq_model: str = "llama-3.1-8b-instant"
-    groq_intent_model: str = "llama-3.1-8b-instant"
     groq_synthesis_model: str = "llama-3.3-70b-versatile"
     openai_api_key: str | None = None
     openai_model: str = "gpt-4.1-mini"
     openai_synthesis_model: str = "gpt-4.1-mini"
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.1-flash-lite"
+    gemini_intent_timeout_ms: int = Field(default=1400, ge=100, le=10_000)
     # Deterministic catalog templates are the production default. Narrative
     # synthesis is opt-in so provider latency cannot delay ordinary lookups.
     enable_answer_synthesis: bool = False
@@ -77,7 +79,6 @@ class Settings(BaseSettings):
     llm_failure_threshold: int = Field(default=3, ge=1)
     llm_failure_window_seconds: int = Field(default=60, ge=1)
     llm_cooldown_seconds: int = Field(default=60, ge=1)
-    llm_intent_timeout_seconds: float = Field(default=2.5, gt=0)
     llm_synthesis_timeout_seconds: float = Field(default=5.0, gt=0)
     llm_circuit_failure_threshold: int = Field(default=3, ge=1)
     llm_circuit_cooldown_seconds: float = Field(default=30.0, gt=0)

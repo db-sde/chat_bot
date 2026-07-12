@@ -10,7 +10,6 @@ import pytest_asyncio
 from config import Settings
 from leads.funnel import LeadFunnel
 from main import ChatbotService
-from nlu.intent import Intent, heuristic_intent
 from schemas import ChatRequest
 from session.state import ConversationState
 from session.store import MemorySessionStore
@@ -144,8 +143,3 @@ async def test_short_domain_followups_retain_category_focus(service, message: st
     assert result.state.focus.university is None
     assert result.state.focus.specialization is None
     assert result.state.focus.entity_id is None
-
-
-def test_unrelated_intent_is_explicit_not_the_factual_default() -> None:
-    assert heuristic_intent("What is the value of pi?") is Intent.UNRELATED
-    assert heuristic_intent("for which uni") is Intent.FACTUAL

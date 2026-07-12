@@ -21,6 +21,7 @@ from response.cards import (
 )
 from schemas import ResponsePayload
 
+from .advisory_handler import advisory_preference, handle_advisory
 from .category_handler import (
     available_categories,
     category_summary,
@@ -294,6 +295,24 @@ async def handle_comparison(
         return specialization_payload
 
     university_ids = _unique_ids(universities)
+    if not any(
+        (
+            selected_entity_ids,
+            university_ids,
+            categories,
+            specializations,
+        )
+    ) and advisory_preference(message):
+        # Gemini can reasonably label a superlative shortlist request as
+        # comparison. With no concrete operands, honor the stated ranking
+        # preference instead of asking for two unrelated course categories.
+        return await handle_advisory(
+            state=state,
+            message=message,
+            catalog=catalog,
+            category_index=category_index,
+        )
+
     if len(university_ids) == 1:
         entity = catalog_get_entity(catalog, university_ids[0])
         university = entity_label(entity, default="that university")

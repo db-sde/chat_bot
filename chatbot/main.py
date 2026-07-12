@@ -23,19 +23,24 @@ from leads.funnel import LeadFunnel
 from leads.webhook import CRMWebhook
 from llm.client import LLMClient, LLMUnavailable
 from llm.prompts import grounded_answer_prompt
+from nlu.action_classifier import Action
+from nlu.action_classifier import classify as classify_action
+from nlu.action_classifier import mention_summary as summarize_mentions
 from nlu.callback_detector import is_callback_request
-from nlu.intent import Intent, classify_intent
+from nlu.intent import Intent, decide_action, heuristic_intent
 from nlu.mention_extractor import extract_mentions
 from resilience.health import dependency_health
-from resolver.clarifier import clarify
+from resilience.intent_metrics import ActionSource, IntentMetrics
+from resilience.intent_metrics import intent_metrics as process_intent_metrics
+from resolver.clarifier import candidate_label, clarify
 from resolver.focus_updater import update_focus
 from resolver.pending_clarification import resolve_pending_clarification
 from resolver.reference_resolver import resolve_reference
 from response.builder import build_response
-from response.templates import topic_from_message
+from response.templates import entity_not_found_answer, topic_from_message
 from routing.fallback_handler import handle_fallback
 from routing.knowledge_handler import handle_knowledge, knowledge_topic
-from routing.router import Router, select_route
+from routing.router import Router, action_from_intent, select_route
 from schemas import ChatRequest, HealthResponse, ReindexResponse, ResponsePayload
 from session.state import ConversationState
 from session.store import SessionStore
@@ -63,19 +68,6 @@ def _looks_like_product_turn(message: str, mentions: Any) -> bool:
     )
 
 
-def _use_intent_llm(message: str, mentions: Any, state: ConversationState) -> bool:
-    """Reserve probabilistic classification for genuinely unstructured turns."""
-
-    return not (
-        _looks_like_product_turn(message, mentions)
-        or topic_from_message(message) != "about"
-        or state.focus.entity_id
-        or state.focus.category
-        or state.focus.university
-        or state.focus.specialization
-    )
-
-
 def _acknowledge_partial_match(payload: ResponsePayload, unresolved: list[str]) -> ResponsePayload:
     if not unresolved:
         return payload
@@ -93,6 +85,84 @@ def _acknowledge_partial_match(payload: ResponsePayload, unresolved: list[str]) 
             )
         }
     )
+
+
+_ENTITY_LOOKUP_RE = re.compile(
+    r"\b(?:tell\s+me\s+about|information\s+(?:about|on)|"
+    r"uni(?:versity)?|college|institute|mba|mca|bba|bca)\b",
+    re.IGNORECASE,
+)
+
+
+def _unresolved_subject(message: str) -> str:
+    subject = re.sub(
+        r"^\s*(?:please\s+)?(?:tell\s+me\s+about|give\s+me\s+information\s+"
+        r"(?:about|on)|information\s+(?:about|on))\s+",
+        "",
+        message,
+        flags=re.IGNORECASE,
+    ).strip(" \t\r\n?.!,")
+    return subject or message.strip(" \t\r\n?.!,")
+
+
+def _unresolved_payload(
+    message: str,
+    mentions: Any,
+    indexes: TaxonomyIndexes,
+    *,
+    structured_entity: str | None = None,
+    use_structured_entity: bool = False,
+) -> ResponsePayload:
+    medium = next(
+        (
+            candidate
+            for candidates in (
+                mentions.universities,
+                mentions.courses,
+                mentions.specializations,
+            )
+            for candidate in candidates
+            if getattr(candidate, "confidence", None) == "MEDIUM"
+        ),
+        None,
+    )
+    suggestion = candidate_label(medium, indexes) if medium is not None else None
+    if use_structured_entity:
+        text = entity_not_found_answer(structured_entity or "that name", None)
+    elif suggestion or _ENTITY_LOOKUP_RE.search(message):
+        text = entity_not_found_answer(_unresolved_subject(message), suggestion)
+    else:
+        text = (
+            "I'm not sure what you're asking yet. Could you share a university name, "
+            "a course such as MBA or MCA, or say that you'd like human help?"
+        )
+    return build_response(
+        text,
+        suggested_chips=["Explore MBA", "Browse universities", "Talk to a counsellor"],
+    )
+
+
+def _has_focus(state: ConversationState) -> bool:
+    return any(
+        (
+            state.focus.entity_id,
+            state.focus.university,
+            state.focus.category,
+            state.focus.specialization,
+        )
+    )
+
+
+def _resolver_intent(action: Action) -> str:
+    """Keep focus_updater's stable legacy intent contract unchanged."""
+
+    return {
+        Action.COMPARE: Intent.COMPARISON.value,
+        Action.RECOMMEND: Intent.ADVISORY.value,
+        Action.DISCOVERY: Intent.DISCOVERY.value,
+        Action.CHITCHAT: Intent.CHITCHAT.value,
+        Action.UNRELATED: Intent.UNRELATED.value,
+    }.get(action, Intent.FACTUAL.value)
 
 
 @dataclass(slots=True)
@@ -116,6 +186,7 @@ class ChatbotService:
         session_store: SessionStore,
         llm: LLMClient,
         lead_funnel: LeadFunnel,
+        intent_metrics: IntentMetrics = process_intent_metrics,
     ) -> None:
         self.settings = settings
         self.catalog = catalog
@@ -124,6 +195,7 @@ class ChatbotService:
         self.session_store = session_store
         self.llm = llm
         self.lead_funnel = lead_funnel
+        self.intent_metrics = intent_metrics
         # Handler output stays deterministic here. Broad factual overviews are streamed by
         # the transport from the same grounded fields instead of being buffered in a handler.
         self.router = Router(catalog, indexes.category_index, llm=None)
@@ -137,6 +209,7 @@ class ChatbotService:
         catalog: CatalogStore | None = None,
         session_store: SessionStore | None = None,
         llm: LLMClient | None = None,
+        intent_metrics: IntentMetrics | None = None,
     ) -> ChatbotService:
         config = settings or get_settings()
         loaded_catalog = catalog or await CatalogStore.create(settings=config)
@@ -153,11 +226,17 @@ class ChatbotService:
             session_store=state_store,
             llm=llm_client,
             lead_funnel=funnel,
+            intent_metrics=intent_metrics or process_intent_metrics,
         )
 
     async def close(self) -> None:
         await self.lead_funnel.close()
         await self.session_store.close()
+        close_llm = getattr(self.llm, "close", None)
+        if callable(close_llm):
+            result = close_llm()
+            if hasattr(result, "__await__"):
+                await result
 
     async def reindex(self) -> int:
         """Refresh the catalog and atomically swap all request-time indexes."""
@@ -235,6 +314,11 @@ class ChatbotService:
 
     async def process_turn(self, chat: ChatRequest) -> TurnResult:
         turn_start = time.monotonic()
+        message_metric = self.intent_metrics.begin_message()
+
+        def record_action_source(source: ActionSource) -> None:
+            self.intent_metrics.record_action_source(message_metric, source)
+
         session_id = chat.session_id or str(uuid4())
         state = await self.session_store.get_or_create(session_id)
         state.turn_count += 1
@@ -245,10 +329,13 @@ class ChatbotService:
         )
         tl.info("chatbot.nlu", 'IN msg="%s"', chat.message)
 
-        # Step 2: callback intent always wins and does not alter catalog focus.
+        # The callback detector is the first decision probe. Mention extraction
+        # still runs unconditionally on every turn before any route returns.
         cb_match = is_callback_request(chat.message)
+        mentions = extract_mentions(chat.message, self.matcher)
         tl.info("chatbot.nlu", "callback_detector: %s", "match" if cb_match else "no match")
         if cb_match:
+            record_action_source("deterministic_rule")
             payload = self.lead_funnel.handle_callback(state, chat.message)
             await self._persist_result(state, payload)
             tl.info("chatbot.routing", "route: lead (callback)")
@@ -257,13 +344,11 @@ class ChatbotService:
         # A pending lead field gets first refusal before catalog clarification or intent
         # classification. Validation is non-mutating until entity/product evidence has had
         # a chance to protect name-shaped queries such as "Sikkim".
-        preview_mentions = None
         captured_pending_fields: list[str] = []
         captured_standalone = False
         pending_answer = self.lead_funnel.inspect_pending_answer(state, chat.message)
         if pending_answer is not None:
-            preview_mentions = extract_mentions(chat.message, self.matcher)
-            product_turn = _looks_like_product_turn(chat.message, preview_mentions)
+            product_turn = _looks_like_product_turn(chat.message, mentions)
             deferral = self.lead_funnel.is_deferral(chat.message)
             name_is_product = pending_answer.field == "name" and product_turn
 
@@ -282,6 +367,7 @@ class ChatbotService:
                     pending_answer.field,
                 )
             elif not product_turn and not deferral:
+                record_action_source("deterministic_rule")
                 payload = self.lead_funnel.invalid_pending_response(pending_answer.field)
                 await self._persist_result(state, payload)
                 tl.info(
@@ -292,13 +378,7 @@ class ChatbotService:
                 return TurnResult(session_id, state, payload, "lead")
 
         if captured_standalone:
-            # Still exercise intent/entity NLU so a future recognizer improvement cannot make
-            # a lead reply silently steal a product question. The response remains lead-only
-            # because this turn contains no current product evidence.
-            intent_start = time.monotonic()
-            intent = await classify_intent(chat.message, self.llm, use_llm=False)
-            intent_ms = (time.monotonic() - intent_start) * 1000
-            tl.info("chatbot.nlu", "intent: %s (%.0fms)", intent.value, intent_ms)
+            record_action_source("deterministic_rule")
             payload = self.lead_funnel.captured_reply_response(
                 state,
                 captured_pending_fields,
@@ -333,8 +413,8 @@ class ChatbotService:
                 pending_context is not None
                 and pending_context.resume_intent == "comparison"
             )
-            intent = Intent.COMPARISON if resume_comparison else Intent.FACTUAL
-            route = select_route(state.focus, intent, state.pending_clarification)
+            action = Action.COMPARE if resume_comparison else Action.GET_FACTS
+            route = select_route(state.focus, action, state.pending_clarification)
             dispatch_kwargs: dict[str, Any] = {}
             if resume_comparison and pending_context is not None:
                 universities = list(pending_context.comparison_universities)
@@ -356,10 +436,11 @@ class ChatbotService:
                 }
             payload = await self.router.dispatch(
                 state,
-                intent,
+                action,
                 chat.message,
                 **dispatch_kwargs,
             )
+            record_action_source("deterministic_rule")
             payload = self.lead_funnel.augment(state, payload, chat.message)
             await self._persist_result(state, payload)
             tl.info("chatbot.routing", "route: %s (clarification resolved)", route)
@@ -371,12 +452,14 @@ class ChatbotService:
                 self._synthesis_prompt(state, chat.message, route, payload),
             )
         if state.pending_clarification is not None and not pending.new_topic:
-            payload = await self.router.dispatch(state, Intent.FACTUAL, chat.message)
+            payload = await self.router.dispatch(state, Action.CLARIFY, chat.message)
+            record_action_source("deterministic_rule")
             await self._persist_result(state, payload)
             tl.info("chatbot.routing", "route: clarification (still pending)")
             return TurnResult(session_id, state, payload, "clarification")
 
-        # Step 4: intent and three slot matchers remain independent until focus arbitration.
+        # Action selection is layered: resolved-shape rules, bounded regex intent,
+        # existing contextual fast paths, then one strict Gemini JSON decision.
         previous_assistant = next(
             (
                 item.get("content", "")
@@ -385,7 +468,6 @@ class ChatbotService:
             ),
             "",
         )
-        mentions = preview_mentions or extract_mentions(chat.message, self.matcher)
         preference_followup = any(
             marker in previous_assistant.casefold()
             for marker in ("what matters most", "which direction is closer")
@@ -407,20 +489,64 @@ class ChatbotService:
                 "computer",
             )
         )
-        intent_start = time.monotonic()
-        intent = (
-            Intent.ADVISORY
-            if preference_followup
-            else await classify_intent(
-                chat.message,
-                self.llm,
-                use_llm=_use_intent_llm(chat.message, mentions, state),
-            )
+        domain_topic = knowledge_topic(chat.message)
+        selected_topic = topic_from_message(chat.message)
+        safe_focused_followup = bool(
+            _has_focus(state)
+            and not domain_topic
+            and (mentions.reference or selected_topic != "about")
         )
-        if intent is Intent.DISCOVERY and mentions.has_explicit_mentions:
-            intent = Intent.FACTUAL
-        intent_ms = (time.monotonic() - intent_start) * 1000
-        tl.info("chatbot.nlu", "intent: %s (%.0fms)", intent.value, intent_ms)
+        action_start = time.monotonic()
+        used_gemini = False
+        structured_entity: str | None = None
+        gemini_needs_clarification = False
+        action = classify_action(mentions, chat.message)
+        if action is not None:
+            action_source: ActionSource = "deterministic_rule"
+            source_label = "action-rule"
+        elif preference_followup:
+            action = Action.RECOMMEND
+            action_source = "heuristic_regex"
+            source_label = "preference-followup"
+        else:
+            heuristic = heuristic_intent(chat.message)
+            if heuristic is not Intent.FACTUAL:
+                action = action_from_intent(heuristic)
+                action_source = "heuristic_regex"
+                source_label = "heuristic-regex"
+            elif domain_topic:
+                action = Action.GET_FACTS
+                action_source = "deterministic_rule"
+                source_label = "knowledge-fast-path"
+            elif safe_focused_followup:
+                action = Action.GET_FACTS
+                action_source = "deterministic_rule"
+                source_label = "focused-topic-fast-path"
+            else:
+                used_gemini = True
+                outcome = await decide_action(
+                    chat.message,
+                    summarize_mentions(mentions),
+                    self.llm,
+                    metrics=self.intent_metrics,
+                    message_metric=message_metric,
+                )
+                action = outcome.action
+                structured_entity = outcome.entity
+                gemini_needs_clarification = outcome.needs_clarification
+                action_source = (
+                    "gemini" if outcome.source == "gemini" else "heuristic_regex"
+                )
+                source_label = outcome.source
+        record_action_source(action_source)
+        action_ms = (time.monotonic() - action_start) * 1000
+        tl.info(
+            "chatbot.nlu",
+            "action: %s source=%s (%.0fms)",
+            action.value,
+            source_label,
+            action_ms,
+        )
 
         # Log per-slot mention results.
         for slot, candidates in [
@@ -441,8 +567,73 @@ class ChatbotService:
             else:
                 tl.info("chatbot.nlu", "mention: %s=none", slot)
 
-        domain_topic = knowledge_topic(chat.message)
-        if domain_topic and not mentions.has_explicit_mentions and not mentions.reference:
+        if action is Action.CALLBACK:
+            payload = self.lead_funnel.handle_callback(state, chat.message)
+            await self._persist_result(state, payload)
+            tl.info("chatbot.routing", "route: lead (Gemini callback)")
+            return TurnResult(session_id, state, payload, "lead")
+
+        # Matcher evidence still needs the deterministic confirmation flow. A
+        # degraded Gemini outcome must not discard MEDIUM "mbaa" -> MBA evidence
+        # or a HIGH ambiguity such as the two Manipal universities.
+        matcher_confirmation = bool(
+            (
+                mentions.has_medium_confidence_mention
+                and action
+                in {Action.GET_FACTS, Action.UNSUPPORTED_ENTITY, Action.CLARIFY}
+            )
+            or (
+                mentions.has_high_confidence_mention
+                and action is Action.UNSUPPORTED_ENTITY
+                and action_source == "heuristic_regex"
+            )
+        )
+        if matcher_confirmation:
+            action = Action.GET_FACTS
+
+        if action is Action.UNSUPPORTED_ENTITY:
+            payload = _unresolved_payload(
+                chat.message,
+                mentions,
+                self.indexes,
+                structured_entity=structured_entity,
+                use_structured_entity=used_gemini and action_source == "gemini",
+            )
+            await self._persist_result(state, payload)
+            tl.info("chatbot.routing", "route: fallback (unresolved entity)")
+            return TurnResult(session_id, state, payload, "fallback")
+
+        if action is Action.CLARIFY or (
+            gemini_needs_clarification
+            and action not in {Action.CALLBACK, Action.UNSUPPORTED_ENTITY, Action.UNRELATED}
+        ):
+            payload = await self.router.dispatch(state, Action.CLARIFY, chat.message)
+            await self._persist_result(state, payload)
+            tl.info("chatbot.routing", "route: clarification (Gemini decision)")
+            return TurnResult(session_id, state, payload, "clarification")
+
+        # A vague no-evidence degraded factual action must never reuse an older catalog
+        # entity. Keep focus intact and ask for a concrete subject instead.
+        if (
+            used_gemini
+            and action_source == "heuristic_regex"
+            and action is Action.GET_FACTS
+            and not mentions.has_explicit_mentions
+            and not domain_topic
+            and not safe_focused_followup
+            and not matcher_confirmation
+        ):
+            payload = _unresolved_payload(chat.message, mentions, self.indexes)
+            await self._persist_result(state, payload)
+            tl.info("chatbot.routing", "route: fallback (unanchored factual)")
+            return TurnResult(session_id, state, payload, "fallback")
+
+        if (
+            action is Action.GET_FACTS
+            and domain_topic
+            and not mentions.has_explicit_mentions
+            and not mentions.reference
+        ):
             payload = await handle_knowledge(
                 state=state,
                 message=chat.message,
@@ -467,7 +658,7 @@ class ChatbotService:
         update = update_focus(
             state,
             mentions,
-            intent=intent.value,
+            intent=_resolver_intent(action),
             catalog=self.catalog,
             indexes=self.indexes,
             category_index=self.indexes.category_index,
@@ -475,15 +666,21 @@ class ChatbotService:
 
         # Only a confident unrelated signal may discard catalog focus. Entityless factual,
         # comparison, discovery, and advisory follow-ups inherit focus normally.
-        if intent is Intent.UNRELATED:
+        if action is Action.UNRELATED:
             state.focus.clear()
             tl.info(
                 "chatbot.resolver",
                 "focus: cleared (intent=unrelated)",
             )
 
-        decision = clarify(state, update, indexes=self.indexes)
-        route = select_route(state.focus, intent, state.pending_clarification)
+        if action is Action.LIST_PROVIDERS:
+            # Same-name provider records are alternatives only when the user is
+            # selecting one. A list request consumes the entire family directly.
+            state.pending_clarification = None
+            decision = None
+        else:
+            decision = clarify(state, update, indexes=self.indexes)
+        route = select_route(state.focus, action, state.pending_clarification)
 
         # Log focus state change.
         focus_after = {
@@ -512,7 +709,7 @@ class ChatbotService:
         else:
             payload = await self.router.dispatch(
                 state,
-                intent,
+                action,
                 chat.message,
                 categories=update.comparison_categories,
                 universities=update.comparison_universities,
@@ -522,9 +719,10 @@ class ChatbotService:
                 allow_single_university=bool(mentions.unresolved_terms),
                 advisory_candidate_ids=update.advisory_candidate_ids,
                 topic=topic,
+                specialization_candidates=mentions.specializations,
             )
 
-        if decision.needs_clarification:
+        if decision is not None and decision.needs_clarification:
             payload = payload.model_copy(
                 update={
                     "text": decision.text or payload.text,
@@ -662,6 +860,25 @@ async def chat_endpoint(chat: ChatRequest, request: Request) -> StreamingRespons
 async def health_endpoint(request: Request) -> dict[str, Any]:
     service: ChatbotService = request.app.state.service
     return await dependency_health(service.session_store, service.catalog, service.llm)
+
+
+@app.get("/metrics")
+async def metrics_endpoint(request: Request) -> dict[str, Any]:
+    service: ChatbotService = request.app.state.service
+    return service.intent_metrics.snapshot()
+
+
+@app.post("/admin/metrics/reset")
+async def reset_metrics_endpoint(
+    request: Request,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    service: ChatbotService = request.app.state.service
+    expected = service.settings.admin_api_key
+    if expected and authorization != f"Bearer {expected}":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin token")
+    service.intent_metrics.reset()
+    return service.intent_metrics.snapshot()
 
 
 @app.post("/admin/reindex", response_model=ReindexResponse)

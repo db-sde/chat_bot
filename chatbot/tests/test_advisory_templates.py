@@ -265,8 +265,9 @@ async def test_finance_provider_and_job_followup_use_published_record() -> None:
     finally:
         await service.close()
 
-    assert provider.route == "factual"
-    assert "Finance Management is offered by Jain University Online" in provider.payload.text
+    assert provider.route == "list_providers"
+    assert "Finance Management is offered by 1 published university" in provider.payload.text
+    assert "Jain University Online" in provider.payload.text
     assert jobs.route == "factual"
     assert "Financial Analyst (INR 6.5 LPA)" in jobs.payload.text
 
@@ -274,7 +275,11 @@ async def test_finance_provider_and_job_followup_use_published_record() -> None:
 @pytest.mark.asyncio
 async def test_accreditation_and_fee_query_shortlists_universities_not_categories() -> None:
     service = await ChatbotService.create(
-        Settings(redis_url=None, lead_prompt_after_turn=100),
+        Settings(
+            redis_url=None,
+            gemini_api_key=None,
+            lead_prompt_after_turn=100,
+        ),
         session_store=MemorySessionStore(),
     )
     try:

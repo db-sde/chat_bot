@@ -52,6 +52,28 @@ class MentionResult:
     def has_explicit_mentions(self) -> bool:
         return bool(self.universities or self.courses or self.specializations)
 
+    @property
+    def has_high_confidence_mention(self) -> bool:
+        return any(
+            getattr(candidate, "confidence", None) == "HIGH"
+            for candidate in (
+                *self.universities,
+                *self.courses,
+                *self.specializations,
+            )
+        )
+
+    @property
+    def has_medium_confidence_mention(self) -> bool:
+        return any(
+            getattr(candidate, "confidence", None) == "MEDIUM"
+            for candidate in (
+                *self.universities,
+                *self.courses,
+                *self.specializations,
+            )
+        )
+
     def candidates_for(self, slot_type: str) -> list[Any]:
         return {
             "university": self.universities,

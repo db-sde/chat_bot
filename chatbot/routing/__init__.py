@@ -8,10 +8,13 @@ from .discovery_handler import handle_discovery
 from .factual_handler import handle_factual
 from .fallback_handler import handle_fallback
 from .knowledge_handler import handle_knowledge
-from .router import Router, dispatch_route, select_route
+from .list_handler import handle_list_providers, handle_list_specializations
+from .router import Action, Router, action_from_intent, dispatch_route, select_route
 
 __all__ = [
+    "Action",
     "Router",
+    "action_from_intent",
     "dispatch_route",
     "handle_advisory",
     "handle_category",
@@ -21,5 +24,7 @@ __all__ = [
     "handle_factual",
     "handle_fallback",
     "handle_knowledge",
+    "handle_list_providers",
+    "handle_list_specializations",
     "select_route",
 ]
