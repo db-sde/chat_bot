@@ -46,7 +46,7 @@ _CATALOG_COMPARISON = re.compile(
     re.IGNORECASE,
 )
 _CATALOG_ADVISORY = re.compile(
-    r"\b(?:best\s+for\s+me|"
+    r"\b(?:best\b[^?]{0,80}\bfor\s+me|"
     r"which\b[^?]{0,80}\b(?:should\s+i|is\s+best|has\s+the\s+best)|"
     r"which\s+university\b[^?]{0,80}\b(?:highest|reasonable\s+fees?)|"
     r"recommend|suggest|suit(?:s|able)?\s+(?:me|my)|help\s+me\s+choose|"
@@ -70,7 +70,8 @@ _DOMAIN_VOCABULARY = re.compile(
 _OPEN_REASONING = re.compile(
     r"\b(?:confus(?:ed|ing)|help\s+(?:me\s+)?(?:decid(?:e|ing)|choose)|"
     r"guide\s+me|somebody\s+guide|someone\s+to\s+help|career\s+(?:guidance|growth)|"
-    r"working\s+professional|recommend|suggest|best\s+for\s+me|"
+    r"working\s+professional|recommend|suggest|"
+    r"best\b[^?]{0,80}\bfor\s+me|"
     r"compare|comparison|versus|vs\.?|which\s+should\s+i)\b",
     re.IGNORECASE,
 )

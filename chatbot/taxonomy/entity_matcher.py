@@ -56,12 +56,19 @@ class EntityMatcher:
     ) -> list[Candidate]:
         best_by_id: dict[str, Candidate] = {}
         for match in match_ngrams(query_tokens, slot_type, self.indexes):
-            entity_ids = expand_single_token_cluster(
-                self.indexes.ambiguity_clusters,
-                slot_type,
-                match.matched_span,
-                match.entity_ids,
-            )
+            # Exact catalog aliases/acronyms are authoritative and already retain
+            # every ID explicitly attached to that term. Expanding those through
+            # a shared-token cluster turns precise aliases such as ``Jain`` into
+            # false ambiguity with ``Arka Jain``. N-gram/fuzzy token matches still
+            # expand, preserving genuine brand-family ambiguity such as Manipal.
+            entity_ids = match.entity_ids
+            if match.method not in {"exact", "alias", "acronym"}:
+                entity_ids = expand_single_token_cluster(
+                    self.indexes.ambiguity_clusters,
+                    slot_type,
+                    match.matched_span,
+                    entity_ids,
+                )
             for entity_id in entity_ids:
                 candidate = Candidate(
                     entity_id=entity_id,

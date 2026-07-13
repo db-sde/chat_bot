@@ -27,7 +27,8 @@ class Action(StrEnum):
 
 _SPECIALIZATION_MARKER = re.compile(r"\bspeciali[sz]ations?\b", re.IGNORECASE)
 _PROVIDER_REQUEST = re.compile(
-    r"\b(?:which\s+universit(?:y|ies)\s+(?:offers?|provides?)|who\s+offers?)\b",
+    r"\b(?:which\s+universit(?:y|ies)\s+(?:offers?|provides?)|who\s+offers?|"
+    r"universit(?:y|ies)\s+(?:with|offering|that\s+offers?))\b",
     re.IGNORECASE,
 )
 _OPTIONS_REQUEST = re.compile(
@@ -40,7 +41,10 @@ _COMPARE_MARKER = re.compile(
     re.IGNORECASE,
 )
 _RECOMMEND_MARKER = re.compile(
-    r"\b(?:best\s+for\s+me|recommend|suggest|help\s+me\s+choose|"
+    r"\b(?:best\b[^?]{0,80}\bfor\s+me|cheapest|lowest[-\s]+cost|top|"
+    r"(?:under|below|within|up\s*to|upto)\s*"
+    r"(?:a\s+budget\s+of\s*)?(?:₹\s*|rs\.?\s*|inr\s*)?\d|"
+    r"recommend|suggest|help\s+me\s+choose|"
     r"career\s+(?:guidance|growth)|working\s+professional\s+(?:advice|guidance)|"
     r"which\b[^?]{0,80}\b(?:should\s+i|is\s+best|has\s+the\s+best)|"
     r"which\s+university\b[^?]{0,80}\b(?:highest|reasonable\s+fees?))\b",
@@ -80,16 +84,19 @@ def _all_high_groups(mentions: Any) -> dict[tuple[Any, ...], list[Any]]:
     return groups
 
 
-def _one_specialization_family(mentions: Any) -> bool:
+def _one_specialization_span(mentions: Any) -> bool:
+    """Whether the user supplied one specialization concept span.
+
+    A catalog can publish that span on many provider records and, occasionally,
+    on closely related canonical labels. Those records are discovery results,
+    not separate operands the user must disambiguate. Separate spans (for
+    example ``Marketing and Finance``) remain separate semantic groups.
+    """
+
     candidates = _candidates(mentions, "specializations")
     if not candidates:
         return False
-    names = {
-        " ".join(str(getattr(candidate, "canonical_name", "")).casefold().split())
-        for candidate in candidates
-    }
-    names.discard("")
-    return len(names) == 1
+    return len(_semantic_groups(candidates, "specialization")) == 1
 
 
 def _unknown_entities(mentions: Any) -> tuple[Any, ...]:
@@ -135,7 +142,7 @@ def classify(mentions: Any, message: str) -> Action | None:
     ):
         return Action.UNSUPPORTED_ENTITY
 
-    if _one_specialization_family(mentions) and (
+    if high_specializations and (
         _PROVIDER_REQUEST.search(message)
         or (
             _OPTIONS_REQUEST.search(message)
@@ -149,7 +156,7 @@ def classify(mentions: Any, message: str) -> Action | None:
     # provider rows in the index should therefore become provider discovery,
     # not a choice between duplicate specialization labels.
     if (
-        _one_specialization_family(mentions)
+        _one_specialization_span(mentions)
         and not high_universities
         and not _COMPARE_MARKER.search(message)
         and not _RECOMMEND_MARKER.search(message)
@@ -170,6 +177,15 @@ def classify(mentions: Any, message: str) -> Action | None:
         or (groups and bool(getattr(mentions, "unresolved_terms", ())))
     ):
         return Action.COMPARE
+
+    # Ranking, budget, and personal-fit language changes the requested outcome,
+    # even when the catalog subject itself is already resolved. This must run
+    # before the generic catalog-facts branch so phrases such as "Cheapest MBA"
+    # do not collapse into the ordinary category overview. Catalog evidence is
+    # required here; open-ended no-evidence reasoning remains behind the Gemini
+    # gate in ``nlu.intent``.
+    if groups and _RECOMMEND_MARKER.search(message):
+        return Action.RECOMMEND
 
     if (
         groups

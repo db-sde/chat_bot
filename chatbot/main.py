@@ -16,6 +16,7 @@ from fastapi import FastAPI, Header, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 import logging_setup
+from advisor.flow import advisor_can_consume, handle_advisor_turn
 from config import Settings, get_settings
 from data.accessor import safe_get, validate_focus
 from data.loader import SAMPLE_CATALOG_PATH, CatalogStore
@@ -71,6 +72,26 @@ def _looks_like_product_turn(
         or getattr(mentions, "reference", None)
         or action_hint is not None
         or heuristic is not Intent.FACTUAL
+    )
+
+
+def _looks_like_lead_attempt(field: str, message: str) -> bool:
+    """Distinguish a malformed field answer from an unrelated chat turn."""
+
+    value = message.strip()
+    if field == "phone":
+        return bool(re.search(r"\d", value))
+    if field == "email":
+        return "@" in value
+    return bool(
+        value
+        and "?" not in value
+        and len(value.split()) <= 5
+        and not re.match(
+            r"^(?:tell|show|browse|explore|compare|what|which|how|why|list)\b",
+            value,
+            flags=re.IGNORECASE,
+        )
     )
 
 
@@ -342,6 +363,7 @@ class ChatbotService:
         tl.info("chatbot.nlu", "callback_detector: %s", "match" if cb_match else "no match")
         if cb_match:
             record_action_source("deterministic_rule")
+            state.advisor.clear()
             payload = self.lead_funnel.handle_callback(state, chat.message)
             await self._persist_result(state, payload)
             tl.info("chatbot.routing", "route: lead (callback)")
@@ -350,12 +372,24 @@ class ChatbotService:
         preflight_action = classify_action(mentions, chat.message)
         preflight_heuristic = heuristic_intent(chat.message)
 
-        # A pending lead field gets first refusal before catalog clarification or intent
-        # classification. Validation is non-mutating until entity/product evidence has had
-        # a chance to protect name-shaped queries such as "Sikkim".
-        captured_pending_fields: list[str] = []
-        captured_standalone = False
-        pending_answer = self.lead_funnel.inspect_pending_answer(state, chat.message)
+        # Lead collection is an explicit, isolated flow. Lifecycle commands and
+        # valid field answers are handled here; every informational turn exits the
+        # flow and continues through ordinary catalog routing untouched.
+        if self.lead_funnel.is_active(state):
+            lifecycle_payload = self.lead_funnel.handle_lifecycle_command(
+                state,
+                chat.message,
+            )
+            if lifecycle_payload is not None:
+                record_action_source("deterministic_rule")
+                await self._persist_result(state, lifecycle_payload)
+                tl.info("chatbot.routing", "route: lead (lifecycle command)")
+                return TurnResult(session_id, state, lifecycle_payload, "lead")
+
+            pending_answer = self.lead_funnel.inspect_pending_answer(state, chat.message)
+        else:
+            pending_answer = None
+
         if pending_answer is not None:
             product_turn = _looks_like_product_turn(
                 chat.message,
@@ -380,28 +414,38 @@ class ChatbotService:
             name_is_product = pending_answer.field == "name" and product_turn
 
             if pending_answer.valid and not deferral and not name_is_product:
-                captured_pending_fields = self.lead_funnel.commit_pending_answer(
+                captured_fields = self.lead_funnel.commit_pending_answer(
                     state,
                     pending_answer,
                 )
                 # Persist the lead snapshot before any downstream NLU/routing failure can
                 # diverge session state from the CRM event that was just scheduled.
                 await self.session_store.set(state)
-                captured_standalone = not product_turn
                 tl.info(
                     "chatbot.leads",
                     "pending %s captured before NLU",
                     pending_answer.field,
                 )
-            elif deferral:
-                # Preserve the unanswered field for legacy progressive capture,
-                # but let this turn continue without treating the deferral as data.
-                pass
-            elif product_turn:
-                # A normal chat action suspends the legacy progressive ask. The
-                # user can reopen it explicitly; it must not intercept this turn.
-                state.lead.last_asked_field = None
-            else:
+                if product_turn:
+                    # A combined answer + catalog question may safely save the
+                    # explicit field, but the informational request owns the
+                    # response and closes collection immediately afterward.
+                    self.lead_funnel.complete(state)
+                    tl.info("chatbot.leads", "lead field saved; flow exited for chat")
+                else:
+                    payload = self.lead_funnel.captured_reply_response(
+                        state,
+                        captured_fields,
+                    )
+                    record_action_source("deterministic_rule")
+                    await self._persist_result(state, payload)
+                    tl.info("chatbot.routing", "route: lead (pending answer captured)")
+                    return TurnResult(session_id, state, payload, "lead")
+
+            if deferral or product_turn:
+                self.lead_funnel.complete(state)
+                tl.info("chatbot.leads", "lead flow exited for ordinary chat")
+            elif _looks_like_lead_attempt(pending_answer.field, chat.message):
                 record_action_source("deterministic_rule")
                 payload = self.lead_funnel.invalid_pending_response(pending_answer.field)
                 await self._persist_result(state, payload)
@@ -411,16 +455,28 @@ class ChatbotService:
                     pending_answer.field,
                 )
                 return TurnResult(session_id, state, payload, "lead")
+            else:
+                self.lead_funnel.complete(state)
 
-        if captured_standalone:
-            record_action_source("deterministic_rule")
-            payload = self.lead_funnel.captured_reply_response(
-                state,
-                captured_pending_fields,
-            )
-            await self._persist_result(state, payload)
-            tl.info("chatbot.routing", "route: lead (pending answer captured)")
-            return TurnResult(session_id, state, payload, "lead")
+        # Advisor answers are similarly isolated, but persist in their own
+        # profile rather than academic focus. A new informational query simply
+        # suspends advisor mode and proceeds through normal resolution.
+        if state.advisor.active:
+            if advisor_can_consume(state, chat.message, mentions):
+                record_action_source("deterministic_rule")
+                payload = handle_advisor_turn(
+                    state,
+                    chat.message,
+                    self.catalog,
+                    mentions=mentions,
+                    category=state.advisor.category,
+                )
+                await self._persist_result(state, payload)
+                tl.info("chatbot.routing", "route: advisory (profile answer)")
+                return TurnResult(session_id, state, payload, "advisory")
+            state.advisor.active = False
+            state.advisor.last_asked_field = None
+            tl.info("chatbot.routing", "advisor mode suspended for ordinary chat")
 
         # Step 3: an offered clarification is resolved before all ordinary NLU.
         pending_context = (
@@ -630,6 +686,7 @@ class ChatbotService:
             tl.info("chatbot.nlu", '[unknown_entity] input="%s"', unknown)
 
         if action in {Action.CALLBACK, Action.OPEN_LEAD_FORM}:
+            state.advisor.clear()
             payload = self.lead_funnel.handle_callback(state, chat.message)
             await self._persist_result(state, payload)
             tl.info("chatbot.routing", "route: lead (Gemini callback)")
@@ -661,6 +718,14 @@ class ChatbotService:
             "spec": state.focus.specialization_concept or state.focus.specialization,
             "eid": state.focus.entity_id,
         }
+        if (
+            action is Action.DISCOVERY
+            and not mentions.has_explicit_mentions
+            and not mentions.reference
+        ):
+            # A broad browse request is a deliberate context break, not a
+            # pronoun follow-up to the previously focused course.
+            state.focus.clear()
         resolve_reference(mentions, state, raw_input=chat.message)
         update = update_focus(
             state,
@@ -836,7 +901,13 @@ class ChatbotService:
                 advisory_candidate_ids=update.advisory_candidate_ids,
                 topic=topic,
                 specialization_candidates=mentions.specializations,
+                mentions=mentions,
             )
+
+        if action is Action.RECOMMEND and state.advisor.active:
+            # Duplicate provider rows for one specialization are catalog records,
+            # not an advisor ambiguity. The guided profile owns the next question.
+            decision = None
 
         if decision is not None and decision.needs_clarification:
             payload = payload.model_copy(

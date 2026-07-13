@@ -78,7 +78,8 @@ async def test_pending_contact_is_committed_before_product_routing(service) -> N
 
     assert result.state.lead.phone == "9876543210"
     assert result.route == "factual"
-    assert "INR 1,96,000" in result.payload.text
+    assert "published total fee" in result.payload.text
+    assert not result.state.lead.active
 
 
 @pytest.mark.asyncio
@@ -88,7 +89,9 @@ async def test_pending_name_deferrals_are_not_captured(service, message: str) ->
     result = await turn(service, message, f"defer-{message}")
 
     assert result.state.lead.name is None
-    assert result.state.lead.last_asked_field == "name"
+    assert not result.state.lead.active
+    assert result.state.lead.last_asked_field is None
+    assert "cancelled" in result.payload.text
 
 
 def test_prompted_phone_validation_accepts_any_ten_digit_shape() -> None:

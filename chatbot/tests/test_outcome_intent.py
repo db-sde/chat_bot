@@ -247,9 +247,10 @@ async def test_known_entity_control_sequence_never_calls_gemini() -> None:
         "factual",
         "factual",
         "comparison",
-        "factual",
+        "fallback",
     ]
-    assert "INR 1,96,000" in results[1].payload.text
+    assert "INR 2,16,000" in results[1].payload.text
+    assert "Jain University does not currently offer Finance Management" in results[3].payload.text
     assert llm.intent_calls == []
     snapshot = metrics.snapshot()
     assert snapshot["total_messages"] == 4
@@ -340,12 +341,17 @@ async def test_open_human_help_reaches_callback_through_gemini(message: str) -> 
             "Which universities offer Marketing specialization?",
             "list_providers",
             (
-                "Amity University Online",
-                "Jain University Online",
-                "Lovely Professional University",
-                "Manipal University Jaipur",
-                "NMIMS Online",
+                "Marketing Programs",
+                "Marketing is offered by",
+                "Published Universities",
+                "Jain University",
+                "NMIMS",
             ),
+        ),
+        (
+            "Universities with Finance specialization",
+            "list_providers",
+            ("Finance Management", "published universit"),
         ),
     ],
 )

@@ -153,6 +153,7 @@ async def test_one_letter_article_is_not_an_amity_acronym(deterministic_service)
         ("Which university is better, LPU or NMIMS?", Intent.COMPARISON),
         ("Which Online MBA is best for Marketing?", Intent.ADVISORY),
         ("I have a budget of 1.8 lakh. Which MBA should I choose?", Intent.ADVISORY),
+        ("Best MBA for me?", Intent.ADVISORY),
     ],
 )
 def test_high_match_catalog_intents_are_local(message: str, expected: Intent) -> None:

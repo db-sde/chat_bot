@@ -60,7 +60,7 @@ async def turn(service: ChatbotService, message: str, session_id: str):
         ("markting", "list_providers", "Marketing is offered"),
         ("finace", "list_providers", "Finance Management is offered"),
         ("lpuu", "clarification", "Lovely Professional University"),
-        ("nmis", "clarification", "Narsee Monjee"),
+        ("nmis", "clarification", "NMIMS Online"),
     ],
 )
 async def test_catalog_typos_are_deterministic_and_zero_gemini(
@@ -131,6 +131,11 @@ async def test_providerless_concepts_discover_without_clarifying(
     [
         "I need career guidance for MBA",
         "Which MBA specialization is best for me?",
+        "Which MBA is best?",
+        "Best MBA for me?",
+        "Cheapest MBA",
+        "Top online MBA programs",
+        "MBA under 2 lakh",
     ],
 )
 async def test_known_concept_guidance_reaches_advisory_without_becoming_facts(
@@ -155,11 +160,11 @@ async def test_weak_topic_locking_and_attribute_context(blueprint_service) -> No
     switched = await turn(service, "What is BBA?", "weak-lock")
 
     assert fee.route == "factual"
-    assert "INR 1,96,000" in fee.payload.text
-    assert switched.route == "fallback"
+    assert "INR 2,16,000" in fee.payload.text
+    assert switched.route == "category"
     assert switched.state.focus.university_concept is None
-    assert switched.state.focus.course_concept is None
-    assert switched.state.focus.unknown_entities == ["bba"]
+    assert switched.state.focus.course_concept == "bba"
+    assert switched.state.focus.unknown_entities == []
     assert "NMIMS" not in switched.payload.text
     assert llm.intent_calls == []
 
@@ -181,7 +186,8 @@ async def test_explicit_specialization_discovery_clears_inherited_university(
     assert result.state.focus.university_concept is None
     assert result.state.focus.course_concept is None
     assert result.state.focus.specialization_concept == "Marketing"
-    assert "5 published universities" in result.payload.text
+    assert "Marketing is offered by" in result.payload.text
+    assert "published universities" in result.payload.text
     assert llm.intent_calls == []
 
 
@@ -189,10 +195,10 @@ async def test_explicit_specialization_discovery_clears_inherited_university(
 async def test_explicit_invalid_combination_is_explained(blueprint_service) -> None:
     service, llm, _ = blueprint_service
 
-    result = await turn(service, "IGNOU MBA", "invalid-combination")
+    result = await turn(service, "Annamalai University MBA", "invalid-combination")
 
     assert result.route == "fallback"
-    assert "IGNOU does not currently offer MBA" in result.payload.text
+    assert "Annamalai University does not currently offer MBA" in result.payload.text
     assert "Available providers include" in result.payload.text
     assert llm.intent_calls == []
 
@@ -201,11 +207,11 @@ async def test_explicit_invalid_combination_is_explained(blueprint_service) -> N
 async def test_true_acronym_ambiguity_still_clarifies(blueprint_service) -> None:
     service, llm, _ = blueprint_service
 
-    result = await turn(service, "SMU", "true-ambiguity")
+    result = await turn(service, "GU", "true-ambiguity")
 
     assert result.route == "clarification"
-    assert "Sikkim Manipal" in result.payload.text
-    assert "Srinivas Management" in result.payload.text
+    assert "Ganpat University" in result.payload.text
+    assert "GITAM University" in result.payload.text
     assert llm.intent_calls == []
 
 
@@ -238,8 +244,8 @@ async def test_blueprint_observability_events_are_emitted(
     with caplog.at_level(logging.INFO):
         await turn(service, "markting", "logs-recognition")
         await turn(service, "Harvard MBA", "logs-unknown")
-        await turn(service, "IGNOU MBA", "logs-validation")
-        await turn(service, "SMU", "logs-clarification")
+        await turn(service, "Annamalai University MBA", "logs-validation")
+        await turn(service, "GU", "logs-clarification")
 
     messages = "\n".join(record.getMessage() for record in caplog.records)
     assert "[recognition]" in messages

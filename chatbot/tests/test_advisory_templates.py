@@ -247,7 +247,7 @@ async def test_same_specialization_candidate_ids_become_bounded_shortlist() -> N
 
 
 @pytest.mark.asyncio
-async def test_finance_provider_and_job_followup_use_published_record() -> None:
+async def test_finance_family_job_followup_never_selects_an_arbitrary_provider() -> None:
     service = await ChatbotService.create(
         Settings(redis_url=None, lead_prompt_after_turn=100),
         session_store=MemorySessionStore(),
@@ -266,10 +266,18 @@ async def test_finance_provider_and_job_followup_use_published_record() -> None:
         await service.close()
 
     assert provider.route == "list_providers"
-    assert "Finance Management is offered by 1 published university" in provider.payload.text
-    assert "Jain University Online" in provider.payload.text
+    assert "Finance Management is offered by" in provider.payload.text
+    assert "published universities" in provider.payload.text
+    assert "Arka Jain University" in provider.payload.text
+    assert "Lovely Professional University" in provider.payload.text
     assert jobs.route == "factual"
-    assert "Financial Analyst (INR 6.5 LPA)" in jobs.payload.text
+    assert (
+        "Finance Management has published records from multiple universities"
+        in jobs.payload.text
+    )
+    assert "Which university" in jobs.payload.text
+    assert "Lovely Professional University MBA Finance Management" not in jobs.payload.text
+    assert any("Finance Management" in chip for chip in jobs.payload.suggested_chips)
 
 
 @pytest.mark.asyncio
@@ -295,7 +303,6 @@ async def test_accreditation_and_fee_query_shortlists_universities_not_categorie
     assert result.route == "advisory"
     assert "highest published NAAC grade" in result.payload.text
     assert "A++" in result.payload.text
-    assert "Indira Gandhi National Open University" in result.payload.text
-    assert "Lovely Professional University Online" in result.payload.text
-    assert "Jain University Online" in result.payload.text
+    assert "Universities with that grade" in result.payload.text
+    assert "SASTRA Deemed University" in result.payload.text
     assert "MCA currently has the lowest" not in result.payload.text

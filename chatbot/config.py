@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     webhook_timeout_seconds: float = Field(default=5.0, gt=0)
     lead_nudge_after_turns: int = Field(default=3, ge=0)
     dead_letter_path: Path = Path("var/lead_dead_letters.jsonl")
+    # Retained for environment/session compatibility. The isolated lead flow is
+    # now explicit and does not auto-prompt from ordinary catalog turns.
     lead_prompt_after_turn: int = Field(default=3, ge=0)
     lead_prompt_interval: int = Field(default=2, ge=1)
 

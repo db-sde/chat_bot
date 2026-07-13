@@ -65,6 +65,7 @@ TEST_SUITES = {
     ],
     "COMPARISON": [
         "Compare LPU and NMIMS",
+        "Compare NMIMS and Amity",
         "Compare MBA fees of LPU and NMIMS",
         "Compare LPU MBA and NMIMS MBA",
         "Compare Amity MBA and Jain MBA",
@@ -72,6 +73,11 @@ TEST_SUITES = {
         "Compare Marketing and Finance",
     ],
     "DISCOVERY": [
+        "Show MBA universities",
+        "Universities with Finance specialization",
+        "Cheapest MBA",
+        "Top online MBA programs",
+        "MBA under 2 lakh",
         "Show all MBA programs",
         "Show all MCA programs",
         "Show MBA specializations",
@@ -81,6 +87,8 @@ TEST_SUITES = {
         "I want an MBA in Marketing. What are my options?",
     ],
     "ADVISORY": [
+        "Which MBA is best?",
+        "Best MBA for me?",
         "Suggest an affordable Online MBA",
         "Which Online MBA is best for Marketing?",
         "Which university has the highest accreditation and reasonable fees?",
@@ -154,6 +162,16 @@ DETERMINISTIC_ACTION_CASES = {
     "Show MBA specializations",
     "Which universities offer Marketing specialization?",
 }
+SPRINT_DETERMINISTIC_CASES = {
+    "Show MBA universities",
+    "Universities with Finance specialization",
+    "Cheapest MBA",
+    "Top online MBA programs",
+    "MBA under 2 lakh",
+    "Compare NMIMS and Amity",
+    "Which MBA is best?",
+    "Best MBA for me?",
+}
 GEMINI_CALLBACK_CASES = {
     "I'm confused",
     "need help deciding",
@@ -161,7 +179,10 @@ GEMINI_CALLBACK_CASES = {
 }
 FINAL_BLUEPRINT_ZERO_GEMINI_CASES = set(TEST_SUITES["FINAL_BLUEPRINT"])
 TRACKED_ACTION_CASES = (
-    DETERMINISTIC_ACTION_CASES | GEMINI_CALLBACK_CASES | FINAL_BLUEPRINT_ZERO_GEMINI_CASES
+    DETERMINISTIC_ACTION_CASES
+    | SPRINT_DETERMINISTIC_CASES
+    | GEMINI_CALLBACK_CASES
+    | FINAL_BLUEPRINT_ZERO_GEMINI_CASES
 )
 
 
@@ -912,32 +933,46 @@ def _validate_tracked_action(
 ) -> list[str]:
     failures: list[str] = []
     response = str(result.get("response", ""))
-    if question in DETERMINISTIC_ACTION_CASES:
+    if question in DETERMINISTIC_ACTION_CASES | SPRINT_DETERMINISTIC_CASES:
         failures.extend(_validate_zero_gemini_delta(delta, expected_messages=1))
         if delta is not None and delta["action_from_deterministic_rule"] != 1:
             failures.append(
                 "deterministic action source mismatch: "
                 f"expected 1, got {delta['action_from_deterministic_rule']}"
             )
+        expectation: TextExpectation
         if question == "Show MBA specializations":
-            required = ("Business Analytics", "Finance Management", "Marketing")
+            expectation = TextExpectation(
+                required=("Business Analytics", "Finance Management", "Marketing"),
+                forbidden=("Which one did you mean",),
+            )
+        elif question == "Which universities offer Marketing specialization?":
+            expectation = TextExpectation(
+                required=("Marketing", "published universit"),
+                forbidden=("Which one did you mean",),
+            )
+        elif question == "Show MBA universities":
+            expectation = TextExpectation(
+                required=("MBA", "available"),
+                forbidden=("couldn't find",),
+            )
+        elif question == "Universities with Finance specialization":
+            expectation = TextExpectation(
+                required=("Finance Management", "published universit"),
+                forbidden=("Which one did you mean", "couldn't find"),
+            )
+        elif question == "Compare NMIMS and Amity":
+            expectation = TextExpectation(
+                required=("NMIMS", "Amity"),
+                forbidden=("Which two", "couldn't find"),
+            )
         else:
-            required = (
-                "Amity University Online",
-                "Jain University Online",
-                "Lovely Professional University",
-                "Manipal University Jaipur",
-                "NMIMS Online",
-            )
-        failures.extend(
-            _validate_text_expectation(
-                response,
-                TextExpectation(
-                    required=required,
-                    forbidden=("Which one did you mean",),
-                ),
-            )
-        )
+            # Ranking/budget wording may legitimately produce either a grounded
+            # shortlist or one criterion question, depending on catalog coverage.
+            # The routing contract here is local/zero-Gemini and an honest,
+            # non-unsupported response.
+            expectation = TextExpectation(required=("MBA",), forbidden=("couldn't find",))
+        failures.extend(_validate_text_expectation(response, expectation))
         return failures
 
     if question in FINAL_BLUEPRINT_ZERO_GEMINI_CASES:

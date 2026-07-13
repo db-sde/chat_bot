@@ -6,6 +6,7 @@ import re
 from collections.abc import Sequence
 from typing import Any
 
+from advisor.flow import handle_advisor_turn, is_personal_advisor_request
 from data.accessor import safe_get
 from response.builder import build_response
 from response.cards import (
@@ -83,9 +84,24 @@ def advisory_preference(message: str) -> str | None:
         return "accreditation_fees"
     if any(
         marker in text
-        for marker in ("fee", "budget", "affordable", "reasonable cost", "lower cost")
+        for marker in (
+            "fee",
+            "budget",
+            "affordable",
+            "reasonable cost",
+            "lower cost",
+            "lowest cost",
+            "lowest fee",
+            "cheapest",
+            "under ",
+            "below ",
+            "within ",
+            "up to ",
+        )
     ):
         return "fees"
+    if any(marker in text for marker in ("ranking", "ranked", "top ")):
+        return "rankings"
     if any(marker in text for marker in ("placement", "career support", "hiring", "recruit")):
         return "placements"
     if any(
@@ -345,6 +361,57 @@ def _accreditation_fee_response(catalog: Any) -> ResponsePayload:
     )
 
 
+def _ranking_response(
+    category: str | None,
+    category_index: Any,
+    catalog: Any,
+) -> ResponsePayload:
+    """Use publisher rankings when present and never manufacture a 'top' list."""
+
+    entities = (
+        entities_for_category(category, category_index, catalog)
+        if category
+        else iter_catalog_entities(catalog)
+    )
+    rows: list[str] = []
+    seen: set[str] = set()
+    for entity in entities:
+        university = entity_university(entity) or entity_label(entity)
+        ranking = first_value(
+            entity,
+            "ranking",
+            "rank",
+            "nirf_rank",
+            "ranking_content",
+            default=None,
+        )
+        rankings = safe_get(entity, "rankings", None)
+        if ranking is None and rankings:
+            ranking = rankings
+        rendered = clean_text(ranking, max_chars=180)
+        key = university.casefold()
+        if university and rendered and key not in seen:
+            seen.add(key)
+            rows.append(f"• **{university}:** {rendered}")
+    label = display_category(category) if category else "program"
+    if not rows:
+        return build_response(
+            f"## Top {label} programs\n\n"
+            "The current catalog does not publish comparable ranking data, so I won't "
+            "invent a top order. I can compare the published fees, accreditations, or "
+            "placement support instead.",
+            suggested_chips=[
+                f"Cheapest {label}",
+                f"Compare {label} accreditations",
+                f"{label} placement support",
+            ],
+        )
+    return build_response(
+        f"## Published {label} rankings\n\n" + "\n".join(rows[:6]),
+        suggested_chips=[f"Compare {label} fees", f"{label} eligibility"],
+    )
+
+
 def _fee_response(
     label: str,
     entities: Sequence[Any],
@@ -407,6 +474,7 @@ async def handle_advisory(
     candidate_ids: Sequence[Any] | None = None,
     advisory_candidate_ids: Sequence[Any] | None = None,
     candidates: Sequence[Any] | None = None,
+    mentions: Any = None,
     **_: Any,
 ) -> ResponsePayload:
     """Ask exactly one bounded preference question; do not invent a ranking."""
@@ -418,12 +486,29 @@ async def handle_advisory(
     )
     category = str(category) if category else None
     preference = advisory_preference(message)
+
+    # Guided mode is opt-in and persisted separately from academic focus. Direct
+    # analytical queries (fee/ranking/NAAC) still use the established shortlist
+    # path when lightweight handler tests provide a state without AdvisorState.
+    if hasattr(state, "advisor") and is_personal_advisor_request(message):
+        return handle_advisor_turn(
+            state,
+            message,
+            catalog,
+            mentions=mentions,
+            category=category,
+            start=True,
+        )
+
     budget = parse_budget(message) if preference == "fees" else None
     references = advisory_candidate_ids or candidate_ids or candidates
     shortlisted = _candidate_entities(catalog, references)
 
     if preference == "accreditation_fees":
         return _accreditation_fee_response(catalog)
+
+    if preference == "rankings":
+        return _ranking_response(category, category_index, catalog)
 
     if preference == "careers":
         if shortlisted:
@@ -457,11 +542,27 @@ async def handle_advisory(
                     suggested_chips=[f"{label} fees", f"Compare {label} options"],
                 )
         if preference == "specialization":
-            mapping = getattr(category_index, "specialization_to_entities", {})
-            names = [display_category(name) for name in list(mapping)[:6]]
+            names: list[str] = []
+            seen: set[str] = set()
+            for entity in entities_for_category(category, category_index, catalog):
+                if entity_page_type(entity) != "specialization":
+                    continue
+                name = clean_text(
+                    first_value(
+                        entity,
+                        "specialization_name",
+                        "spec_name",
+                        default="",
+                    )
+                )
+                key = name.casefold()
+                if name and key not in seen:
+                    seen.add(key)
+                    names.append(name)
+            names.sort(key=str.casefold)
             return build_response(
                 f"Which {label} specialization fits your goal?",
-                suggested_chips=names or ["Browse specializations"],
+                suggested_chips=names[:6] or ["Browse specializations"],
             )
         text = (
             f"I can narrow the published {label} options for you. "

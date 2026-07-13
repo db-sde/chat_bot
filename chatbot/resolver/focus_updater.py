@@ -211,9 +211,7 @@ def _mention_groups(
     )
 
 
-def _same_semantic_family(
-    candidates: Iterable[Candidate], indexes: TaxonomyIndexes | None
-) -> bool:
+def _same_semantic_family(candidates: Iterable[Candidate], indexes: TaxonomyIndexes | None) -> bool:
     """Return whether provider records represent one named specialization."""
 
     labels = {" ".join(_label(item, indexes).casefold().split()) for item in candidates}
@@ -234,8 +232,21 @@ def _comparison_course_entities(
     for university in universities:
         pool: set[str] = set()
         for key in _university_keys(university, indexes):
-            pool.update(reverse.intersect(category=category, university=key))
-        if indexes is not None:
+            matches = set(reverse.intersect(category=category, university=key))
+            if indexes is not None:
+                matches = {
+                    entity_id
+                    for entity_id in matches
+                    if _metadata(indexes, entity_id).get("page_type") == "course"
+                }
+            if matches:
+                # Keys are ordered from concrete catalog id/name to broader
+                # publisher aliases. Once an exact key binds the university, do
+                # not widen it with a shared token such as ``jain`` that also
+                # belongs to Arka Jain University.
+                pool = matches
+                break
+        if indexes is not None and pool:
             pool = {
                 entity_id
                 for entity_id in pool
@@ -305,11 +316,7 @@ def update_focus(
     # Discovery is an explicit topic switch. A provider-less specialization
     # family must not be narrowed through an inherited university before the
     # family has a chance to reach the list-provider handler.
-    if (
-        is_discovery
-        and high_by_slot["specialization"]
-        and not high_by_slot["university"]
-    ):
+    if is_discovery and high_by_slot["specialization"] and not high_by_slot["university"]:
         _clear_slot(focus, "university")
         _clear_slot(focus, "course")
         _clear_slot(focus, "specialization")
@@ -414,9 +421,8 @@ def update_focus(
     specialization_groups = _mention_groups(specialization_high)
     one_concept_family = False
     if len(specialization_high) > 1:
-        one_concept_family = (
-            len(specialization_groups) == 1
-            and _same_semantic_family(specialization_high, indexes)
+        one_concept_family = len(specialization_groups) == 1 and _same_semantic_family(
+            specialization_high, indexes
         )
         comparable_families = (
             is_comparison
@@ -523,9 +529,7 @@ def update_focus(
         _assign(focus, "specialization_concept", specialization_concept)
         _set_source(focus, "specialization", "explicit")
         resolved["specialization"] = (
-            specialization_high
-            if one_concept_family
-            else (specialization_candidate,)
+            specialization_high if one_concept_family else (specialization_candidate,)
         )
     if single:
         _assign(focus, "entity_id", None)
@@ -546,9 +550,7 @@ def update_focus(
     ):
         # Discovery deliberately retains the entire provider family. Concrete
         # records are resolved by the handler, never selected here.
-        joined = tuple(
-            dict.fromkeys(candidate.entity_id for candidate in specialization_high)
-        )
+        joined = tuple(dict.fromkeys(candidate.entity_id for candidate in specialization_high))
         _assign(focus, "entity_id", None)
     elif reverse and specialization_candidate and current_specialization and not current_category:
         compatible = True

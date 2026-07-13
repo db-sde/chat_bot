@@ -156,6 +156,7 @@ async def dispatch_route(
     topic: str | None = None,
     category: str | None = None,
     specialization_candidates: Sequence[Any] | None = None,
+    mentions: Any = None,
 ) -> ResponsePayload:
     """Select and invoke one async handler, returning the canonical payload."""
 
@@ -199,6 +200,7 @@ async def dispatch_route(
         return await handle_advisory(
             **common,
             candidate_ids=advisory_candidate_ids,
+            mentions=mentions,
         )
     if route_name == "factual":
         return await handle_factual(**common, entity=entity, topic=topic)

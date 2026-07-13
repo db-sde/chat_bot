@@ -7,8 +7,10 @@ from typing import Any
 from data.accessor import safe_get
 from response.builder import build_response
 from response.cards import (
+    catalog_get_entity,
     clean_text,
     entity_label,
+    entity_university,
     find_catalog_entity,
     first_value,
 )
@@ -76,6 +78,8 @@ def _load_focused_entity(
     catalog: Any,
     category_index: Any,
     explicit: Any = None,
+    *,
+    multiple_matches: list[str] | None = None,
 ) -> Any:
     if explicit is not None:
         return explicit
@@ -121,6 +125,13 @@ def _load_focused_entity(
         }
         if len(matches) == 1:
             return _cache_resolved(state, catalog, next(iter(matches)))
+        if len(matches) > 1:
+            # A provider-less specialization is one concept backed by multiple
+            # publisher records. Never fall through to ``find_catalog_entity``:
+            # its exact-name lookup would silently select the first provider.
+            if multiple_matches is not None:
+                multiple_matches.extend(sorted(matches))
+            return None
     elif university:
         university_id = _university_entity_id(catalog, university)
         if university_id:
@@ -197,12 +208,35 @@ async def handle_factual(
 ) -> ResponsePayload:
     """Answer from cached publisher data, degrading cleanly on absent fields."""
 
+    multiple_matches: list[str] = []
     focused_entity = _load_focused_entity(
         state,
         catalog,
         category_index,
         explicit=entity,
+        multiple_matches=multiple_matches,
     )
+    if focused_entity is None and multiple_matches:
+        focus = _focus(state)
+        specialization = _concept(focus, "specialization_concept", "specialization")
+        category = _concept(focus, "course_concept", "category")
+        subject = specialization or category or "that program"
+        providers = sorted(
+            {
+                provider
+                for entity_id in multiple_matches
+                if (candidate := catalog_get_entity(catalog, entity_id)) is not None
+                if (provider := entity_university(candidate))
+            },
+            key=str.casefold,
+        )
+        selected_topic = topic or topic_from_message(message)
+        detail = "published information" if selected_topic == "about" else selected_topic
+        return build_response(
+            f"{subject} has published records from multiple universities. "
+            f"Which university should I use for the {detail} answer?",
+            suggested_chips=[f"{provider} {subject}" for provider in providers],
+        )
     if focused_entity is None:
         return build_response(
             "I couldn't load a single published record for that request. "
@@ -217,7 +251,11 @@ async def handle_factual(
     if not text:
         text = render_topic(selected_topic, focused_entity, catalog=catalog)
 
-    chips = suggested_chips(focused_entity, selected_topic)
+    chips = suggested_chips(
+        focused_entity,
+        selected_topic,
+        catalog=catalog,
+    )
     if not chips:
         page_type = str(first_value(focused_entity, "_meta.page_type", "page_type", default=""))
         if page_type == "university":

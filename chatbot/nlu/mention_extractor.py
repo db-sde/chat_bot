@@ -256,6 +256,78 @@ def detect_reference(message: str) -> str | None:
     return None
 
 
+def _prefer_precise_catalog_families(
+    candidates: list[Any],
+    indexes: Any = None,
+) -> list[Any]:
+    """Prune broad publisher aliases when a more precise catalog label exists.
+
+    Large feeds can legitimately repeat one alias across provider records. They
+    can also attach a broad alias such as ``marketing`` to both ``Marketing`` and
+    ``Digital Marketing``. For one input span, an exact canonical concept wins.
+    Otherwise, only an explicit publisher alias may narrow a shared-token cluster
+    (``Jain`` vs ``Arka Jain``); prefix position alone must not collapse a genuine
+    brand family such as ``Manipal``. Provider duplicates remain intact.
+    """
+
+    groups: dict[tuple[Any, ...], list[Any]] = {}
+    order: list[tuple[Any, ...]] = []
+    for candidate in candidates:
+        key = (
+            getattr(candidate, "slot_type", None),
+            getattr(candidate, "start", None),
+            getattr(candidate, "end", None),
+            normalize_text(getattr(candidate, "matched_span", "")),
+            getattr(candidate, "confidence", None),
+        )
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(candidate)
+
+    result: list[Any] = []
+    for key in order:
+        values = groups[key]
+        span = key[3]
+        if not span or len(values) == 1:
+            result.extend(values)
+            continue
+        exact = [
+            candidate
+            for candidate in values
+            if normalize_text(getattr(candidate, "canonical_name", "")) == span
+        ]
+        if exact:
+            result.extend(exact)
+            continue
+
+        alias_index = getattr(indexes, "alias_index", {})
+        slot_aliases = alias_index.get(key[0], {}) if hasattr(alias_index, "get") else {}
+        explicit_alias_ids = (
+            slot_aliases.get(span, ()) if hasattr(slot_aliases, "get") else ()
+        )
+        explicit_aliases = [
+            candidate
+            for candidate in values
+            if getattr(candidate, "entity_id", None) in explicit_alias_ids
+        ]
+        result.extend(explicit_aliases or values)
+    return result
+
+
+def _drop_query_language_fuzzy_matches(candidates: list[Any]) -> list[Any]:
+    """Never turn conversational control words into typo-corrected entities."""
+
+    result: list[Any] = []
+    for candidate in candidates:
+        span_tokens = set(normalize_text(getattr(candidate, "matched_span", "")).split())
+        fuzzy = int(getattr(candidate, "layer", 0) or 0) == 4
+        if fuzzy and span_tokens and span_tokens <= _QUERY_AND_STRUCTURE_WORDS:
+            continue
+        result.append(candidate)
+    return result
+
+
 def _display_unresolved(value: str) -> str:
     words = [word for word in value.strip(" ,.-").split() if word]
     return " ".join(word.upper() if len(word) <= 3 else word.title() for word in words)
@@ -463,8 +535,19 @@ def extract_mentions(message: str, matcher: Any) -> MentionResult:
     """Resolve all slot types independently and retain every candidate."""
 
     tokens = tokenize(message)
-    courses = list(matcher.resolve_slot(tokens, "course"))
-    specializations = list(matcher.resolve_slot(tokens, "specialization"))
+    indexes = getattr(matcher, "indexes", None)
+    courses = _prefer_precise_catalog_families(
+        _drop_query_language_fuzzy_matches(
+            list(matcher.resolve_slot(tokens, "course"))
+        ),
+        indexes,
+    )
+    specializations = _prefer_precise_catalog_families(
+        _drop_query_language_fuzzy_matches(
+            list(matcher.resolve_slot(tokens, "specialization"))
+        ),
+        indexes,
+    )
     high_category_spans = [
         (candidate.start, candidate.end)
         for candidate in courses
@@ -480,7 +563,12 @@ def extract_mentions(message: str, matcher: Any) -> MentionResult:
             for start, end in high_category_spans
         )
     ]
-    universities = list(matcher.resolve_slot(tokens, "university"))
+    universities = _prefer_precise_catalog_families(
+        _drop_query_language_fuzzy_matches(
+            list(matcher.resolve_slot(tokens, "university"))
+        ),
+        indexes,
+    )
     attribute_index = _attribute_index(matcher)
     attributes = _extract_attributes(message, attribute_index)
     unknown_entities = _unknown_entities(

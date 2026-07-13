@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from data.accessor import safe_get
@@ -11,10 +11,13 @@ from response.cards import (
     catalog_get_entity,
     entity_fee,
     entity_label,
+    entity_page_type,
     entity_university,
     format_inr,
+    has_value,
     iter_catalog_entities,
     parse_money,
+    render_sections,
 )
 from schemas import ResponsePayload
 
@@ -93,9 +96,7 @@ def entities_for_category(category: str, category_index: Any, catalog: Any) -> l
         if entity is None:
             continue
         identity = str(
-            safe_get(entity, "id", None)
-            or safe_get(entity, "slug", None)
-            or entity_label(entity)
+            safe_get(entity, "id", None) or safe_get(entity, "slug", None) or entity_label(entity)
         ).casefold()
         if identity in seen:
             continue
@@ -137,6 +138,63 @@ def category_summary(category: str, category_index: Any, catalog: Any) -> dict[s
     }
 
 
+def _career_outcomes(entities: Iterable[Any], *, limit: int = 10) -> list[str]:
+    """Collect only explicitly published role/outcome labels for a category."""
+
+    outcomes: list[str] = []
+    seen: set[str] = set()
+    for entity in entities:
+        collections = (
+            safe_get(entity, "job_profiles", []) or [],
+            safe_get(entity, "career_outcomes", []) or [],
+        )
+        for collection in collections:
+            if isinstance(collection, (str, bytes, Mapping)):
+                collection = (collection,)
+            for item in collection:
+                if isinstance(item, str):
+                    value = item.strip()
+                else:
+                    value = str(
+                        safe_get(item, "job_title", None)
+                        or safe_get(item, "role", None)
+                        or safe_get(item, "title", None)
+                        or safe_get(item, "name", None)
+                        or ""
+                    ).strip()
+                key = value.casefold()
+                if not value or key in seen:
+                    continue
+                seen.add(key)
+                outcomes.append(value)
+                if len(outcomes) == limit:
+                    return outcomes
+    return outcomes
+
+
+def _category_actions(label: str, summary: Mapping[str, Any]) -> list[str]:
+    """Build grounded actions from fields represented in this category result."""
+
+    entities = list(summary.get("entities", ()))
+    universities = list(summary.get("universities", ()))
+    actions: list[str] = []
+    if any(entity_fee(entity) for entity in entities):
+        actions.append(f"{label} Fees")
+    if any(
+        has_value(safe_get(entity, "eligibility_summary", None))
+        or has_value(safe_get(entity, "eligibility_content", None))
+        for entity in entities
+    ):
+        actions.append(f"{label} Eligibility")
+    if any(entity_page_type(entity) == "specialization" for entity in entities):
+        actions.append(f"{label} Specializations")
+    if _career_outcomes(entities, limit=1):
+        actions.append(f"{label} Career Scope")
+    if len(universities) >= 2:
+        actions.append(f"Compare {universities[0]} and {universities[1]} {label}")
+    return actions[:5]
+
+
 def _focus_category(state: Any) -> str | None:
     focus = getattr(state, "focus", None)
     value = getattr(focus, "category", None)
@@ -160,8 +218,7 @@ async def handle_category(
     label = display_category(selected)
     if not selected:
         choices = [
-            display_category(item)
-            for item in available_categories(category_index, catalog)[:6]
+            display_category(item) for item in available_categories(category_index, catalog)[:6]
         ]
         return build_response(
             "Which course category would you like to explore?",
@@ -200,16 +257,39 @@ async def handle_category(
             requirements.append(f"{university}: {eligibility}")
         if requirements:
             return build_response(
-                f"Published {label} eligibility varies by university: "
-                + "; ".join(requirements[:6])
-                + ". Check the final university record before applying.",
-                suggested_chips=[f"{label} fees", f"Universities offering {label}"],
+                render_sections(
+                    f"{label} Eligibility",
+                    [("Published Requirements", requirements[:6])],
+                    intro=(
+                        "Eligibility varies by university. Check the final published "
+                        "program record before applying."
+                    ),
+                ),
+                suggested_chips=_category_actions(label, summary),
+            )
+
+    if any(
+        marker in message.casefold() for marker in ("career", "job", "role", "scope", "opportunit")
+    ):
+        outcomes = _career_outcomes(summary["entities"])
+        if outcomes:
+            return build_response(
+                render_sections(
+                    f"{label} Career Scope",
+                    [("Published Career Outcomes", outcomes)],
+                    intro=(
+                        "These roles appear in the current catalog records; actual outcomes "
+                        "depend on the learner, role requirements, and employer."
+                    ),
+                ),
+                suggested_chips=[
+                    action
+                    for action in _category_actions(label, summary)
+                    if "career scope" not in action.casefold()
+                ],
             )
 
     shown = universities[:8]
-    provider_text = ", ".join(shown)
-    if len(universities) > len(shown):
-        provider_text += f", and {len(universities) - len(shown)} more"
 
     minimum = summary["fee_min"]
     maximum = summary["fee_max"]
@@ -223,13 +303,18 @@ async def handle_category(
             f"{format_inr(minimum)} to {format_inr(maximum)}."
         )
 
-    text = (
-        f"{label} is available from {provider_text}. {fee_text} "
-        "I haven't selected one university for you."
+    text = render_sections(
+        f"{label} Programs",
+        [("Published Universities", shown), ("Fees", [fee_text])],
+        intro=(
+            f"{label} is available from {len(universities)} published "
+            f"universit{'y' if len(universities) == 1 else 'ies'}. "
+            "I haven't selected one university for you."
+        ),
     )
     return build_response(
         text,
-        suggested_chips=[f"{label} eligibility", f"{label} fees"],
+        suggested_chips=_category_actions(label, summary),
     )
 
 

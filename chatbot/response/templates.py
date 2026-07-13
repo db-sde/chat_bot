@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
 from typing import Any
 
 from data.accessor import safe_get
@@ -11,9 +11,14 @@ from .cards import (
     catalog_get_entity,
     clean_text,
     entity_fee,
+    entity_heading,
     entity_label,
+    entity_page_type,
+    entity_university,
     first_value,
     has_value,
+    related_specialization_names,
+    render_sections,
 )
 
 
@@ -28,7 +33,7 @@ def unavailable_answer(entity: Any, topic: str) -> str:
 def entity_not_found_answer(name: str, suggestion: str | None = None) -> str:
     """Response when entity_matcher returned no match — the name is unresolved."""
 
-    base = f"I couldn't find a match for \"{name}\" in the published catalog."
+    base = f'I couldn\'t find a match for "{name}" in the published catalog.'
     if suggestion:
         base += f" Did you mean {suggestion}?"
     else:
@@ -101,10 +106,23 @@ def mode_answer(entity: Any) -> str:
 
 def placements_answer(entity: Any) -> str:
     subject = entity_label(entity)
-    content = clean_text(safe_get(entity, "placement_content", None), max_chars=520)
+    content = clean_text(
+        first_value(
+            entity,
+            "placement_content",
+            "placement_support",
+            "placements_content",
+            default=None,
+        ),
+        max_chars=520,
+    )
     if not content:
         return unavailable_answer(entity, "placement")
-    return f"For {subject}, the published placement information says: {content}"
+    return render_sections(
+        entity_heading(entity),
+        [("Placement Support", [content])],
+        intro=f"Published placement information for {subject}.",
+    )
 
 
 def emi_answer(entity: Any) -> str:
@@ -149,14 +167,116 @@ def exam_answer(entity: Any) -> str:
     return f"For {subject}, {content}"
 
 
-def accreditation_answer(entity: Any) -> str:
-    subject = entity_label(entity)
+def _nested_lines(
+    value: Any,
+    *,
+    field_groups: tuple[tuple[str, ...], ...],
+    limit: int = 6,
+) -> list[str]:
+    """Render publisher strings/objects without assuming one feed-specific shape."""
+
+    if not has_value(value):
+        return []
+    values = (
+        value
+        if isinstance(value, Iterable) and not isinstance(value, (str, bytes, Mapping))
+        else [value]
+    )
+    result: list[str] = []
+    for item in values:
+        if isinstance(item, (str, int, float)):
+            rendered = clean_text(item)
+        else:
+            parts = [
+                clean_text(first_value(item, *fields, default=None)) for fields in field_groups
+            ]
+            rendered = " — ".join(part for part in parts if part)
+        if rendered and rendered.casefold() not in {line.casefold() for line in result}:
+            result.append(rendered)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def accreditation_items(entity: Any) -> list[str]:
+    """Collect approvals and accreditation bodies from all documented shapes."""
+
+    details: list[str] = []
     naac = clean_text(safe_get(entity, "naac_grade", None))
     ugc = clean_text(first_value(entity, "ugc_status", "ugc_approved", default=None))
-    details = [value for value in (f"NAAC grade {naac}" if naac else "", ugc) if value]
+    if naac:
+        details.append(f"NAAC grade {naac}")
+    if ugc:
+        details.append(ugc)
+    details.extend(
+        _nested_lines(
+            safe_get(entity, "accreditations", None),
+            field_groups=(
+                ("body_name", "name", "title"),
+                ("body_descriptor", "descriptor", "status"),
+                ("body_detail", "detail", "description"),
+            ),
+        )
+    )
+    for path in ("approvals", "approval"):
+        details.extend(
+            _nested_lines(
+                safe_get(entity, path, None),
+                field_groups=(
+                    ("body_name", "authority", "name", "title"),
+                    ("status", "descriptor", "detail", "description"),
+                ),
+            )
+        )
+    return list(dict.fromkeys(details))
+
+
+def ranking_items(entity: Any) -> list[str]:
+    """Collect explicit publisher rankings; never infer a ranking from NAAC or fees."""
+
+    result: list[str] = []
+    for path in ("rankings", "ranking", "ranking_content"):
+        result.extend(
+            _nested_lines(
+                safe_get(entity, path, None),
+                field_groups=(
+                    ("ranking_body", "organization", "agency", "name", "title"),
+                    ("rank", "position", "value"),
+                    ("ranking_year", "year"),
+                    ("description", "detail"),
+                ),
+            )
+        )
+    facts = safe_get(entity, "facts", []) or []
+    if isinstance(facts, Iterable) and not isinstance(facts, (str, bytes, Mapping)):
+        for fact in facts:
+            title = clean_text(first_value(fact, "fact_title", "title", default=None))
+            if "rank" not in title.casefold():
+                continue
+            description = clean_text(
+                first_value(fact, "fact_description", "description", default=None)
+            )
+            result.append(" — ".join(value for value in (title, description) if value))
+    return list(dict.fromkeys(value for value in result if value))[:6]
+
+
+def accreditation_answer(entity: Any) -> str:
+    subject = entity_label(entity)
+    details = accreditation_items(entity)
     if not details:
         return unavailable_answer(entity, "accreditation")
-    return f"The published accreditation details for {subject} are: {'; '.join(details)}."
+    return render_sections(
+        entity_heading(entity),
+        [("Approvals & Accreditations", details)],
+        intro=f"Published accreditation details for {subject}.",
+    )
+
+
+def ranking_answer(entity: Any) -> str:
+    details = ranking_items(entity)
+    if not details:
+        return unavailable_answer(entity, "ranking")
+    return render_sections(entity_heading(entity), [("Published Rankings", details)])
 
 
 def certificate_answer(entity: Any) -> str:
@@ -181,9 +301,22 @@ def jobs_answer(entity: Any) -> str:
         salary = clean_text(safe_get(profile, "avg_salary", None))
         if title:
             rendered.append(f"{title} ({salary})" if salary else title)
+    rendered.extend(
+        _nested_lines(
+            safe_get(entity, "career_outcomes", None),
+            field_groups=(
+                ("job_title", "role", "name", "title"),
+                ("avg_salary", "salary", "outcome", "description"),
+            ),
+        )
+    )
     if not rendered:
         return unavailable_answer(entity, "career-outcome")
-    return f"Published career options for {subject} include {', '.join(rendered[:6])}."
+    return render_sections(
+        entity_heading(entity),
+        [("Career Outcomes", rendered[:6])],
+        intro=f"Published career options for {subject}.",
+    )
 
 
 def _provider_name(entity: Any, catalog: Any = None) -> str:
@@ -251,7 +384,11 @@ def programs_answer(entity: Any) -> str:
             rendered.append(f"{name} ({fee})" if fee else name)
     if not rendered:
         return unavailable_answer(entity, "program")
-    return f"Published programs at {subject} include {', '.join(rendered[:8])}."
+    return render_sections(
+        entity_heading(entity),
+        [("Published Programs", rendered[:8])],
+        intro=f"Programs currently listed for {subject}.",
+    )
 
 
 def reviews_answer(entity: Any) -> str:
@@ -265,20 +402,62 @@ def reviews_answer(entity: Any) -> str:
             rendered.append(f'"{text}" — {reviewer}' if reviewer else f'"{text}"')
     if not rendered:
         return unavailable_answer(entity, "review")
-    return f"The published student feedback for {subject} includes: {'; '.join(rendered[:3])}."
+    return render_sections(
+        entity_heading(entity),
+        [("Student Feedback", rendered[:3])],
+        intro=f"Published student feedback for {subject}.",
+    )
+
+
+def specialization_items(entity: Any, catalog: Any = None) -> list[str]:
+    """Return concrete catalog specialization labels related to this record."""
+
+    result = related_specialization_names(entity, catalog, limit=8)
+    for path in ("specializations", "popular_specializations"):
+        result.extend(
+            _nested_lines(
+                safe_get(entity, path, None),
+                field_groups=(("specialization_name", "spec_name", "name", "title"),),
+                limit=8,
+            )
+        )
+    return list(dict.fromkeys(result))[:8]
+
+
+def specializations_answer(entity: Any, catalog: Any = None) -> str:
+    details = specialization_items(entity, catalog)
+    intro = clean_text(safe_get(entity, "specializations_intro", None), max_chars=320)
+    if not details and not intro:
+        return unavailable_answer(entity, "specialization")
+    sections = [("Popular Specializations", details)] if details else []
+    return render_sections(entity_heading(entity), sections, intro=intro)
+
+
+def career_items(entity: Any) -> list[str]:
+    profiles = safe_get(entity, "job_profiles", []) or []
+    result: list[str] = []
+    for profile in profiles if isinstance(profiles, (list, tuple)) else []:
+        title = clean_text(safe_get(profile, "job_title", None))
+        salary = clean_text(safe_get(profile, "avg_salary", None))
+        if title:
+            result.append(f"{title} ({salary})" if salary else title)
+    result.extend(
+        _nested_lines(
+            safe_get(entity, "career_outcomes", None),
+            field_groups=(
+                ("job_title", "role", "name", "title"),
+                ("avg_salary", "salary", "outcome", "description"),
+            ),
+            limit=4,
+        )
+    )
+    return list(dict.fromkeys(result))[:4]
 
 
 def about_answer(entity: Any, catalog: Any = None) -> str:
     subject = entity_label(entity)
     hero = clean_text(safe_get(entity, "hero_description", None), max_chars=260)
     about = clean_text(safe_get(entity, "about_content", None), max_chars=520)
-    if hero and about and hero.casefold() not in about.casefold():
-        return f"{subject}: {hero} {about}"
-    if about:
-        return f"{subject}: {about}"
-    if hero:
-        return f"{subject}: {hero}"
-
     provider = _provider_name(entity, catalog)
     duration = clean_text(safe_get(entity, "duration", None))
     mode = clean_text(first_value(entity, "mode", "mode_of_learning", default=None))
@@ -287,24 +466,60 @@ def about_answer(entity: Any, catalog: Any = None) -> str:
         first_value(entity, "eligibility_summary", "eligibility_content", default=None),
         max_chars=260,
     )
-
-    sentences: list[str] = []
-    if provider and provider.casefold() != subject.casefold():
-        sentences.append(f"{subject} is offered by {provider}.")
-
-    published: list[str] = []
+    starting_fee = clean_text(safe_get(entity, "starting_fee", None))
+    details: list[str] = []
     if duration:
-        published.append(f"duration: {duration}")
+        details.append(f"duration: {duration}")
     if mode:
-        published.append(f"mode: {mode}")
+        details.append(f"mode: {mode}")
     if fee:
-        published.append(f"fee: {fee}")
+        details.append(f"fee: {fee}")
+    if starting_fee and starting_fee.casefold() != fee.casefold():
+        details.append(f"starting fee: {starting_fee}")
     if eligibility:
-        published.append(f"eligibility: {eligibility}")
-    if published:
-        sentences.append(f"Published details — {'; '.join(published)}.")
-    if sentences:
-        return " ".join(sentences)
+        details.append(f"eligibility: {eligibility}")
+
+    overview: list[str] = []
+    if hero:
+        overview.append(hero)
+    if about and (not hero or hero.casefold() not in about.casefold()):
+        overview.append(about)
+
+    intro = None
+    if provider and provider.casefold() != subject.casefold():
+        intro = f"{subject} is offered by {provider}."
+
+    sections: list[tuple[str, Iterable[Any]]] = []
+    if overview:
+        sections.append(("Overview", overview))
+    if details:
+        sections.append(("Published Details", details))
+    approvals = accreditation_items(entity)
+    if approvals:
+        sections.append(("Approvals & Accreditations", approvals))
+    specializations = specialization_items(entity, catalog)
+    if specializations:
+        sections.append(("Popular Specializations", specializations[:6]))
+    placement = clean_text(
+        first_value(
+            entity,
+            "placement_content",
+            "placement_support",
+            "placements_content",
+            default=None,
+        ),
+        max_chars=320,
+    )
+    if placement:
+        sections.append(("Placement Support", [placement]))
+    careers = career_items(entity)
+    if careers:
+        sections.append(("Career Outcomes", careers))
+    rankings = ranking_items(entity)
+    if rankings:
+        sections.append(("Published Rankings", rankings))
+    if sections or intro:
+        return render_sections(entity_heading(entity), sections, intro=intro)
     return unavailable_answer(entity, "overview")
 
 
@@ -319,6 +534,7 @@ TEMPLATE_BY_TOPIC: dict[str, Callable[[Any], str]] = {
     "admission": admission_answer,
     "exam": exam_answer,
     "accreditation": accreditation_answer,
+    "ranking": ranking_answer,
     "certificate": certificate_answer,
     "jobs": jobs_answer,
     "programs": programs_answer,
@@ -333,6 +549,8 @@ def render_topic(topic: str, entity: Any, *, catalog: Any = None) -> str:
         return provider_answer(entity, catalog)
     if topic == "about":
         return about_answer(entity, catalog)
+    if topic == "specializations":
+        return specializations_answer(entity, catalog)
     template = TEMPLATE_BY_TOPIC.get(topic, about_answer)
     return template(entity)
 
@@ -370,6 +588,7 @@ def topic_from_message(message: str) -> str:
                 "career option",
                 "career opportunit",
                 "career outcome",
+                "career scope",
                 "salary",
                 "package",
                 "earning",
@@ -378,8 +597,10 @@ def topic_from_message(message: str) -> str:
         ("syllabus", ("syllabus", "curriculum", "subjects", "semester-wise")),
         ("admission", ("admission", "how to apply", "application process", "enrol")),
         ("exam", ("exam", "proctor", "assessment")),
+        ("ranking", ("ranking", "ranked", " rank ", "position in")),
         ("accreditation", ("naac", "ugc", "accredit", "approval", "recognition")),
         ("certificate", ("certificate", "degree valid", "validity")),
+        ("specializations", ("specializations", "specialisations")),
         ("programs", ("programs", "courses offered", "degrees offered")),
         ("reviews", ("reviews", "student feedback", "testimonials")),
     )
@@ -389,51 +610,108 @@ def topic_from_message(message: str) -> str:
     return "about"
 
 
-_CHIP_FIELDS: dict[str, tuple[str, ...]] = {
-    "Fees": ("total_fee", "starting_fee", "fee_plans"),
-    "Duration": ("duration",),
-    "Eligibility": ("eligibility_summary", "eligibility_content", "programs_table"),
-    "Mode": ("mode", "mode_of_learning"),
-    "EMI options": ("emi_amount", "emi_content", "fee_plans"),
-    "Placements": ("placement_content",),
-    "Syllabus": ("syllabus_content",),
-    "Job profiles": ("job_profiles",),
-    "Admission process": ("admission_steps", "admission_fee_note"),
-    "Accreditations": ("naac_grade", "ugc_status", "ugc_approved", "accreditations"),
-    "Programs": ("programs_table",),
-    "Reviews": ("reviews",),
+_TOPIC_FIELDS: dict[str, tuple[str, ...]] = {
+    "fee": ("total_fee", "starting_fee", "fee_plans", "programs_table"),
+    "duration": ("duration",),
+    "eligibility": ("eligibility_summary", "eligibility_content", "programs_table"),
+    "mode": ("mode", "mode_of_learning"),
+    "emi": ("emi_amount", "emi_content", "fee_plans"),
+    "placements": ("placement_content", "placement_support", "placements_content"),
+    "syllabus": ("syllabus_content",),
+    "jobs": ("job_profiles", "career_outcomes"),
+    "admission": ("admission_steps", "admission_fee_note"),
+    "accreditation": ("naac_grade", "ugc_status", "ugc_approved", "accreditations"),
+    "programs": ("programs_table",),
+    "reviews": ("reviews",),
+    "exam": ("exam_content",),
 }
 
-_TOPIC_CHIPS: dict[str, tuple[str, ...]] = {
-    "fee": ("Eligibility", "EMI options", "Placements"),
-    "duration": ("Fees", "Eligibility", "Mode"),
-    "eligibility": ("Fees", "Admission process", "Duration"),
-    "mode": ("Duration", "Fees", "Exams"),
-    "placements": ("Job profiles", "Fees", "Eligibility"),
-    "emi": ("Fees", "Eligibility", "Admission process"),
-    "syllabus": ("Duration", "Job profiles", "Fees"),
-    "admission": ("Eligibility", "Fees", "EMI options"),
-    "exam": ("Mode", "Syllabus", "Duration"),
-    "accreditation": ("Programs", "Fees", "Reviews"),
-    "certificate": ("Accreditations", "Mode", "Placements"),
-    "jobs": ("Placements", "Fees", "Syllabus"),
-    "programs": ("Fees", "Eligibility", "Accreditations"),
-    "reviews": ("Programs", "Accreditations", "Fees"),
-    "provider": ("Fees", "Eligibility", "Duration"),
-    "about": ("Fees", "Eligibility", "Placements", "Programs", "Accreditations"),
+_TOPIC_LABELS = {
+    "fee": "Fees",
+    "duration": "Duration",
+    "eligibility": "Eligibility",
+    "mode": "Learning Mode",
+    "emi": "EMI Options",
+    "placements": "Placement Support",
+    "jobs": "Career Scope",
+    "specializations": "Specializations",
+    "accreditation": "Approvals",
+    "ranking": "Rankings",
+    "programs": "Programs",
+    "admission": "Admission Process",
+    "syllabus": "Syllabus",
+    "reviews": "Reviews",
+}
+
+_TOPIC_ACTION_ORDER: dict[str, tuple[str, ...]] = {
+    "fee": ("eligibility", "specializations", "placements", "emi", "duration"),
+    "eligibility": ("fee", "specializations", "admission", "duration"),
+    "placements": ("jobs", "fee", "specializations", "eligibility"),
+    "jobs": ("placements", "specializations", "fee", "syllabus"),
+    "specializations": ("fee", "eligibility", "jobs", "placements"),
+    "accreditation": ("ranking", "programs", "fee", "reviews"),
+    "ranking": ("accreditation", "programs", "fee", "placements"),
+    "programs": ("fee", "eligibility", "accreditation", "specializations"),
+    "about": (
+        "fee",
+        "eligibility",
+        "specializations",
+        "placements",
+        "jobs",
+        "accreditation",
+        "ranking",
+        "duration",
+        "programs",
+    ),
 }
 
 
-def suggested_chips(entity: Any, topic: str, *, limit: int = 3) -> list[str]:
-    """Return static chips only when the corresponding entity data exists."""
+def has_topic_data(entity: Any, topic: str, *, catalog: Any = None) -> bool:
+    """Return whether selecting a quick action can produce a grounded answer."""
+
+    if topic == "specializations":
+        return bool(specialization_items(entity, catalog)) or has_value(
+            safe_get(entity, "specializations_intro", None)
+        )
+    if topic == "ranking":
+        return bool(ranking_items(entity))
+    if topic == "accreditation":
+        return bool(accreditation_items(entity))
+    return any(has_value(safe_get(entity, path, None)) for path in _TOPIC_FIELDS.get(topic, ()))
+
+
+def _action_subject(entity: Any) -> str:
+    heading = entity_heading(entity)
+    return heading if len(heading) <= 48 else entity_university(entity) or entity_label(entity)
+
+
+def suggested_chips(
+    entity: Any,
+    topic: str,
+    *,
+    catalog: Any = None,
+    limit: int = 4,
+) -> list[str]:
+    """Build executable, subject-qualified actions only for published data."""
 
     result: list[str] = []
-    for label in _TOPIC_CHIPS.get(topic, _TOPIC_CHIPS["about"]):
-        paths = ("exam_content",) if label == "Exams" else _CHIP_FIELDS.get(label, ())
-        if any(has_value(safe_get(entity, path, None)) for path in paths):
-            result.append(label)
-        if len(result) >= limit:
+    subject = _action_subject(entity)
+    order = _TOPIC_ACTION_ORDER.get(topic, _TOPIC_ACTION_ORDER["about"])
+    supports_compare = entity_page_type(entity) in {
+        "university",
+        "course",
+        "specialization",
+    }
+    topic_limit = max(limit - 1, 0) if supports_compare else limit
+    for candidate_topic in order:
+        if len(result) >= topic_limit:
             break
+        if candidate_topic == topic or not has_topic_data(entity, candidate_topic, catalog=catalog):
+            continue
+        label = _TOPIC_LABELS[candidate_topic]
+        result.append(f"{subject} {label}")
+    if len(result) < limit and supports_compare:
+        result.append(f"Compare {subject} with another university")
     return result
 
 
@@ -441,7 +719,9 @@ __all__ = [
     "TEMPLATE_BY_TOPIC",
     "about_answer",
     "accreditation_answer",
+    "accreditation_items",
     "admission_answer",
+    "career_items",
     "certificate_answer",
     "duration_answer",
     "eligibility_answer",
@@ -449,13 +729,18 @@ __all__ = [
     "entity_not_found_answer",
     "exam_answer",
     "fee_answer",
+    "has_topic_data",
     "jobs_answer",
     "mode_answer",
     "placements_answer",
     "programs_answer",
     "provider_answer",
+    "ranking_answer",
+    "ranking_items",
     "render_topic",
     "reviews_answer",
+    "specialization_items",
+    "specializations_answer",
     "suggested_chips",
     "syllabus_answer",
     "topic_from_message",

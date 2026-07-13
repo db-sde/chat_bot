@@ -12,6 +12,7 @@ from response.cards import (
     entity_label,
     entity_page_type,
     entity_university,
+    render_sections,
 )
 from schemas import ResponsePayload
 
@@ -64,16 +65,18 @@ async def handle_list_specializations(
     names.sort(key=str.casefold)
     if not names:
         categories = [
-            display_category(item)
-            for item in available_categories(category_index, catalog)[:3]
+            display_category(item) for item in available_categories(category_index, catalog)[:3]
         ]
         return build_response(
             f"I couldn't find published {label} specializations in the current catalog.",
             suggested_chips=[f"Explore {item}" for item in categories],
         )
     return build_response(
-        f"Published {label} specializations include: {', '.join(names)}.",
-        suggested_chips=names[:6],
+        render_sections(
+            f"{label} Specializations",
+            [("Published Options", names)],
+        ),
+        suggested_chips=[f"{label} {name}" for name in names[:6]],
     )
 
 
@@ -138,9 +141,17 @@ async def handle_list_providers(
         )
     count = len(providers)
     return build_response(
-        f"{specialization_label} is offered by {count} published "
-        f"universit{'y' if count == 1 else 'ies'}: {', '.join(providers)}.",
-        suggested_chips=[f"Tell me about {provider}" for provider in providers[:6]],
+        render_sections(
+            f"{specialization_label} Programs",
+            [("Published Universities", providers)],
+            intro=(
+                f"{specialization_label} is offered by {count} published "
+                f"universit{'y' if count == 1 else 'ies'}."
+            ),
+        ),
+        suggested_chips=[
+            f"Tell me about {provider} {specialization_label}" for provider in providers[:6]
+        ],
     )
 
 

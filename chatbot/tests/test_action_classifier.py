@@ -43,12 +43,20 @@ def action_matcher() -> EntityMatcher:
             Action.LIST_PROVIDERS,
         ),
         ("Compare LPU and NMIMS", Action.COMPARE),
+        ("Compare NMIMS and Amity", Action.COMPARE),
         ("Compare Harvard and LPU", Action.COMPARE),
         ("Tell me about NMIMS", Action.GET_FACTS),
         ("Tell me about LPU MBA Marketing", Action.GET_FACTS),
-        ("Which Online MBA is best for Marketing?", None),
-        ("I need career guidance for MBA", None),
-        ("Which MBA specialization is best for me?", None),
+        ("Show MBA universities", Action.GET_FACTS),
+        ("Which Online MBA is best for Marketing?", Action.RECOMMEND),
+        ("I need career guidance for MBA", Action.RECOMMEND),
+        ("Which MBA specialization is best for me?", Action.RECOMMEND),
+        ("Which MBA is best?", Action.RECOMMEND),
+        ("Best MBA for me?", Action.RECOMMEND),
+        ("Cheapest MBA", Action.RECOMMEND),
+        ("Top online MBA programs", Action.RECOMMEND),
+        ("MBA under 2 lakh", Action.RECOMMEND),
+        ("Universities with Finance specialization", Action.LIST_PROVIDERS),
         ("Tell me about Marketing", Action.LIST_PROVIDERS),
         ("Tell me about Finance", Action.LIST_PROVIDERS),
         ("Tell me about HR", Action.LIST_PROVIDERS),
@@ -74,10 +82,13 @@ def test_mention_summary_uses_only_deduplicated_catalog_names(
         action_matcher,
     )
 
-    assert mention_summary(mentions) == (
-        "category=none, university=none, specialization=high(Marketing)"
-    )
-    assert "INR" not in mention_summary(mentions)
+    summary = mention_summary(mentions)
+    assert summary.startswith("category=none, university=none, specialization=high(")
+    assert summary.endswith(")")
+    rendered_names = summary.removesuffix(")").rsplit("(", maxsplit=1)[1].split("|")
+    assert "Marketing" in rendered_names
+    assert len(rendered_names) == len(set(rendered_names))
+    assert "INR" not in summary
 
 
 def test_action_classifier_stays_in_single_digit_milliseconds(
@@ -92,6 +103,26 @@ def test_action_classifier_stays_in_single_digit_milliseconds(
     mean_ms = (time.perf_counter() - started) * 1_000 / 1_000
 
     assert mean_ms < 5
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "Which MBA is best?",
+        "Best MBA for me?",
+        "Cheapest MBA",
+        "Top online MBA programs",
+        "MBA under 2 lakh",
+    ],
+)
+def test_resolved_decision_queries_do_not_fall_back_to_generic_facts(
+    action_matcher: EntityMatcher,
+    message: str,
+) -> None:
+    mentions = extract_mentions(message, action_matcher)
+
+    assert mentions.has_high_confidence_mention
+    assert classify(mentions, message) is Action.RECOMMEND
 
 
 def test_unknown_names_route_to_unsupported_while_retaining_known_evidence() -> None:

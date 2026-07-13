@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StateModel(BaseModel):
@@ -136,10 +136,65 @@ class PendingClarification(StateModel):
 
 
 class LeadState(StateModel):
+    # ``active`` is the flow lifecycle authority. ``last_asked_field`` remains
+    # for wire/session compatibility, but ordinary chat must never infer an
+    # active lead flow from missing contact fields alone.
+    active: bool = False
     name: str | None = None
     phone: str | None = None
     email: str | None = None
     last_asked_field: Literal["name", "phone", "email"] | None = None
+
+    @model_validator(mode="after")
+    def hydrate_legacy_activity(self) -> LeadState:
+        """Resume older persisted funnels that only stored a pending field."""
+
+        if self.last_asked_field is not None:
+            self.active = True
+        return self
+
+    def deactivate(self) -> None:
+        self.active = False
+        self.last_asked_field = None
+
+    def restart(self) -> None:
+        self.active = True
+        self.name = None
+        self.phone = None
+        self.email = None
+        self.last_asked_field = "name"
+
+
+AdvisorField = Literal[
+    "current_education",
+    "work_experience",
+    "career_goal",
+    "budget",
+    "preferred_specialization",
+]
+
+
+class AdvisorState(StateModel):
+    """Profile collected only inside the opt-in guided recommendation flow."""
+
+    active: bool = False
+    category: str | None = None
+    current_education: str | None = None
+    work_experience: str | None = None
+    career_goal: str | None = None
+    budget: float | None = Field(default=None, ge=0)
+    preferred_specialization: str | None = None
+    last_asked_field: AdvisorField | None = None
+
+    def clear(self) -> None:
+        self.active = False
+        self.category = None
+        self.current_education = None
+        self.work_experience = None
+        self.career_goal = None
+        self.budget = None
+        self.preferred_specialization = None
+        self.last_asked_field = None
 
 
 class ConversationState(StateModel):
@@ -147,6 +202,7 @@ class ConversationState(StateModel):
     focus: Focus = Field(default_factory=Focus)
     pending_clarification: PendingClarification | None = None
     lead: LeadState = Field(default_factory=LeadState)
+    advisor: AdvisorState = Field(default_factory=AdvisorState)
     turn_count: int = Field(default=0, ge=0)
     history: list[dict[str, Any]] = Field(default_factory=list)
     # Full catalog envelopes already used by this session. This keeps persistence
@@ -171,6 +227,8 @@ SessionState = ConversationState
 
 
 __all__ = [
+    "AdvisorField",
+    "AdvisorState",
     "ConversationState",
     "Focus",
     "FocusSlot",

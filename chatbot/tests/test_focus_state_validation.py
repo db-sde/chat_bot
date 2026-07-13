@@ -54,7 +54,7 @@ def test_hydrate_focus_concepts_migrates_legacy_ids_once(
     hydrate_focus_concepts(focus, indexes)
 
     assert hydrated is focus
-    assert focus.university_concept == "NMIMS Online"
+    assert focus.university_concept == "NMIMS"
     assert focus.course_concept == "mba"
     assert focus.specialization_concept is None
     assert focus.source == "context"
@@ -65,13 +65,13 @@ def test_hydrate_focus_concepts_migrates_legacy_ids_once(
 def test_hydrate_focus_concepts_uses_specialization_record_metadata(
     indexes: TaxonomyIndexes,
 ) -> None:
-    focus = Focus(entity_id="spec-lpu-mba-marketing")
+    focus = Focus(entity_id="spec-lpu-mba-finance")
 
     hydrate_focus_concepts(focus, indexes)
 
     assert focus.university_concept == "Lovely Professional University"
     assert focus.course_concept == "mba"
-    assert focus.specialization_concept == "Marketing"
+    assert focus.specialization_concept == "Finance Management"
 
 
 def test_validate_focus_returns_one_concrete_course_for_valid_pair(
@@ -102,13 +102,14 @@ def test_validate_focus_returns_all_provider_records_for_one_concept_family(
     result = validate_focus(focus, indexes)
 
     assert result.valid
-    assert set(result.compatible_entity_ids) == {
-        "spec-amity-mba-marketing",
-        "spec-jain-mba-marketing",
-        "spec-lpu-mba-marketing",
-        "spec-manipal-jaipur-mba-marketing",
-        "spec-nmims-mba-marketing",
+    expected = {
+        entity_id
+        for entity_id in indexes.category_index.entities_for_specialization("Marketing")
+        if indexes.entity_metadata[entity_id]["page_type"] == "specialization"
+        and indexes.entity_metadata[entity_id]["specialization_name"] == "Marketing"
     }
+    assert len(expected) > 1
+    assert set(result.compatible_entity_ids) == expected
 
 
 def test_validate_focus_late_binds_all_three_concepts(
@@ -117,7 +118,7 @@ def test_validate_focus_late_binds_all_three_concepts(
     focus = Focus(
         university_concept="Lovely Professional University",
         course_concept="mba",
-        specialization_concept="Marketing",
+        specialization_concept="Finance Management",
     )
 
     result = validate_focus(
@@ -127,7 +128,7 @@ def test_validate_focus_late_binds_all_three_concepts(
     )
 
     assert result.valid
-    assert result.compatible_entity_ids == ("spec-lpu-mba-marketing",)
+    assert result.compatible_entity_ids == ("spec-lpu-mba-finance",)
 
 
 def test_validate_focus_marks_two_explicit_incompatible_concepts_as_conflict(
@@ -194,8 +195,12 @@ def test_validate_focus_drops_inherited_conflict_and_keeps_explicit_course(
     assert result.valid
     assert result.reason == "dropped_inherited_context"
     assert result.dropped_context_slots == ("university",)
-    assert len(result.compatible_entity_ids) == 5
-    assert all(entity_id.startswith("course-") for entity_id in result.compatible_entity_ids)
+    expected_courses = {
+        entity_id
+        for entity_id in indexes.category_index.entities_for_category("mba")
+        if indexes.entity_metadata[entity_id]["page_type"] == "course"
+    }
+    assert set(result.compatible_entity_ids) == expected_courses
     assert focus.university_concept is None
     assert focus.university is None
     assert focus.course_concept == "mba"

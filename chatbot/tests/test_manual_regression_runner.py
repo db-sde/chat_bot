@@ -82,6 +82,27 @@ def test_gemini_callback_timeout_is_reported_instead_of_raised() -> None:
     assert any("did not reach the lead funnel" in failure for failure in failures)
 
 
+def test_sprint_discovery_case_requires_deterministic_zero_gemini() -> None:
+    result = {
+        "response": (
+            "Within a published total-fee budget of INR 2,00,000, "
+            "these MBA options match."
+        )
+    }
+
+    assert _validate_tracked_action("MBA under 2 lakh", result, _zero_delta()) == []
+
+    degraded = {
+        **_zero_delta(),
+        "llm_intent_calls": 1,
+        "action_from_deterministic_rule": 0,
+        "action_from_gemini": 1,
+        "llm_intent_latency_samples": 1,
+    }
+    failures = _validate_tracked_action("MBA under 2 lakh", result, degraded)
+    assert any("expected llm_intent_calls=0" in failure for failure in failures)
+
+
 def test_lead_isolation_acceptance_requires_full_cta_payload() -> None:
     turns = [
         {

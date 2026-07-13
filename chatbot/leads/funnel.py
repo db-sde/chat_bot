@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from leads.crm_schema import CRMLeadEvent
 from leads.webhook import CRMWebhook
@@ -24,6 +24,18 @@ LEAD_DEFERRAL_RE = re.compile(
 )
 LEAD_CHAT_ESCAPE_RE = re.compile(
     r"^\s*(?:browse|explore|continue|keep\s+exploring)(?:\s+(?:universit(?:y|ies)|courses?|programs?|speciali[sz]ations?))?\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+LEAD_CANCEL_RE = re.compile(
+    r"^\s*(?:cancel|stop|exit|skip|never\s*mind|not\s+now|maybe\s+later|"
+    r"prefer\s+not\s+to|no\s+thanks?)"
+    r"(?:\s+(?:the\s+)?(?:callback(?:\s+form)?|lead|request|form|flow))?\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
+LEAD_RESTART_RE = re.compile(
+    r"^\s*(?:restart|reset|start\s+over|begin\s+again)"
+    r"(?:\s+(?:the\s+)?(?:callback(?:\s+form)?|lead|request|form|flow|details?))?"
+    r"\s*[.!]?\s*$",
     re.IGNORECASE,
 )
 QUESTION_WORDS = {
@@ -97,6 +109,95 @@ class LeadFunnel:
         return None
 
     @staticmethod
+    def lifecycle_command(message: str) -> Literal["cancel", "restart"] | None:
+        """Return an exact lead-flow command before any contact-field parsing.
+
+        These commands are deliberately whole-message matches. A sentence that merely
+        contains a word such as ``restart`` remains ordinary chat, while a standalone
+        command can never be accepted as a person's name.
+        """
+
+        if LEAD_CANCEL_RE.fullmatch(message):
+            return "cancel"
+        if LEAD_RESTART_RE.fullmatch(message):
+            return "restart"
+        return None
+
+    @staticmethod
+    def is_active(state: Any) -> bool:
+        """Return the explicit lifecycle flag; missing fields alone are not activity."""
+
+        return bool(getattr(getattr(state, "lead", None), "active", False))
+
+    @staticmethod
+    def _set_active(state: Any, active: bool) -> None:
+        lead = state.lead
+        if hasattr(lead, "active"):
+            lead.active = active
+
+    def start(self, state: Any) -> str | None:
+        """Activate or resume explicit collection and return the next missing field."""
+
+        self._set_active(state, True)
+        field = self._next_missing(state.lead)
+        state.lead.last_asked_field = field
+        if field is None:
+            self.complete(state)
+        return field
+
+    def complete(self, state: Any) -> None:
+        """End collection while preserving the completed contact snapshot."""
+
+        deactivate = getattr(state.lead, "deactivate", None)
+        if callable(deactivate):
+            deactivate()
+            return
+        self._set_active(state, False)
+        state.lead.last_asked_field = None
+
+    def cancel(self, state: Any) -> ResponsePayload:
+        """Cancel an active flow without treating the command as submitted data."""
+
+        self.complete(state)
+        return ResponsePayload(
+            text="No problem — the callback request has been cancelled.",
+            suggested_chips=["Browse universities", "Browse course categories"],
+            cta=None,
+        )
+
+    def restart(self, state: Any) -> ResponsePayload:
+        """Clear any partial contact values and restart from the name field."""
+
+        restart = getattr(state.lead, "restart", None)
+        if callable(restart):
+            restart()
+        else:
+            state.lead.name = None
+            state.lead.phone = None
+            state.lead.email = None
+            self._set_active(state, True)
+            state.lead.last_asked_field = "name"
+        return ResponsePayload(
+            text=f"Of course — let's start over. {FIELD_ASKS['name']}",
+            suggested_chips=["Cancel callback request"],
+            cta=CTA(**lead_capture_cta(label="Talk to a counsellor", action="lead_capture")),
+        )
+
+    def handle_lifecycle_command(
+        self,
+        state: Any,
+        message: str,
+    ) -> ResponsePayload | None:
+        """Apply a cancel/restart command before callers inspect a pending answer."""
+
+        command = self.lifecycle_command(message)
+        if command == "cancel":
+            return self.cancel(state) if self.is_active(state) else None
+        if command == "restart":
+            return self.restart(state) if self.is_active(state) else None
+        return None
+
+    @staticmethod
     def _extract(
         message: str,
         expected: str | None = None,
@@ -104,6 +205,10 @@ class LeadFunnel:
         allow_lowercase_name: bool = False,
         allow_name: bool = True,
     ) -> dict[str, str]:
+        # Lifecycle commands always win over the permissive name shape. In
+        # particular, ``cancel`` and ``restart`` must never become lead names.
+        if LeadFunnel.lifecycle_command(message) is not None:
+            return {}
         captured: dict[str, str] = {}
         email = EMAIL_RE.search(message)
         compact_message = re.sub(r"[()\s-]", "", message)
@@ -218,7 +323,7 @@ class LeadFunnel:
             saved = changed[0] if changed else "detail"
             text = f"Thanks, I've saved your {saved}. {FIELD_ASKS[field]}"
         else:
-            state.lead.last_asked_field = None
+            self.complete(state)
             text = (
                 "Thanks — I have your details. "
                 "A DegreeBaba counsellor can contact you shortly."
@@ -297,15 +402,20 @@ class LeadFunnel:
     def handle_callback(self, state: Any, message: str) -> ResponsePayload:
         """Short-circuit an explicit human-contact request into the funnel."""
 
-        self.capture(state, message)
+        self.start(state)
+        # The trigger phrase itself (for example "Request Callback") is not a
+        # field answer. Phone/email embedded in the same turn remain safe to
+        # capture, while a name is collected by the dedicated next step.
+        self.capture(state, message, allow_name=False)
         field = self._next_missing(state.lead)
         if field is None:
             text = (
                 "Thanks — your details are saved. "
                 "A DegreeBaba counsellor can contact you shortly."
             )
-            state.lead.last_asked_field = None
+            self.complete(state)
         else:
+            self._set_active(state, True)
             state.lead.last_asked_field = field
             text = f"Absolutely — I can help arrange that. {FIELD_ASKS[field]}"
         return ResponsePayload(
@@ -318,10 +428,12 @@ class LeadFunnel:
         changed = self.capture(state, message, allow_lowercase_name=True)
         field = self._next_missing(state.lead)
         if field:
+            self._set_active(state, True)
             state.lead.last_asked_field = field
             saved = changed[0] if changed else "detail"
             text = f"Thanks, I've saved your {saved}. {FIELD_ASKS[field]}"
         else:
+            self.complete(state)
             text = "Thanks — I have your details. A DegreeBaba counsellor can contact you shortly."
         return ResponsePayload(
             text=text,
@@ -330,34 +442,10 @@ class LeadFunnel:
         )
 
     def augment(self, state: Any, payload: ResponsePayload, message: str) -> ResponsePayload:
-        """Optionally add one non-blocking ask after the product answer."""
+        """Compatibility no-op: ordinary chat never starts or advances lead capture."""
 
-        self.capture(state, message, allow_name=False)
-        if self._next_missing(state.lead) is None:
-            return payload
-        if state.turn_count < self.start_after_turn:
-            return payload
-        if state.turn_count % max(self.prompt_interval, 1) != 0:
-            return payload
-
-        field = self._next_missing(state.lead)
-        if field is None:
-            return payload
-        state.lead.last_asked_field = field
-        return payload.model_copy(
-            update={
-                "text": (
-                    f"{payload.text}\n\nIf you'd like personalised help, "
-                    f"{FIELD_ASKS[field].lower()}"
-                ),
-                "cta": payload.cta
-                or CTA(
-                    **lead_capture_cta(
-                        label="Talk to a counsellor", action="lead_capture"
-                    )
-                ),
-            }
-        )
+        del state, message
+        return payload
 
     async def close(self, *, timeout: float = 8.0) -> None:
         """Drain in-flight CRM tasks during graceful application shutdown."""

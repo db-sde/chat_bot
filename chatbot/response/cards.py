@@ -79,6 +79,65 @@ def entity_page_type(entity: Any) -> str:
     return str(value).strip().lower()
 
 
+def entity_heading(entity: Any) -> str:
+    """Return a compact, self-contained heading for a publisher record."""
+
+    label = entity_label(entity)
+    page_type = entity_page_type(entity)
+    if page_type == "university":
+        return label
+
+    provider = entity_university(entity)
+    category = clean_text(safe_get(entity, "category", None))
+    if category and len(category) <= 6 and category.replace("-", "").isalnum():
+        category = category.upper()
+    elif category:
+        category = category.replace("-", " ").title()
+
+    parts: list[str] = []
+    for value in (
+        provider,
+        category if page_type == "specialization" else "",
+        label,
+    ):
+        if not value:
+            continue
+        normalized = value.casefold()
+        if any(normalized == part.casefold() for part in parts):
+            continue
+        # Course labels commonly already include their category ("Online MBA").
+        if category and value == category and category.casefold() in label.casefold():
+            continue
+        parts.append(value)
+    return " ".join(parts) or label
+
+
+def render_sections(
+    title: str,
+    sections: Iterable[tuple[str, Iterable[Any]]],
+    *,
+    intro: str | None = None,
+) -> str:
+    """Render compact chat-safe headings and bullets without changing the API schema."""
+
+    blocks = [clean_text(title)]
+    if intro and (cleaned_intro := clean_text(intro)):
+        blocks.append(cleaned_intro)
+    for heading, values in sections:
+        items: list[str] = []
+        seen: set[str] = set()
+        for value in values:
+            cleaned = clean_text(value)
+            key = cleaned.casefold()
+            if not cleaned or key in seen:
+                continue
+            seen.add(key)
+            items.append(cleaned)
+        if items:
+            blocks.append(f"{clean_text(heading)}:\n" + "\n".join(f"• {item}" for item in items))
+    return "\n\n".join(block for block in blocks if block)
+
+
 def entity_fee(entity: Any) -> str:
     """Return the most comparable published fee field for an entity."""
 
@@ -235,12 +294,78 @@ def find_catalog_entity(catalog: Any, reference: Any) -> Any:
             entity_university(candidate),
         )
         if any(
-            _SPACE_RE.sub(" ", str(value).strip().lower()) == target
-            for value in values
-            if value
+            _SPACE_RE.sub(" ", str(value).strip().lower()) == target for value in values if value
         ):
             return candidate
     return None
+
+
+def related_specialization_names(
+    entity: Any,
+    catalog: Any,
+    *,
+    limit: int = 8,
+) -> list[str]:
+    """Find specialization labels related by publisher links/provider/category."""
+
+    result: list[str] = []
+    seen: set[str] = set()
+
+    def add(value: Any) -> None:
+        label = clean_text(value)
+        key = label.casefold()
+        if label and key not in seen:
+            seen.add(key)
+            result.append(label)
+
+    current_label = clean_text(
+        first_value(entity, "specialization_name", "spec_name", default=None)
+    )
+    current_id = clean_text(first_value(entity, "id", "entity_id", "slug", default=None))
+    current_course = first_value(entity, "linked_course.id", "linked_course", default=None)
+    if isinstance(current_course, Mapping):
+        current_course = first_value(current_course, "id", "entity_id", "slug", default=None)
+    current_course = clean_text(current_course)
+    provider = entity_university(entity).casefold()
+    category = clean_text(safe_get(entity, "category", None)).casefold()
+    page_type = entity_page_type(entity)
+
+    other_specs = safe_get(entity, "other_specs", []) or []
+    if isinstance(other_specs, Iterable) and not isinstance(other_specs, (str, bytes, Mapping)):
+        for item in other_specs:
+            add(first_value(item, "other_spec_name", "specialization_name", "name", default=None))
+
+    for candidate in iter_catalog_entities(catalog):
+        if entity_page_type(candidate) != "specialization":
+            continue
+        candidate_label = clean_text(
+            first_value(candidate, "specialization_name", "spec_name", default=None)
+        )
+        if not candidate_label or candidate_label.casefold() == current_label.casefold():
+            continue
+        candidate_provider = entity_university(candidate).casefold()
+        candidate_category = clean_text(safe_get(candidate, "category", None)).casefold()
+        linked_course = first_value(candidate, "linked_course.id", "linked_course", default=None)
+        if isinstance(linked_course, Mapping):
+            linked_course = first_value(linked_course, "id", "entity_id", "slug", default=None)
+        linked_course = clean_text(linked_course)
+
+        linked = bool(
+            (current_id and linked_course and linked_course == current_id)
+            or (current_course and linked_course and linked_course == current_course)
+        )
+        same_provider = bool(provider and candidate_provider == provider)
+        same_category = bool(category and candidate_category == category)
+        related = linked
+        if page_type == "university":
+            related = same_provider
+        elif page_type in {"course", "specialization"}:
+            related = linked or (same_provider and (not category or same_category))
+        if related:
+            add(candidate_label)
+        if len(result) >= limit:
+            break
+    return result[:limit]
 
 
 def numbered_lines(labels: Iterable[str]) -> str:
@@ -252,6 +377,7 @@ __all__ = [
     "catalog_get_entity",
     "clean_text",
     "entity_fee",
+    "entity_heading",
     "entity_label",
     "entity_page_type",
     "entity_university",
@@ -262,5 +388,7 @@ __all__ = [
     "iter_catalog_entities",
     "numbered_lines",
     "parse_money",
+    "related_specialization_names",
+    "render_sections",
     "unwrap_catalog_record",
 ]

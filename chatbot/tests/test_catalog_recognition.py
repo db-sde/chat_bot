@@ -225,15 +225,17 @@ def test_catalog_attributes_are_extracted_without_becoming_unknowns(
     assert mentions.unknown_entities == []
 
 
-def test_short_unknown_acronym_is_retained_without_fuzzy_false_positive(
+def test_new_catalog_category_acronym_resolves_exactly_without_unknown_fallback(
     sample_matcher: EntityMatcher,
 ) -> None:
     mentions = extract_mentions("What is BBA?", sample_matcher)
 
-    assert mentions.courses == []
+    assert [candidate.entity_id for candidate in mentions.courses] == ["category:bba"]
+    assert mentions.courses[0].confidence == "HIGH"
+    assert mentions.courses[0].method == "exact"
     assert mentions.specializations == []
-    assert mentions.unknown_entities == ["bba"]
-    assert mentions.unresolved_terms == ["BBA"]
+    assert mentions.unknown_entities == []
+    assert mentions.unresolved_terms == []
 
 
 def test_single_online_token_does_not_fuzzy_match_multiword_course_aliases(

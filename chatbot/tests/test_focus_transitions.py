@@ -66,8 +66,11 @@ async def test_specialization_resets_when_university_and_category_rementioned(se
     focus = result.state.focus
     # Specialization must be gone — the user zoomed out to the course level.
     assert focus.specialization is None, f"stale spec: {focus.specialization}"
-    # Should NOT mention Business Analytics in the response.
-    assert "Business Analytics" not in result.payload.text
+    assert focus.specialization_concept is None
+    # The course overview may now list available specializations as follow-up
+    # catalog data; it must still render the course itself, not a stale spec page.
+    assert result.payload.text.startswith("NMIMS Online MBA")
+    assert "Popular Specializations" in result.payload.text
 
 
 # ---------------------------------------------------------------------------
