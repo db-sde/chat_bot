@@ -326,7 +326,7 @@ def _accreditation_fee_response(catalog: Any) -> ResponsePayload:
         return build_response(
             "I couldn't find universities with both a published NAAC grade and "
             "comparable fee data in the current catalog.",
-            suggested_chips=["Explore universities", "Compare MBA fees"],
+            suggested_chips=["Explore universities", "Compare course fees"],
         )
 
     highest = max(row[0] for row in rows)
@@ -341,7 +341,7 @@ def _accreditation_fee_response(catalog: Any) -> ResponsePayload:
         f"Universities with that grade, ordered by published starting fee, are: {options}. "
         "Starting fees may use different per-semester schedules, so compare the total "
         "program fee before deciding.",
-        suggested_chips=["Compare MBA fees", "Check accreditations"],
+        suggested_chips=["Compare course fees", "Check accreditations"],
     )
 
 
@@ -461,7 +461,7 @@ async def handle_advisory(
             names = [display_category(name) for name in list(mapping)[:6]]
             return build_response(
                 f"Which {label} specialization fits your goal?",
-                suggested_chips=names or ["Marketing", "Business Analytics", "Finance", "HR"],
+                suggested_chips=names or ["Browse specializations"],
             )
         text = (
             f"I can narrow the published {label} options for you. "
@@ -470,16 +470,16 @@ async def handle_advisory(
         chips = ["Lower fees", "Preferred specialization", "Placement support"]
     else:
         if preference in {"business", "technology"}:
-            selected = "mba" if preference == "business" else "mca"
-            summary = category_summary(selected, category_index, catalog)
-            universities = summary["universities"]
-            label = selected.upper()
-            if universities:
+            labels = [
+                display_category(item)
+                for item in available_categories(category_index, catalog)[:6]
+            ]
+            if labels:
                 return build_response(
-                    f"Based on that direction, {label} is the closest catalog category. "
-                    f"It currently has published options from {', '.join(universities[:5])}. "
-                    "This is a category fit, not a university ranking.",
-                    suggested_chips=[f"Explore {label}", f"Compare {label} options"],
+                    "I can use that direction to compare published options, but the catalog "
+                    "doesn't define a universal business-or-technology mapping. Which course "
+                    f"category should I evaluate: {', '.join(labels)}?",
+                    suggested_chips=labels,
                 )
         if preference == "fees":
             ranked_categories: list[tuple[float, str]] = []
@@ -489,11 +489,20 @@ async def handle_advisory(
                     ranked_categories.append((summary["fee_min"], display_category(item)))
             if ranked_categories:
                 _, label = min(ranked_categories)
+                known_labels = [
+                    display_category(item)
+                    for item in available_categories(category_index, catalog)[:2]
+                ]
+                compare_chip = (
+                    f"Compare {known_labels[0]} and {known_labels[1]}"
+                    if len(known_labels) == 2
+                    else "Compare course categories"
+                )
                 return build_response(
                     f"From comparable published starting totals, {label} currently has the "
                     "lowest entry point among the catalog categories. Fee schedules differ, "
                     "so treat this as a shortlist signal rather than a final price.",
-                    suggested_chips=[f"Explore {label}", "Compare MBA and MCA"],
+                    suggested_chips=[f"Explore {label}", compare_chip],
                 )
         text = (
             "I can narrow the catalog with one preference. Which direction is closer to "

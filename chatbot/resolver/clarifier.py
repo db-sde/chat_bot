@@ -39,6 +39,25 @@ def candidate_label(candidate: Candidate, indexes: TaxonomyIndexes | None = None
     return canonical
 
 
+def _same_canonical_specialization_family(
+    candidates: tuple[Candidate, ...],
+    indexes: TaxonomyIndexes | None,
+) -> bool:
+    """Collapse provider-specific rows representing one specialization concept."""
+
+    if len(candidates) < 2:
+        return False
+    canonical_names: set[str] = set()
+    for candidate in candidates:
+        metadata = _metadata(indexes, candidate.entity_id)
+        canonical = str(metadata.get("canonical_name") or candidate.canonical_name).strip()
+        normalized = " ".join(canonical.casefold().split())
+        if not normalized:
+            return False
+        canonical_names.add(normalized)
+    return len(canonical_names) == 1
+
+
 def _set_pending(
     state: object,
     candidates: tuple[Candidate, ...],
@@ -108,6 +127,13 @@ def clarify(
             (slot for slot in priority if slot in update.ambiguous), next(iter(update.ambiguous))
         )
         candidates = tuple(update.ambiguous[slot_type])
+        if slot_type == "specialization" and _same_canonical_specialization_family(
+            candidates, indexes
+        ):
+            # The resolver surfaced provider rows, not distinct user choices.
+            # Provider discovery handles late binding without a fake ambiguity.
+            state.pending_clarification = None
+            return ClarificationDecision(needs_clarification=False, focus=update.focus)
         labels = tuple(candidate_label(candidate, indexes) for candidate in candidates)
         _set_pending(state, candidates, slot_type, update)
         options = "; ".join(f"{index}. {label}" for index, label in enumerate(labels, 1))

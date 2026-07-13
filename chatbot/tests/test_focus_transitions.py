@@ -88,22 +88,18 @@ async def test_off_topic_does_not_reuse_stale_focus(service) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Bug 2.4: Unresolvable entity name must say "not found"
+# Bug 2.4: Phonetic typo must resolve deterministically without inventing one provider
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_unresolvable_name_says_not_found(service) -> None:
-    """'Monypal University' must not imply the entity exists with no data."""
+async def test_monypal_surfaces_true_manipal_ambiguity(service) -> None:
+    """'Monypal' resolves to the catalog's Manipal family and asks which one."""
 
     result = await turn(service, "tell me about Monypal University", "bug-2.4")
-    text = result.payload.text
-    # Must NOT phrase it as if Monypal is a real entity with missing data.
-    assert "no information available about monypal" not in text.casefold()
-    # Should acknowledge that it couldn't match (or offer a suggestion).
-    assert any(
-        phrase in text.casefold()
-        for phrase in ("couldn't", "could not", "not found", "no match", "couldn't find")
-    ), f"unexpected phrasing: {text}"
+    text = result.payload.text.casefold()
+    assert result.route == "clarification"
+    assert "manipal" in text
+    assert "monypal" not in text
 
 
 # ---------------------------------------------------------------------------

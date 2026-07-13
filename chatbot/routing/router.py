@@ -36,7 +36,7 @@ INTENT_TO_ACTION: dict[str, Action] = {
     "comparison": Action.COMPARE,
     "advisory": Action.RECOMMEND,
     "discovery": Action.DISCOVERY,
-    "callback": Action.CALLBACK,
+    "callback": Action.OPEN_LEAD_FORM,
     "chitchat": Action.CHITCHAT,
     "unrelated": Action.UNRELATED,
     "unresolved_entity": Action.UNSUPPORTED_ENTITY,
@@ -62,6 +62,8 @@ def action_from_intent(intent: Any) -> Action:
     """Map legacy intent values at the compatibility boundary."""
 
     value = _action_value(intent)
+    if value in {Action.CALLBACK.value, Action.OPEN_LEAD_FORM.value}:
+        return Action.OPEN_LEAD_FORM
     if value in Action._value2member_map_:
         return Action(value)
     return INTENT_TO_ACTION.get(value, Action.FALLBACK)
@@ -83,6 +85,7 @@ def select_route(
 
     selected_action = action_from_intent(action)
     if selected_action in {
+        Action.OPEN_LEAD_FORM,
         Action.CALLBACK,
         Action.UNSUPPORTED_ENTITY,
         Action.UNRELATED,

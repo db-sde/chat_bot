@@ -8,17 +8,23 @@ from __future__ import annotations
 
 from typing import Any
 
+OPEN_LEAD_WIDGET = "OPEN_LEAD_WIDGET"
+
 
 def lead_capture_cta(
     *,
     label: str = "Talk to a counsellor",
-    action: str = "start_lead_capture",
+    action: str = "lead_capture",
 ) -> dict[str, Any]:
-    return {"label": label, "action": action}
+    return {
+        "label": label,
+        "action": action,
+        "payload": {"target_action": OPEN_LEAD_WIDGET},
+    }
 
 
 def callback_cta() -> dict[str, Any]:
-    return lead_capture_cta(label="Request a callback", action="request_callback")
+    return lead_capture_cta(label="Request a callback")
 
 
-__all__ = ["callback_cta", "lead_capture_cta"]
+__all__ = ["OPEN_LEAD_WIDGET", "callback_cta", "lead_capture_cta"]

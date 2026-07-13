@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from leads.funnel import LeadFunnel
+from response.cta import callback_cta, lead_capture_cta
 from session.state import ConversationState
 
 
@@ -30,6 +31,22 @@ def test_callback_starts_with_one_name_ask(funnel) -> None:
     assert state.lead.last_asked_field == "name"
     assert "name" in payload.text.lower()
     assert "phone" not in payload.text.lower()
+    assert payload.cta is not None
+    assert payload.cta.action == "lead_capture"
+    assert payload.cta.payload == {"target_action": "OPEN_LEAD_WIDGET"}
+
+
+def test_chat_navigation_yields_to_product_routing(funnel) -> None:
+    lead_funnel, _ = funnel
+
+    assert lead_funnel.is_deferral("Browse Universities")
+    assert lead_funnel.is_deferral("Keep exploring programs")
+
+
+def test_lead_cta_factories_keep_legacy_action_and_add_widget_target() -> None:
+    for cta in (lead_capture_cta(), callback_cta()):
+        assert cta["action"] == "lead_capture"
+        assert cta["payload"] == {"target_action": "OPEN_LEAD_WIDGET"}
 
 
 @pytest.mark.asyncio

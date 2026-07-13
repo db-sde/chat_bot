@@ -97,7 +97,11 @@ async def handle_clarification(
         return build_response(
             f"I need one more detail to identify the {noun}. Which university, course, "
             "or specialization did you mean?",
-            suggested_chips=["Search universities", "Explore MBA", "Browse specializations"],
+            suggested_chips=[
+                "Search universities",
+                "Browse course categories",
+                "Browse specializations",
+            ],
         )
 
     if len(labels) == 1:

@@ -7,7 +7,8 @@ from typing import Any
 from response.builder import build_response
 from schemas import ResponsePayload
 
-from .category_handler import available_categories, display_category
+from .category_handler import available_categories, display_category, handle_category
+from .list_handler import handle_list_providers
 
 
 async def handle_discovery(
@@ -21,11 +22,33 @@ async def handle_discovery(
 ) -> ResponsePayload:
     """Show category choices rather than guessing a university or course."""
 
-    del state, llm
+    focus = getattr(state, "focus", None)
+    specialization = getattr(focus, "specialization_concept", None) or getattr(
+        focus, "specialization", None
+    )
+    category = getattr(focus, "course_concept", None) or getattr(focus, "category", None)
+    university = getattr(focus, "university_concept", None) or getattr(
+        focus, "university", None
+    )
+    if specialization and not university:
+        return await handle_list_providers(
+            state=state,
+            message=message,
+            catalog=catalog,
+            category_index=category_index,
+            specialization=str(specialization),
+        )
+    if category and not university:
+        return await handle_category(
+            state=state,
+            message=message,
+            catalog=catalog,
+            category_index=category_index,
+        )
+
+    del llm
     categories = available_categories(category_index, catalog)
     labels = [display_category(category) for category in categories[:6]]
-    if not labels:
-        labels = ["MBA", "MCA", "BBA", "BCA"]
 
     greeting = str(message or "").strip().casefold()
     prefix = "Hi! " if greeting in {"hi", "hello", "hey", "good morning", "good evening"} else ""

@@ -23,6 +23,8 @@ class Candidate:
     score: float | None = None
     start: int = 0
     end: int = 0
+    method: str = "unknown"
+    matched_catalog_term: str | None = None
 
 
 def _candidate_key(candidate: Candidate) -> tuple[int, int, int, float, str, str]:
@@ -71,6 +73,8 @@ class EntityMatcher:
                     score=match.score,
                     start=match.start,
                     end=match.end,
+                    method=match.method,
+                    matched_catalog_term=match.matched_catalog_term,
                 )
                 previous = best_by_id.get(entity_id)
                 if previous is None or _candidate_key(candidate) < _candidate_key(previous):

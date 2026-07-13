@@ -68,15 +68,15 @@ async def test_mixed_known_unknown_acknowledges_missing_qualifier(
 
     result = await turn(service, message, f"partial-{missing}")
 
-    assert result.route == "category"
+    assert result.route == "fallback"
     assert f"couldn't find {missing}" in result.payload.text
-    assert "MBA is available" in result.payload.text
+    assert "Available MBA providers include" in result.payload.text
     assert result.synthesis_prompt is None
     assert llm.intent_calls == 0
 
 
 @pytest.mark.asyncio
-async def test_pure_negative_still_uses_existing_no_match_path() -> None:
+async def test_pure_negative_uses_deterministic_no_match_path() -> None:
     class UnresolvedIntentLLM(ExplodingIntentLLM):
         async def decide_action_tiny(
             self,
@@ -84,7 +84,7 @@ async def test_pure_negative_still_uses_existing_no_match_path() -> None:
             _mention_summary: str,
         ) -> GeminiDecision:
             self.intent_calls += 1
-            return GeminiDecision("unsupported_entity", "XYZ University", False)
+            return GeminiDecision("unrelated", None, False)
 
     llm = UnresolvedIntentLLM()
     metrics = IntentMetrics()
@@ -106,10 +106,10 @@ async def test_pure_negative_still_uses_existing_no_match_path() -> None:
 
     assert result.route == "fallback"
     assert "couldn't find a match" in result.payload.text
-    assert "XYZ University" in result.payload.text
+    assert "xyz" in result.payload.text.casefold()
     assert "I did match" not in result.payload.text
-    assert llm.intent_calls == 1
-    assert metrics.snapshot()["llm_intent_calls"] == 1
+    assert llm.intent_calls == 0
+    assert metrics.snapshot()["llm_intent_calls"] == 0
 
 
 @pytest.mark.asyncio

@@ -47,10 +47,10 @@ _CATALOG_COMPARISON = re.compile(
 )
 _CATALOG_ADVISORY = re.compile(
     r"\b(?:best\s+for\s+me|"
-    r"which\s+(?:one|course|program|university|(?:online\s+)?mba|mca|"
-    r"speciali[sz]ation)\b[^?]{0,80}\b(?:should\s+i|is\s+best|has\s+the\s+best)|"
+    r"which\b[^?]{0,80}\b(?:should\s+i|is\s+best|has\s+the\s+best)|"
     r"which\s+university\b[^?]{0,80}\b(?:highest|reasonable\s+fees?)|"
-    r"recommend|suggest|suit(?:s|able)?\s+(?:me|my)|help\s+me\s+choose)\b",
+    r"recommend|suggest|suit(?:s|able)?\s+(?:me|my)|help\s+me\s+choose|"
+    r"career\s+(?:guidance|growth)|working\s+professional\s+(?:advice|guidance))\b",
     re.IGNORECASE,
 )
 _DISCOVERY = re.compile(
@@ -62,8 +62,16 @@ _DISCOVERY = re.compile(
 
 _DOMAIN_VOCABULARY = re.compile(
     r"\b(?:accreditation|admission|career|course|degree|duration|eligibility|"
-    r"fees?|mba|mca|bba|bca|naac|online|placement|program|speciali[sz]ation|"
+    r"fees?|naac|online|placement|program|speciali[sz]ation|"
     r"ugc|uni(?:versity|versities)?)\b",
+    re.IGNORECASE,
+)
+
+_OPEN_REASONING = re.compile(
+    r"\b(?:confus(?:ed|ing)|help\s+(?:me\s+)?(?:decid(?:e|ing)|choose)|"
+    r"guide\s+me|somebody\s+guide|someone\s+to\s+help|career\s+(?:guidance|growth)|"
+    r"working\s+professional|recommend|suggest|best\s+for\s+me|"
+    r"compare|comparison|versus|vs\.?|which\s+should\s+i)\b",
     re.IGNORECASE,
 )
 
@@ -98,6 +106,12 @@ def fallback_intent(message: str) -> Intent:
     """Minimal degraded-mode fallback used only when Gemini cannot classify."""
 
     return Intent.FACTUAL if _DOMAIN_VOCABULARY.search(message) else Intent.UNRESOLVED_ENTITY
+
+
+def should_use_reasoning_llm(message: str) -> bool:
+    """Gate Gemini to advisory/comparison/open-reasoning turns only."""
+
+    return bool(_OPEN_REASONING.search(message))
 
 
 def _failure_reason(error: Exception) -> str:
@@ -183,4 +197,5 @@ __all__ = [
     "fallback_intent",
     "heuristic_intent",
     "is_exact_chitchat",
+    "should_use_reasoning_llm",
 ]

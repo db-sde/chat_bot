@@ -159,9 +159,13 @@ async def handle_category(
     selected = category or _focus_category(state)
     label = display_category(selected)
     if not selected:
+        choices = [
+            display_category(item)
+            for item in available_categories(category_index, catalog)[:6]
+        ]
         return build_response(
             "Which course category would you like to explore?",
-            suggested_chips=["MBA", "MCA", "BBA"],
+            suggested_chips=choices,
         )
 
     summary = category_summary(selected, category_index, catalog)

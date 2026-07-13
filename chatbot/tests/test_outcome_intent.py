@@ -32,8 +32,8 @@ class ScriptedIntentLLM:
         responses: Mapping[str, GeminiDecision | Exception] | None = None,
         *,
         default: GeminiDecision | Exception = GeminiDecision(
-            "unsupported_entity",
-            "Unknown entity",
+            "unrelated",
+            None,
             False,
         ),
     ) -> None:
@@ -140,16 +140,12 @@ async def test_vague_human_help_uses_gemini_callback_without_reusing_stale_focus
 
 
 @pytest.mark.asyncio
-async def test_harward_is_explicitly_unresolved_and_leaves_focus_untouched() -> None:
+async def test_harward_is_deterministically_unresolved_and_clears_inherited_focus() -> None:
     message = "Tell me about harward uni"
-    llm = ScriptedIntentLLM(
-        {message: GeminiDecision("unsupported_entity", "Harward", False)}
-    )
+    llm = ScriptedIntentLLM()
     service, metrics = await make_service(llm)
     try:
-        before = (
-            await turn(service, "Tell me about NMIMS MBA", "harward")
-        ).state.focus.model_copy(deep=True)
+        await turn(service, "Tell me about NMIMS MBA", "harward")
 
         result = await turn(service, message, "harward")
     finally:
@@ -157,17 +153,47 @@ async def test_harward_is_explicitly_unresolved_and_leaves_focus_untouched() -> 
 
     text = result.payload.text.casefold()
     assert result.route == "fallback"
-    assert result.state.focus == before
-    assert '"Harward"' in result.payload.text
-    assert '"harward uni"' not in text
+    assert result.state.focus.university_concept is None
+    assert result.state.focus.course_concept is None
+    assert result.state.focus.specialization_concept is None
+    assert [item.casefold() for item in result.state.focus.unknown_entities] == ["harward"]
+    assert "harward" in text
     assert "published catalog" in text
     assert "1,96,000" not in text
-    assert llm.intent_calls == [message]
-    assert metrics.snapshot()["llm_intent_calls"] == 1
+    assert llm.intent_calls == []
+    assert metrics.snapshot()["llm_intent_calls"] == 0
 
 
 @pytest.mark.asyncio
-async def test_pi_uses_gemini_unrelated_and_cannot_answer_from_stale_focus() -> None:
+@pytest.mark.parametrize(
+    ("message", "unknowns"),
+    [
+        ("Guide me to Harvard", ["harvard"]),
+        ("I'm confused between Harvard and Oxford", ["harvard", "oxford"]),
+        ("Which should I choose, Harvard or Oxford?", ["harvard", "oxford"]),
+    ],
+)
+async def test_open_reasoning_unknown_names_are_local_and_zero_gemini(
+    message: str,
+    unknowns: list[str],
+) -> None:
+    llm = ExplodingIntentLLM()
+    service, metrics = await make_service(llm)
+    try:
+        result = await turn(service, message, f"open-unknown-{message}")
+    finally:
+        await service.close()
+
+    assert result.route == "fallback"
+    assert result.state.focus.unknown_entities == unknowns
+    assert llm.intent_calls == []
+    snapshot = metrics.snapshot()
+    assert snapshot["llm_intent_calls"] == 0
+    assert snapshot["action_from_deterministic_rule"] == 1
+
+
+@pytest.mark.asyncio
+async def test_pi_uses_local_unrelated_and_cannot_answer_from_stale_focus() -> None:
     message = "what is the value of pi"
     llm = ScriptedIntentLLM({message: GeminiDecision("unrelated", None, False)})
     service, metrics = await make_service(llm)
@@ -181,8 +207,8 @@ async def test_pi_uses_gemini_unrelated_and_cannot_answer_from_stale_focus() -> 
     assert result.state.focus.model_dump(exclude_none=True) == {}
     assert "NMIMS" not in result.payload.text
     assert "1,96,000" not in result.payload.text
-    assert llm.intent_calls == [message]
-    assert metrics.snapshot()["llm_intent_calls"] == 1
+    assert llm.intent_calls == []
+    assert metrics.snapshot()["llm_intent_calls"] == 0
 
 
 @pytest.mark.asyncio
@@ -199,8 +225,8 @@ async def test_garbled_news_turn_is_not_silently_answered_from_catalog_focus() -
     assert result.route == "fallback"
     assert "NMIMS" not in result.payload.text
     assert "1,96,000" not in result.payload.text
-    assert llm.intent_calls == [message]
-    assert metrics.snapshot()["llm_intent_calls"] == 1
+    assert llm.intent_calls == []
+    assert metrics.snapshot()["llm_intent_calls"] == 0
 
 
 @pytest.mark.asyncio
@@ -246,7 +272,7 @@ async def test_classifier_failure_warns_records_metrics_and_completes(
     reason: str,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    message = "what is the value of pi"
+    message = "I need help deciding"
     llm = ScriptedIntentLLM({message: failure})
     service, metrics = await make_service(llm)
     try:
@@ -294,9 +320,7 @@ async def test_open_human_help_reaches_callback_through_gemini(message: str) -> 
     assert result.state.focus == before
     assert result.state.lead.last_asked_field == "name"
     assert llm.intent_calls == [message]
-    assert llm.mention_summaries == [
-        "category=none, university=none, specialization=none"
-    ]
+    assert llm.mention_summaries == ["category=none, university=none, specialization=none"]
     snapshot = metrics.snapshot()
     assert snapshot["llm_intent_calls"] == 1
     assert snapshot["llm_intent_failures"] == 0

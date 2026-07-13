@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any, Literal
 
-from .alias_tables import CURATED_ALIASES, normalize_text
+from .alias_tables import normalize_text
 from .ambiguity_clusters import build_ambiguity_clusters
 from .category_index import CategoryIndex
 from .fuzzy_bucket import BucketKey, FuzzyTerm, build_fuzzy_buckets
@@ -20,17 +20,92 @@ FrequencyClass = Literal["STRONG", "WEAK", "SUPPRESSED"]
 STOPWORDS = frozenset(
     {"university", "online", "institute", "of", "the", "and", "management", "college"}
 )
-KNOWN_CATEGORY_EXPANSIONS = {
-    "master of business administration": "mba",
-    "masters of business administration": "mba",
-    "master of computer applications": "mca",
-    "masters of computer applications": "mca",
-    "bachelor of business administration": "bba",
-    "bachelor of computer applications": "bca",
-}
-KNOWN_CATEGORY_CODES = frozenset(
-    {"mba", "mca", "bba", "bca", "bcom", "mcom", "ba", "ma", "bsc", "msc"}
+_CATEGORY_CONNECTIVES = frozenset({"and", "in", "of", "s", "the"})
+_CATEGORY_DELIVERY_TOKENS = frozenset(
+    {"course", "degree", "distance", "learning", "mode", "online", "program", "programme"}
 )
+_DEGREE_LEADS = frozenset(
+    {
+        "associate",
+        "bachelor",
+        "certificate",
+        "diploma",
+        "doctor",
+        "doctoral",
+        "graduate",
+        "master",
+        "postgraduate",
+        "undergraduate",
+    }
+)
+
+# Attribute vocabulary is generated from publisher field names, not university,
+# course, or specialization values. Structural envelope words are discarded so
+# keys such as ``total_fee`` and ``eligibility_summary`` contribute the concepts
+# ``fee`` and ``eligibility`` without turning ``program``/``content`` into user
+# query attributes.
+_ATTRIBUTE_STRUCTURAL_TOKENS = frozenset(
+    {
+        "about",
+        "alias",
+        "aliases",
+        "amount",
+        "answer",
+        "average",
+        "avg",
+        "by",
+        "canonical",
+        "category",
+        "content",
+        "course",
+        "description",
+        "detail",
+        "details",
+        "document",
+        "faq",
+        "faqs",
+        "full",
+        "generated",
+        "heading",
+        "hero",
+        "highlight",
+        "highlights",
+        "id",
+        "item",
+        "items",
+        "linked",
+        "list",
+        "meta",
+        "name",
+        "note",
+        "of",
+        "other",
+        "page",
+        "plan",
+        "plans",
+        "program",
+        "question",
+        "section",
+        "slug",
+        "specialization",
+        "starting",
+        "summary",
+        "table",
+        "text",
+        "title",
+        "total",
+        "type",
+        "university",
+        "value",
+    }
+)
+_ATTRIBUTE_TOKEN_NORMALIZATION = {
+    "approved": "approval",
+    "approvals": "approval",
+    "fees": "fee",
+    "placements": "placement",
+    "rankings": "ranking",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +119,7 @@ class CatalogRecord:
     category: str | None = None
     specialization_name: str | None = None
     aliases: tuple[str, ...] = ()
+    attribute_terms: tuple[tuple[str, str], ...] = ()
 
     def as_mapping(self) -> Mapping[str, object]:
         return MappingProxyType(
@@ -60,6 +136,7 @@ class CatalogRecord:
                 "category": self.category,
                 "specialization_name": self.specialization_name,
                 "aliases": self.aliases,
+                "attribute_terms": self.attribute_terms,
             }
         )
 
@@ -77,6 +154,7 @@ class TaxonomyIndexes:
     entity_tokens: Mapping[str, frozenset[str]]
     entity_metadata: Mapping[str, Mapping[str, object]]
     ambiguity_clusters: Mapping[str, Mapping[str, frozenset[str]]]
+    attribute_index: Mapping[str, frozenset[str]]
     category_index: CategoryIndex
 
     # Short compatibility names are convenient in tests and callers.
@@ -97,15 +175,52 @@ class TaxonomyIndexes:
         return self.alias_index
 
 
+def category_initialism(value: object) -> str | None:
+    """Return a generic initialism for a spelled-out degree phrase."""
+
+    tokens = tuple(normalize_text(value).split())
+    if len(tokens) < 2:
+        return None
+    lead = tokens[0].removesuffix("s")
+    compound_lead = len(tokens) > 1 and (tokens[0], tokens[1]) in {
+        ("post", "graduate"),
+        ("under", "graduate"),
+    }
+    if lead not in _DEGREE_LEADS and not compound_lead:
+        return None
+    initials = "".join(token[0] for token in tokens if token not in _CATEGORY_CONNECTIVES)
+    return initials if len(initials) >= 2 else None
+
+
 def normalize_category(value: object) -> str:
-    normalized = normalize_text(value)
-    if normalized in KNOWN_CATEGORY_EXPANSIONS:
-        return KNOWN_CATEGORY_EXPANSIONS[normalized]
-    tokens = normalized.split()
-    for token in tokens:
-        if token in KNOWN_CATEGORY_CODES:
-            return token
-    return normalized
+    """Derive a stable category key without enumerating degree codes."""
+
+    raw = str(value or "").strip()
+    normalized = normalize_text(raw)
+    if not normalized:
+        return ""
+    tokens = [token for token in normalized.split() if token not in _CATEGORY_DELIVERY_TOKENS]
+    if not tokens:
+        return normalized
+
+    # Publisher codes such as MBA/MCA are authoritative regardless of which
+    # catalog introduces them. Delivery words in all caps are ignored.
+    for match in re.finditer(r"\b[A-Z][A-Z0-9&-]{1,11}\b", raw):
+        code = normalize_text(match.group(0)).replace(" ", "")
+        if code and code not in _CATEGORY_DELIVERY_TOKENS:
+            return code
+
+    # Punctuated abbreviations such as B.Tech/B.Com remain generic: compact the
+    # publisher spelling instead of maintaining a list of known programs.
+    if "." in raw and 2 <= len(tokens) <= 4:
+        return "".join(tokens)
+
+    initialism = category_initialism(" ".join(tokens))
+    if initialism:
+        return initialism
+    if len(tokens) == 1:
+        return tokens[0]
+    return " ".join(tokens)
 
 
 def category_entity_id(category: str) -> str:
@@ -149,6 +264,64 @@ def _strings(value: object) -> tuple[str, ...]:
             result.extend(_strings(item))
         return tuple(result)
     return (str(value),)
+
+
+def _attribute_concepts(raw_key: object) -> tuple[str, ...]:
+    concepts: list[str] = []
+    for token in normalize_text(raw_key).split():
+        if token in _ATTRIBUTE_STRUCTURAL_TOKENS:
+            continue
+        normalized = _ATTRIBUTE_TOKEN_NORMALIZATION.get(token, token)
+        # A conservative singular form is useful for publisher keys such as
+        # ``placements`` while leaving short acronyms (UGC/NAAC) untouched.
+        if normalized.endswith("ies") and len(normalized) > 4:
+            normalized = normalized[:-3] + "y"
+        elif normalized.endswith("s") and len(normalized) > 4:
+            normalized = normalized[:-1]
+        if normalized in _ATTRIBUTE_STRUCTURAL_TOKENS:
+            continue
+        if normalized and normalized not in concepts:
+            concepts.append(normalized)
+    return tuple(concepts)
+
+
+def _attribute_forms(concept: str) -> tuple[str, ...]:
+    forms = [concept]
+    if len(concept) >= 3 and not concept.endswith("s"):
+        plural = concept[:-1] + "ies" if concept.endswith("y") else concept + "s"
+        forms.append(plural)
+    return tuple(forms)
+
+
+def _catalog_attribute_terms(value: object) -> tuple[tuple[str, str], ...]:
+    """Return ``(query term, canonical attribute)`` pairs from catalog keys."""
+
+    pairs: set[tuple[str, str]] = set()
+
+    def visit(item: object) -> None:
+        mapping = _as_mapping(item)
+        if mapping:
+            for raw_key, child in mapping.items():
+                concepts = _attribute_concepts(raw_key)
+                for concept in concepts:
+                    for form in _attribute_forms(concept):
+                        pairs.add((form, concept))
+                if len(concepts) > 1:
+                    phrase = " ".join(concepts)
+                    for concept in concepts:
+                        pairs.add((phrase, concept))
+                if child is not None and (
+                    isinstance(child, Mapping)
+                    or (isinstance(child, Iterable) and not isinstance(child, (str, bytes)))
+                ):
+                    visit(child)
+            return
+        if isinstance(item, Iterable) and not isinstance(item, (str, bytes)):
+            for child in item:
+                visit(child)
+
+    visit(value)
+    return tuple(sorted(pairs))
 
 
 def catalog_records(catalog: object) -> tuple[CatalogRecord, ...]:
@@ -219,6 +392,7 @@ def catalog_records(catalog: object) -> tuple[CatalogRecord, ...]:
                 category=category or None,
                 specialization_name=str(specialization) if specialization else None,
                 aliases=tuple(dict.fromkeys(alias for alias in aliases if alias)),
+                attribute_terms=_catalog_attribute_terms(full_entity or item),
             )
         )
     return tuple(records)
@@ -280,6 +454,10 @@ def build_indexes(catalog: object) -> TaxonomyIndexes:
     metadata: dict[str, Mapping[str, object]] = {
         record.id: record.as_mapping() for record in records
     }
+    attribute_terms: dict[str, set[str]] = defaultdict(set)
+    for record in records:
+        for term, concept in record.attribute_terms:
+            attribute_terms[term].add(concept)
 
     category_records = [record.as_mapping() for record in records]
     category_index = CategoryIndex.from_records(category_records)
@@ -324,6 +502,13 @@ def build_indexes(catalog: object) -> TaxonomyIndexes:
 
     # A course family is one semantic candidate regardless of provider count.
     categories = sorted({record.category for record in records if record.category})
+    category_aliases: dict[str, set[str]] = defaultdict(set)
+    for record in records:
+        if record.page_type != "course" or not record.category:
+            continue
+        if record.program_name:
+            category_aliases[record.category].add(record.program_name)
+        category_aliases[record.category].update(record.aliases)
     for category in categories:
         entity_id = category_entity_id(category)
         display = category.upper() if len(category) <= 5 else category.title()
@@ -339,7 +524,7 @@ def build_indexes(catalog: object) -> TaxonomyIndexes:
                 "aliases": (),
             }
         )
-        add("course", entity_id, display)
+        add("course", entity_id, display, category_aliases.get(category, ()))
 
     # If a feed lacks separate university pages, synthesize a semantic university
     # candidate so its course/specialization records remain discoverable.
@@ -407,27 +592,6 @@ def build_indexes(catalog: object) -> TaxonomyIndexes:
                 if size == 1 and bucket == "STRONG":
                     aliases[slot][span].update(ids)
 
-    # Curated aliases replace (rather than merge with) lower-confidence derivation.
-    for slot, table in CURATED_ALIASES.items():
-        for raw_alias, targets in table.items():
-            resolved: set[str] = set()
-            for target in targets:
-                target_key = (
-                    normalize_category(target) if slot == "course" else normalize_text(target)
-                )
-                if slot == "course":
-                    candidate_id = category_entity_id(target_key)
-                    if candidate_id in entity_names:
-                        resolved.add(candidate_id)
-                else:
-                    resolved.update(canonical[slot].get(target_key, ()))
-                    target_tokens = set(_tokens(target))
-                    for entity_id, name in entity_names.items():
-                        if entity_slots[entity_id] == slot and target_tokens <= set(_tokens(name)):
-                            resolved.add(entity_id)
-            if resolved:
-                aliases[slot][normalize_text(raw_alias)] = resolved
-
     frozen_acronyms = _freeze_slot_set_map(acronyms)
     fuzzy_by_slot: dict[str, Mapping[BucketKey, tuple[FuzzyTerm, ...]]] = {}
     for slot in slots:
@@ -436,6 +600,11 @@ def build_indexes(catalog: object) -> TaxonomyIndexes:
             fuzzy_terms[name].update(ids)
         for alias, ids in aliases[slot].items():
             fuzzy_terms[alias].update(ids)
+        # Generated acronyms must participate in typo correction too. Without
+        # this, ``nmims`` can resolve exactly while ``nmis`` works only when a
+        # duplicate manual/catalog alias happens to exist.
+        for acronym, ids in acronyms[slot].items():
+            fuzzy_terms[acronym].update(ids)
         for span, ids in ngrams[slot][1].items():
             if frequency[slot].get(span) != "SUPPRESSED":
                 fuzzy_terms[span].update(ids)
@@ -466,6 +635,7 @@ def build_indexes(catalog: object) -> TaxonomyIndexes:
         entity_tokens=MappingProxyType(dict(entity_tokens)),
         entity_metadata=MappingProxyType(metadata),
         ambiguity_clusters=clusters,
+        attribute_index=_freeze_set_map(attribute_terms),
         category_index=category_index,
     )
 
@@ -479,5 +649,6 @@ __all__ = [
     "build_indexes",
     "catalog_records",
     "category_entity_id",
+    "category_initialism",
     "normalize_category",
 ]

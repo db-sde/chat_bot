@@ -37,7 +37,7 @@ REJECTION_RE = re.compile(
 )
 TOPIC_RE = re.compile(
     r"\b(?:tell|what|which|compare|about|fees?|duration|eligibility|emi|placements?|"
-    r"admission|accreditation|program|course|university|mba|mca|callback|call me)\b",
+    r"admission|accreditation|program|course|university|callback|call me)\b",
     re.IGNORECASE,
 )
 

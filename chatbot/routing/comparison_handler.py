@@ -42,8 +42,7 @@ def _explicit_categories(value: Any) -> list[str]:
 def _categories_from_message(message: str, known: list[str]) -> list[str]:
     text = str(message or "").casefold()
     matches: list[tuple[int, str]] = []
-    candidates = list(dict.fromkeys([*known, "mba", "mca", "bba", "bca", "mcom", "bcom"]))
-    for category in candidates:
+    for category in dict.fromkeys(known):
         normalized = str(category).strip().casefold()
         if not normalized:
             continue
@@ -320,7 +319,7 @@ async def handle_comparison(
         return build_response(
             f"I matched {university}{scope}. Which other university would you like "
             "to compare it with?",
-            suggested_chips=["Compare with NMIMS", "Compare with LPU", "Compare with Amity"],
+            suggested_chips=["Browse universities"],
         )
 
     selected = _explicit_categories(categories)
@@ -337,7 +336,7 @@ async def handle_comparison(
 
     selected = list(dict.fromkeys(item.strip().casefold() for item in selected if item.strip()))
     if len(selected) < 2:
-        suggestions = [display_category(item) for item in known[:4]] or ["MBA", "MCA", "BBA"]
+        suggestions = [display_category(item) for item in known[:4]]
         return build_response(
             "Which two course categories would you like me to compare?",
             suggested_chips=suggestions,

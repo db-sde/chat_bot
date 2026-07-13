@@ -15,13 +15,21 @@ from response.cards import (
 )
 from schemas import ResponsePayload
 
-from .category_handler import display_category, entities_for_category
+from .category_handler import available_categories, display_category, entities_for_category
 
 
 def _focus_category(state: Any) -> str | None:
     focus = getattr(state, "focus", None)
-    category = getattr(focus, "category", None)
+    category = getattr(focus, "course_concept", None) or getattr(focus, "category", None)
     return str(category) if category else None
+
+
+def _focus_specialization(state: Any) -> str | None:
+    focus = getattr(state, "focus", None)
+    specialization = getattr(focus, "specialization_concept", None) or getattr(
+        focus, "specialization", None
+    )
+    return str(specialization) if specialization else None
 
 
 async def handle_list_specializations(
@@ -55,9 +63,13 @@ async def handle_list_specializations(
                 names.append(name)
     names.sort(key=str.casefold)
     if not names:
+        categories = [
+            display_category(item)
+            for item in available_categories(category_index, catalog)[:3]
+        ]
         return build_response(
             f"I couldn't find published {label} specializations in the current catalog.",
-            suggested_chips=["Explore MBA", "Explore MCA"],
+            suggested_chips=[f"Explore {item}" for item in categories],
         )
     return build_response(
         f"Published {label} specializations include: {', '.join(names)}.",
@@ -72,22 +84,41 @@ async def handle_list_providers(
     category_index: Any = None,
     *,
     specialization_candidates: Sequence[Any] | None = None,
+    specialization: str | None = None,
     llm: Any = None,
     **_: Any,
 ) -> ResponsePayload:
     """List all universities represented by one resolved specialization family."""
 
-    del state, message, category_index, llm
+    del message, llm
     entities: list[Any] = []
+    selected = specialization or _focus_specialization(state)
+    if selected and category_index is not None:
+        for entity_id in category_index.entities_for_specialization(selected):
+            entity = catalog_get_entity(catalog, entity_id)
+            if entity is not None and entity_page_type(entity) == "specialization":
+                entities.append(entity)
     for candidate in specialization_candidates or ():
         entity_id = getattr(candidate, "entity_id", candidate)
         entity = catalog_get_entity(catalog, entity_id)
         if entity is not None and entity_page_type(entity) == "specialization":
             entities.append(entity)
 
-    specialization = "this specialization"
+    # A concept may be backed by the same record through both the taxonomy
+    # candidate and the reverse index. Preserve all providers without duplicates.
+    deduped: dict[str, Any] = {}
+    for entity in entities:
+        identity = str(
+            safe_get(entity, "id", None)
+            or safe_get(entity, "slug", None)
+            or (entity_university(entity), entity_label(entity))
+        )
+        deduped.setdefault(identity, entity)
+    entities = list(deduped.values())
+
+    specialization_label = selected or "this specialization"
     if entities:
-        specialization = str(
+        specialization_label = str(
             safe_get(entities[0], "specialization_name", None)
             or safe_get(entities[0], "spec_name", None)
             or entity_label(entities[0])
@@ -102,12 +133,12 @@ async def handle_list_providers(
     )
     if not providers:
         return build_response(
-            f"I couldn't find published university providers for {specialization}.",
+            f"I couldn't find published university providers for {specialization_label}.",
             suggested_chips=["Explore specializations", "Browse universities"],
         )
     count = len(providers)
     return build_response(
-        f"{specialization} is offered by {count} published "
+        f"{specialization_label} is offered by {count} published "
         f"universit{'y' if count == 1 else 'ies'}: {', '.join(providers)}.",
         suggested_chips=[f"Tell me about {provider}" for provider in providers[:6]],
     )

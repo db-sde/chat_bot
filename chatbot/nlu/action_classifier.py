@@ -18,6 +18,7 @@ class Action(StrEnum):
     DISCOVERY = "discovery"
     CLARIFY = "clarify"
     CALLBACK = "callback"
+    OPEN_LEAD_FORM = "open_lead_form"
     UNSUPPORTED_ENTITY = "unsupported_entity"
     CHITCHAT = "chitchat"
     UNRELATED = "unrelated"
@@ -40,8 +41,8 @@ _COMPARE_MARKER = re.compile(
 )
 _RECOMMEND_MARKER = re.compile(
     r"\b(?:best\s+for\s+me|recommend|suggest|help\s+me\s+choose|"
-    r"which\s+(?:one|course|program|university|(?:online\s+)?mba|mca|"
-    r"speciali[sz]ation)\b[^?]{0,80}\b(?:should\s+i|is\s+best|has\s+the\s+best)|"
+    r"career\s+(?:guidance|growth)|working\s+professional\s+(?:advice|guidance)|"
+    r"which\b[^?]{0,80}\b(?:should\s+i|is\s+best|has\s+the\s+best)|"
     r"which\s+university\b[^?]{0,80}\b(?:highest|reasonable\s+fees?))\b",
     re.IGNORECASE,
 )
@@ -91,6 +92,30 @@ def _one_specialization_family(mentions: Any) -> bool:
     return len(names) == 1
 
 
+def _unknown_entities(mentions: Any) -> tuple[Any, ...]:
+    """Return explicit unknown-entity evidence across extractor versions."""
+
+    unknown = getattr(mentions, "unknown_entities", ()) or ()
+    unresolved = getattr(mentions, "unresolved_terms", ()) or ()
+    return tuple(unknown) + tuple(unresolved)
+
+
+def has_deferred_clarification(mentions: Any) -> bool:
+    """Whether MEDIUM evidence needs the post-resolution clarifier.
+
+    This is deliberately a hint rather than ``Action.CLARIFY``. Clarification
+    needs the resolver's candidates and focus update; dispatching it before
+    resolution would create a content-free response.
+    """
+
+    for field in ("universities", "courses", "specializations"):
+        if _candidates(mentions, field, confidence="MEDIUM") and not _candidates(
+            mentions, field
+        ):
+            return True
+    return False
+
+
 def classify(mentions: Any, message: str) -> Action | None:
     """Return a confident deterministic action, or ``None`` for the next layer."""
 
@@ -98,6 +123,17 @@ def classify(mentions: Any, message: str) -> Action | None:
     high_specializations = _candidates(mentions, "specializations")
     high_universities = _candidates(mentions, "universities")
     groups = _all_high_groups(mentions)
+
+    # Any named catalog gap routes through the honest unsupported handler while
+    # retaining compatible known concepts (for example an unknown university +
+    # a known course). Mixed comparisons remain on their established partial-
+    # comparison path so the known operand can still be summarized.
+    if (
+        _unknown_entities(mentions)
+        and not has_deferred_clarification(mentions)
+        and not (_COMPARE_MARKER.search(message) and groups)
+    ):
+        return Action.UNSUPPORTED_ENTITY
 
     if _one_specialization_family(mentions) and (
         _PROVIDER_REQUEST.search(message)
@@ -109,11 +145,23 @@ def classify(mentions: Any, message: str) -> Action | None:
     ):
         return Action.LIST_PROVIDERS
 
+    # A specialization is a concept until a university is supplied. Multiple
+    # provider rows in the index should therefore become provider discovery,
+    # not a choice between duplicate specialization labels.
+    if (
+        _one_specialization_family(mentions)
+        and not high_universities
+        and not _COMPARE_MARKER.search(message)
+        and not _RECOMMEND_MARKER.search(message)
+    ):
+        return Action.LIST_PROVIDERS
+
     if (
         _SPECIALIZATION_MARKER.search(message)
         and high_categories
         and not high_specializations
         and not _candidates(mentions, "specializations", confidence="MEDIUM")
+        and not _RECOMMEND_MARKER.search(message)
     ):
         return Action.LIST_SPECIALIZATIONS
 
@@ -132,6 +180,11 @@ def classify(mentions: Any, message: str) -> Action | None:
         # and clarify() already know how to present every candidate without
         # selecting one. Provider-list markers above are the shape override.
         return Action.GET_FACTS
+
+    # MEDIUM evidence is intentionally left for the resolver/clarifier. Callers
+    # can inspect ``has_deferred_clarification`` without short-circuiting it.
+    if has_deferred_clarification(mentions):
+        return None
 
     return None
 
@@ -165,4 +218,4 @@ def mention_summary(mentions: Any) -> str:
     return ", ".join(rendered)
 
 
-__all__ = ["Action", "classify", "mention_summary"]
+__all__ = ["Action", "classify", "has_deferred_clarification", "mention_summary"]

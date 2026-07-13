@@ -14,6 +14,7 @@ from response.cards import (
 )
 from response.templates import render_topic, suggested_chips, topic_from_message
 from schemas import ResponsePayload
+from taxonomy.alias_tables import normalize_text
 
 
 def _focus(state: Any) -> Any:
@@ -27,24 +28,115 @@ def _cached_entity(state: Any, entity_id: str | None) -> Any:
     return safe_get(cache, [entity_id], None)
 
 
-def _load_focused_entity(state: Any, catalog: Any, explicit: Any = None) -> Any:
+def _concept(focus: Any, primary: str, legacy: str) -> str | None:
+    value = getattr(focus, primary, None) or getattr(focus, legacy, None)
+    return str(value) if value else None
+
+
+def _cache_resolved(state: Any, catalog: Any, entity_id: str) -> Any:
+    cache_method = getattr(catalog, "cache_in_state", None)
+    if callable(cache_method) and state is not None:
+        try:
+            entity = cache_method(entity_id, state)
+        except (KeyError, TypeError, ValueError):
+            entity = None
+        if entity is not None:
+            focus = _focus(state)
+            if focus is not None and hasattr(focus, "entity_id"):
+                focus.entity_id = entity_id
+            return entity
+    return find_catalog_entity(catalog, entity_id)
+
+
+def _university_entity_id(catalog: Any, concept: str) -> str | None:
+    list_metadata = getattr(catalog, "list_metadata", None)
+    if not callable(list_metadata):
+        return None
+    query = set(normalize_text(concept).split())
+    matches: list[str] = []
+    for item in list_metadata("university"):
+        names = (
+            getattr(item, "canonical_name", None),
+            getattr(item, "university_name", None),
+        )
+        if any(
+            query
+            and (tokens := set(normalize_text(name).split()))
+            and (query <= tokens or tokens <= query)
+            for name in names
+            if name
+        ):
+            matches.append(str(item.id))
+    unique = list(dict.fromkeys(matches))
+    return unique[0] if len(unique) == 1 else None
+
+
+def _load_focused_entity(
+    state: Any,
+    catalog: Any,
+    category_index: Any,
+    explicit: Any = None,
+) -> Any:
     if explicit is not None:
         return explicit
     focus = _focus(state)
+
+    # Canonical concepts are the authoritative focus. Resolve the concrete
+    # publisher record here, at the handler boundary, and only then populate the
+    # legacy entity_id cache used by older sessions and synthesis code.
+    university = _concept(focus, "university_concept", "university")
+    category = _concept(focus, "course_concept", "category")
+    specialization = _concept(focus, "specialization_concept", "specialization")
+    if category_index is not None and (category or specialization):
+        university_keys = [university] if university else [None]
+        legacy_university = getattr(focus, "university", None)
+        metadata = (
+            getattr(catalog, "get_metadata", lambda _value: None)(legacy_university)
+            if legacy_university
+            else None
+        )
+        if metadata is not None:
+            university_keys.extend(
+                value
+                for value in (
+                    getattr(metadata, "university_name", None),
+                    getattr(metadata, "canonical_name", None),
+                )
+                if value
+            )
+        matches: set[str] = set()
+        for university_key in university_keys:
+            matches.update(
+                category_index.intersect(
+                    category=category,
+                    specialization=specialization,
+                    university=university_key,
+                )
+            )
+        desired_type = "specialization" if specialization else "course"
+        matches = {
+            entity_id
+            for entity_id in matches
+            if getattr(catalog.get_metadata(entity_id), "page_type", None) == desired_type
+        }
+        if len(matches) == 1:
+            return _cache_resolved(state, catalog, next(iter(matches)))
+    elif university:
+        university_id = _university_entity_id(catalog, university)
+        if university_id:
+            return _cache_resolved(state, catalog, university_id)
+
+    # Backward-compatible fallback for focus JSON written before concept fields
+    # existed. New turns take the concept-first path above.
     entity_id = getattr(focus, "entity_id", None)
     cached = _cached_entity(state, entity_id)
     if cached is not None:
         return cached
 
     if entity_id and catalog is not None:
-        cache_method = getattr(catalog, "cache_in_state", None)
-        if callable(cache_method) and state is not None:
-            try:
-                entity = cache_method(entity_id, state)
-            except (KeyError, TypeError, ValueError):
-                entity = None
-            if entity is not None:
-                return entity
+        entity = _cache_resolved(state, catalog, entity_id)
+        if entity is not None:
+            return entity
         entity = find_catalog_entity(catalog, entity_id)
         if entity is not None:
             return entity
@@ -105,13 +197,17 @@ async def handle_factual(
 ) -> ResponsePayload:
     """Answer from cached publisher data, degrading cleanly on absent fields."""
 
-    del category_index
-    focused_entity = _load_focused_entity(state, catalog, explicit=entity)
+    focused_entity = _load_focused_entity(
+        state,
+        catalog,
+        category_index,
+        explicit=entity,
+    )
     if focused_entity is None:
         return build_response(
             "I couldn't load a single published record for that request. "
             "Which university or course should I check?",
-            suggested_chips=["Explore MBA", "Browse universities", "Compare courses"],
+            suggested_chips=["Browse course categories", "Browse universities", "Compare courses"],
         )
 
     selected_topic = topic or topic_from_message(message)

@@ -24,6 +24,11 @@ class FocusUpdateResult:
     comparison_specializations: tuple[tuple[Candidate, ...], ...] = ()
     advisory_candidate_ids: tuple[str, ...] = ()
     joined_entity_ids: tuple[str, ...] = ()
+    # Current-turn provenance is carried into catalog validation.  Concrete ids
+    # remain available as a compatibility cache, while these slots describe the
+    # concepts the user actually supplied.
+    explicit_slots: frozenset[str] = frozenset()
+    specialization_candidate_ids: tuple[str, ...] = ()
 
     @property
     def needs_clarification(self) -> bool:
@@ -94,6 +99,31 @@ def _assign(target: object, field_name: str, value: object) -> None:
         setattr(target, field_name, value)
 
 
+def _set_source(focus: object, slot: str, source: str) -> None:
+    sources = _value(focus, "sources")
+    if isinstance(sources, dict):
+        sources[slot] = source
+    _assign(focus, "source", source)
+
+
+def _clear_slot(focus: object, slot: str) -> None:
+    legacy = {
+        "university": "university",
+        "course": "category",
+        "specialization": "specialization",
+    }[slot]
+    concept = {
+        "university": "university_concept",
+        "course": "course_concept",
+        "specialization": "specialization_concept",
+    }[slot]
+    _assign(focus, legacy, None)
+    _assign(focus, concept, None)
+    sources = _value(focus, "sources")
+    if isinstance(sources, dict):
+        sources.pop(slot, None)
+
+
 def _metadata(indexes: TaxonomyIndexes | None, entity_id: str) -> Mapping[str, object]:
     return indexes.entity_metadata.get(entity_id, {}) if indexes else {}
 
@@ -101,6 +131,15 @@ def _metadata(indexes: TaxonomyIndexes | None, entity_id: str) -> Mapping[str, o
 def _label(candidate: Candidate, indexes: TaxonomyIndexes | None) -> str:
     metadata = _metadata(indexes, candidate.entity_id)
     return str(metadata.get("canonical_name") or candidate.canonical_name)
+
+
+def _university_concept(candidate: Candidate, indexes: TaxonomyIndexes | None) -> str:
+    metadata = _metadata(indexes, candidate.entity_id)
+    return str(
+        metadata.get("university_name")
+        or metadata.get("canonical_name")
+        or candidate.canonical_name
+    )
 
 
 def _category(candidate: Candidate, indexes: TaxonomyIndexes | None) -> str:
@@ -224,6 +263,15 @@ def update_focus(
 
     del catalog  # Catalog-derived data is frozen into ``indexes``/``category_index``.
     focus = getattr(state, "focus", state)
+    existing_sources = _value(focus, "sources")
+    if isinstance(existing_sources, dict):
+        for slot, fields in (
+            ("university", ("university_concept", "university")),
+            ("course", ("course_concept", "category")),
+            ("specialization", ("specialization_concept", "specialization")),
+        ):
+            if any(_value(focus, field_name) for field_name in fields):
+                existing_sources[slot] = "context"
     candidates = _candidate_lists(mentions)
     reverse = category_index or (indexes.category_index if indexes else None)
     resolved: dict[str, tuple[Candidate, ...]] = {}
@@ -237,6 +285,35 @@ def update_focus(
         high_by_slot[slot] = high
         if med and not high:
             medium[slot] = med
+
+    selected_intent = str(intent or _value(mentions, "intent") or "").casefold()
+    is_comparison = selected_intent == "comparison"
+    is_discovery = selected_intent == "discovery"
+
+    # Unknown evidence and attributes are current-turn concepts. Unknown names
+    # never enter university/course/specialization focus, while attributes can be
+    # updated without disturbing the entity concepts used by a pronoun follow-up.
+    unknown_entities = list(
+        _value(mentions, "unknown_entities", _value(mentions, "unresolved_terms", ())) or ()
+    )
+    _assign(focus, "unknown_entities", unknown_entities)
+    attributes = list(_value(mentions, "attributes", ()) or ())
+    if attributes:
+        _assign(focus, "attribute", str(attributes[0]))
+        _set_source(focus, "attribute", "explicit")
+
+    # Discovery is an explicit topic switch. A provider-less specialization
+    # family must not be narrowed through an inherited university before the
+    # family has a chance to reach the list-provider handler.
+    if (
+        is_discovery
+        and high_by_slot["specialization"]
+        and not high_by_slot["university"]
+    ):
+        _clear_slot(focus, "university")
+        _clear_slot(focus, "course")
+        _clear_slot(focus, "specialization")
+        _assign(focus, "entity_id", None)
 
     # Independently extracted specialization names commonly map to one page per
     # provider.  Narrow that set with explicit university/category evidence before
@@ -278,19 +355,16 @@ def update_focus(
     if (len(high_by_slot["course"]) > 1 or "course" in medium) and len(
         high_by_slot["university"]
     ) != 1:
-        _assign(focus, "university", None)
-        _assign(focus, "specialization", None)
+        _clear_slot(focus, "university")
+        _clear_slot(focus, "specialization")
         _assign(focus, "entity_id", None)
     if (len(high_by_slot["university"]) > 1 or "university" in medium) and len(
         high_by_slot["course"]
     ) != 1:
-        _assign(focus, "category", None)
-        _assign(focus, "specialization", None)
+        _clear_slot(focus, "course")
+        _clear_slot(focus, "specialization")
         _assign(focus, "entity_id", None)
 
-    selected_intent = str(intent or _value(mentions, "intent") or "").casefold()
-    is_comparison = selected_intent == "comparison"
-    is_advisory = selected_intent == "advisory"
     comparison_categories: tuple[str, ...] = ()
     comparison_universities: tuple[Candidate, ...] = ()
     comparison_entity_ids: tuple[str, ...] = ()
@@ -338,10 +412,10 @@ def update_focus(
 
     specialization_high = high_by_slot["specialization"]
     specialization_groups = _mention_groups(specialization_high)
+    one_concept_family = False
     if len(specialization_high) > 1:
-        advisory_family = (
-            is_advisory
-            and len(specialization_groups) == 1
+        one_concept_family = (
+            len(specialization_groups) == 1
             and _same_semantic_family(specialization_high, indexes)
         )
         comparable_families = (
@@ -352,7 +426,7 @@ def update_focus(
                 for group in specialization_groups
             )
         )
-        if advisory_family:
+        if one_concept_family:
             advisory_candidate_ids = tuple(
                 dict.fromkeys(candidate.entity_id for candidate in specialization_high)
             )
@@ -383,9 +457,9 @@ def update_focus(
         or comparison_specializations
         or any(len(group) > 1 for group in university_groups)
     ):
-        _assign(focus, "university", None)
-        _assign(focus, "category", None)
-        _assign(focus, "specialization", None)
+        _clear_slot(focus, "university")
+        _clear_slot(focus, "course")
+        _clear_slot(focus, "specialization")
         _assign(focus, "entity_id", None)
 
     single: dict[str, Candidate] = {
@@ -395,6 +469,10 @@ def update_focus(
     }
     if course_high and len(course_high) == 1:
         single["course"] = course_high[0]
+    if one_concept_family:
+        # The representative carries the catalog-owned name; all provider ids
+        # remain on the result for late binding in list/advisory handlers.
+        single["specialization"] = specialization_high[0]
 
     explicit_university = "university" in single
     explicit_category = "course" in single
@@ -410,19 +488,19 @@ def update_focus(
     # Depth order: university/category (same level) > specialization.
     has_shallow_mention = explicit_university or explicit_category
     if has_shallow_mention and not explicit_specialization:
-        _assign(focus, "specialization", None)
+        _clear_slot(focus, "specialization")
         _assign(focus, "entity_id", None)
 
     # Concrete topic-switch guarantees: category-only cannot stick to a prior
     # university, and university-only cannot retain a prior course/spec context.
     if explicit_category and not explicit_university:
-        _assign(focus, "university", None)
-        _assign(focus, "specialization", None)
+        _clear_slot(focus, "university")
+        _clear_slot(focus, "specialization")
         _assign(focus, "entity_id", None)
     if explicit_university and not explicit_category:
-        _assign(focus, "category", None)
+        _clear_slot(focus, "course")
         if not explicit_specialization:
-            _assign(focus, "specialization", None)
+            _clear_slot(focus, "specialization")
         _assign(focus, "entity_id", None)
 
     university_candidate = single.get("university")
@@ -430,13 +508,25 @@ def update_focus(
     specialization_candidate = single.get("specialization")
     if university_candidate:
         _assign(focus, "university", university_candidate.entity_id)
+        _assign(focus, "university_concept", _university_concept(university_candidate, indexes))
+        _set_source(focus, "university", "explicit")
         resolved["university"] = (university_candidate,)
     if category_candidate:
-        _assign(focus, "category", _category(category_candidate, indexes))
+        category_concept = _category(category_candidate, indexes)
+        _assign(focus, "category", category_concept)
+        _assign(focus, "course_concept", category_concept)
+        _set_source(focus, "course", "explicit")
         resolved["course"] = (category_candidate,)
     if specialization_candidate:
-        _assign(focus, "specialization", _label(specialization_candidate, indexes))
-        resolved["specialization"] = (specialization_candidate,)
+        specialization_concept = _label(specialization_candidate, indexes)
+        _assign(focus, "specialization", specialization_concept)
+        _assign(focus, "specialization_concept", specialization_concept)
+        _set_source(focus, "specialization", "explicit")
+        resolved["specialization"] = (
+            specialization_high
+            if one_concept_family
+            else (specialization_candidate,)
+        )
     if single:
         _assign(focus, "entity_id", None)
 
@@ -448,7 +538,19 @@ def update_focus(
     # A concrete specialization can be unique without a category field (publisher-native
     # pages may have linked_course=null). Validate it against any university evidence before
     # setting the entity id so duplicate specialization labels are never first-picked.
-    if reverse and specialization_candidate and current_specialization and not current_category:
+    if (
+        is_discovery
+        and specialization_candidate
+        and current_specialization
+        and not current_university
+    ):
+        # Discovery deliberately retains the entire provider family. Concrete
+        # records are resolved by the handler, never selected here.
+        joined = tuple(
+            dict.fromkeys(candidate.entity_id for candidate in specialization_high)
+        )
+        _assign(focus, "entity_id", None)
+    elif reverse and specialization_candidate and current_specialization and not current_category:
         compatible = True
         if current_university:
             university_pool: set[str] = set()
@@ -462,7 +564,7 @@ def update_focus(
             _assign(focus, "entity_id", specialization_candidate.entity_id)
             joined = (specialization_candidate.entity_id,)
         elif explicit_specialization and not explicit_university:
-            _assign(focus, "university", None)
+            _clear_slot(focus, "university")
             _assign(focus, "entity_id", specialization_candidate.entity_id)
             joined = (specialization_candidate.entity_id,)
     # University-only focus is already a unique catalog record.
@@ -508,8 +610,8 @@ def update_focus(
         elif explicit_specialization and not explicit_university and not explicit_category:
             # A specialization-only switch that is incompatible with inherited
             # context must not silently combine unrelated slots.
-            _assign(focus, "university", None)
-            _assign(focus, "category", None)
+            _clear_slot(focus, "university")
+            _clear_slot(focus, "course")
             if specialization_candidate:
                 _assign(focus, "entity_id", specialization_candidate.entity_id)
                 joined = (specialization_candidate.entity_id,)
@@ -529,6 +631,18 @@ def update_focus(
         comparison_specializations=comparison_specializations,
         advisory_candidate_ids=advisory_candidate_ids,
         joined_entity_ids=joined,
+        explicit_slots=frozenset(
+            slot
+            for slot, present in (
+                ("university", explicit_university),
+                ("course", explicit_category),
+                ("specialization", explicit_specialization),
+            )
+            if present
+        ),
+        specialization_candidate_ids=tuple(
+            dict.fromkeys(candidate.entity_id for candidate in specialization_high)
+        ),
     )
 
 

@@ -27,7 +27,6 @@ GEMINI_DECISION_ACTIONS = {
     "clarify",
     "callback",
     "unrelated",
-    "unsupported_entity",
 }
 _DECISION_KEYS = {"action", "entity", "needs_clarification"}
 _GEMINI_DECISION_SCHEMA = {
@@ -41,16 +40,12 @@ _GEMINI_DECISION_SCHEMA = {
             "description": (
                 "Use callback when the user expresses confusion, asks for guidance or "
                 "help deciding, or wants human assistance. Use clarify only for catalog "
-                "entity or selection ambiguity. Use unsupported_entity when the message "
-                "names an entity absent from Resolved so far. Use discovery only to browse "
-                "catalog options without a missing named entity."
+                "selection ambiguity. Use discovery only to browse catalog options."
             ),
         },
         "entity": {
-            "type": ["string", "null"],
-            "description": (
-                "The missing named entity only for unsupported_entity; otherwise null."
-            ),
+            "type": "null",
+            "description": "Always null; catalog entity recognition is deterministic.",
         },
         "needs_clarification": {
             "type": "boolean",
@@ -115,9 +110,7 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
 
 def _parse_gemini_decision(raw: str) -> GeminiDecision:
     if _CATALOG_FIELD_RE.search(raw) or _CATALOG_VALUE_RE.search(raw):
-        raise LLMCatalogContentFailure(
-            "Gemini decision contained suspected catalog-like content"
-        )
+        raise LLMCatalogContentFailure("Gemini decision contained suspected catalog-like content")
     try:
         parsed = json.loads(raw, object_pairs_hook=_reject_duplicate_keys)
     except LLMParseFailure:
@@ -134,22 +127,12 @@ def _parse_gemini_decision(raw: str) -> GeminiDecision:
     needs_clarification = parsed["needs_clarification"]
     if not isinstance(action, str) or action not in GEMINI_DECISION_ACTIONS:
         raise LLMDecisionSchemaFailure("Gemini decision action was not allowed")
-    if entity is not None and (
-        not isinstance(entity, str) or not entity or entity != entity.strip()
-    ):
-        raise LLMDecisionSchemaFailure("Gemini decision entity must be a name or null")
+    if entity is not None:
+        raise LLMDecisionSchemaFailure("Gemini decision entity must be null")
     if type(needs_clarification) is not bool:
-        raise LLMDecisionSchemaFailure(
-            "Gemini decision needs_clarification must be boolean"
-        )
-    if action == "unsupported_entity" and entity is None:
-        raise LLMDecisionSchemaFailure("unsupported_entity requires an entity name")
-    if action != "unsupported_entity" and entity is not None:
-        raise LLMDecisionSchemaFailure("only unsupported_entity may include an entity")
+        raise LLMDecisionSchemaFailure("Gemini decision needs_clarification must be boolean")
     if needs_clarification is not (action == "clarify"):
-        raise LLMDecisionSchemaFailure(
-            "needs_clarification must agree with the clarify action"
-        )
+        raise LLMDecisionSchemaFailure("needs_clarification must agree with the clarify action")
     return GeminiDecision(action, entity, needs_clarification)
 
 
@@ -281,17 +264,15 @@ class LLMClient:
         breaker = self._breakers["gemini"]
         breaker.before_call()
         timeout_ms = int(getattr(self.settings, "gemini_intent_timeout_ms", 1400))
-        model = str(
-            getattr(self.settings, "gemini_model", "gemini-3.1-flash-lite")
-        )
+        model = str(getattr(self.settings, "gemini_model", "gemini-3.1-flash-lite"))
         prompt = (
             "Given this message and what was found in the catalog, decide the action.\n\n"
             f"Message: {json.dumps(message, ensure_ascii=False)}\n"
             f"Resolved so far: {mention_summary}\n\n"
             "Return ONLY this JSON, no other text:\n"
             '{"action": "<one of: recommend, discovery, clarify, callback, '
-            'unsupported_entity, unrelated>",\n'
-            ' "entity": "<name mentioned but not found in catalog, or null>",\n'
+            'unrelated>",\n'
+            ' "entity": null,\n'
             ' "needs_clarification": <true|false>}'
         )
         try:
@@ -383,9 +364,7 @@ class LLMClient:
         async def open_stream():
             if provider == "openai":
                 return await self._openai_client().chat.completions.create(
-                    model=getattr(
-                        self.settings, "openai_synthesis_model", "gpt-4.1-mini"
-                    ),
+                    model=getattr(self.settings, "openai_synthesis_model", "gpt-4.1-mini"),
                     temperature=0.2,
                     max_tokens=220,
                     stream=True,
@@ -395,9 +374,7 @@ class LLMClient:
                     ],
                 )
             return await self._groq_client().chat.completions.create(
-                model=getattr(
-                    self.settings, "groq_synthesis_model", "llama-3.3-70b-versatile"
-                ),
+                model=getattr(self.settings, "groq_synthesis_model", "llama-3.3-70b-versatile"),
                 temperature=0.2,
                 max_tokens=220,
                 stream=True,

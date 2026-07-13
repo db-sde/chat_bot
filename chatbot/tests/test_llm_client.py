@@ -136,8 +136,8 @@ async def test_tiny_decision_uses_exact_prompt_and_generation_bounds() -> None:
         "Resolved so far: category=none, university=none, specialization=none\n\n"
         "Return ONLY this JSON, no other text:\n"
         '{"action": "<one of: recommend, discovery, clarify, callback, '
-        'unsupported_entity, unrelated>",\n'
-        ' "entity": "<name mentioned but not found in catalog, or null>",\n'
+        'unrelated>",\n'
+        ' "entity": null,\n'
         ' "needs_clarification": <true|false>}'
     )
     assert request["config"].temperature == 0
@@ -150,9 +150,9 @@ async def test_tiny_decision_uses_exact_prompt_and_generation_bounds() -> None:
         "discovery",
         "clarify",
         "callback",
-        "unsupported_entity",
         "unrelated",
     }
+    assert schema["properties"]["entity"]["type"] == "null"
 
 
 @pytest.mark.asyncio
@@ -163,7 +163,6 @@ async def test_tiny_decision_uses_exact_prompt_and_generation_bounds() -> None:
         ("discovery", None, False),
         ("clarify", None, True),
         ("callback", None, False),
-        ("unsupported_entity", "Harward", False),
         ("unrelated", None, False),
     ],
 )
@@ -207,12 +206,12 @@ async def test_all_allowed_gemini_decisions_are_accepted(
         "[]",
         '{"action":"callback","entity":null}',
         '{"action":"callback","entity":null,"needs_clarification":false,"note":null}',
-        '{"action":"callback","action":"clarify","entity":null,'
-        '"needs_clarification":false}',
+        '{"action":"callback","action":"clarify","entity":null,"needs_clarification":false}',
         '{"action":"get_facts","entity":null,"needs_clarification":false}',
         '{"action":"unsupported_entity","entity":42,"needs_clarification":false}',
         '{"action":"clarify","entity":null,"needs_clarification":"true"}',
         '{"action":"unsupported_entity","entity":null,"needs_clarification":false}',
+        '{"action":"unsupported_entity","entity":"Harward","needs_clarification":false}',
         '{"action":"callback","entity":"Harward","needs_clarification":false}',
         '{"action":"callback","entity":null,"needs_clarification":true}',
     ],
@@ -233,14 +232,10 @@ async def test_invalid_tiny_decision_is_a_parse_failure(text: str) -> None:
 @pytest.mark.parametrize(
     "text",
     [
-        '{"action":"unsupported_entity","entity":"INR 1,96,000",'
-        '"needs_clarification":false}',
-        '{"action":"unsupported_entity","entity":"NAAC A++",'
-        '"needs_clarification":false}',
-        '{"action":"unsupported_entity","entity":"2 years",'
-        '"needs_clarification":false}',
-        '{"action":"callback","entity":null,"needs_clarification":false,'
-        '"fee":"INR 1,96,000"}',
+        '{"action":"callback","entity":"INR 1,96,000","needs_clarification":false}',
+        '{"action":"callback","entity":"NAAC A++","needs_clarification":false}',
+        '{"action":"callback","entity":"2 years","needs_clarification":false}',
+        '{"action":"callback","entity":null,"needs_clarification":false,"fee":"INR 1,96,000"}',
     ],
 )
 async def test_catalog_like_decision_content_is_rejected_distinctly(text: str) -> None:

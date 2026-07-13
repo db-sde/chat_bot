@@ -14,6 +14,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict
 
 from config import Settings, get_settings
+from taxonomy.index_builder import normalize_category
 
 from .models import CatalogEntity, Course, Specialization, University, parse_entity
 
@@ -21,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 PageType = Literal["university", "course", "specialization"]
 SAMPLE_CATALOG_PATH = Path(__file__).with_name("catalog.sample.json")
-_CATEGORY_PATTERN = re.compile(r"\b(MBA|MCA|BBA|BCA|MA|MCOM|BCOM|MSC|BSC)\b", re.I)
 
 
 class EntityMetadata(BaseModel):
@@ -51,9 +51,8 @@ def _slugify(value: str) -> str:
 
 def _extract_category(program_name: str | None, explicit: str | None) -> str | None:
     if explicit and explicit.strip():
-        return explicit.strip().lower()
-    match = _CATEGORY_PATTERN.search(program_name or "")
-    return match.group(1).lower() if match else None
+        return normalize_category(explicit) or None
+    return normalize_category(program_name) or None
 
 
 def _records_from_payload(payload: Any) -> list[Mapping[str, Any]]:
@@ -292,7 +291,10 @@ class CatalogStore:
             # linked course. Their document title commonly retains the program family
             # (for example "Online MBA Banking Specialization Page"), which is safe
             # deterministic metadata for taxonomy joining.
-            category = _extract_category(entity.meta.document_title or spec_name, entity.category)
+            # A specialization name is not itself a course category. Derive a
+            # missing category only from publisher document context (or an
+            # explicit field), never from labels such as "Banking & Insurance".
+            category = _extract_category(entity.meta.document_title, entity.category)
             specialization_name = spec_name
         else:  # pragma: no cover - the discriminated union makes this unreachable
             raise TypeError(f"Unsupported catalog entity: {type(entity)!r}")

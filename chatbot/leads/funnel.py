@@ -9,6 +9,7 @@ from typing import Any
 
 from leads.crm_schema import CRMLeadEvent
 from leads.webhook import CRMWebhook
+from response.cta import lead_capture_cta
 from schemas import CTA, ResponsePayload
 
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
@@ -21,10 +22,12 @@ LEAD_DEFERRAL_RE = re.compile(
     r"^\s*(?:skip|not\s+now|maybe\s+later|later|no\s+thanks?|prefer\s+not\s+to)\s*[.!]?\s*$",
     re.IGNORECASE,
 )
+LEAD_CHAT_ESCAPE_RE = re.compile(
+    r"^\s*(?:browse|explore|continue|keep\s+exploring)(?:\s+(?:universit(?:y|ies)|courses?|programs?|speciali[sz]ations?))?\s*[.!]?\s*$",
+    re.IGNORECASE,
+)
 QUESTION_WORDS = {
     "about",
-    "amity",
-    "analytics",
     "browse",
     "compare",
     "duration",
@@ -37,21 +40,14 @@ QUESTION_WORDS = {
     "how",
     "fee",
     "fees",
-    "finance",
-    "ignou",
-    "jain",
     "know",
-    "lpu",
-    "manipal",
-    "mba",
-    "mca",
-    "nmims",
     "course",
     "show",
     "tell",
     "university",
     "program",
     "provide",
+    "specialization",
 }
 FIELD_ASKS = {
     "name": "What name should our counsellor use?",
@@ -174,9 +170,11 @@ class LeadFunnel:
 
     @staticmethod
     def is_deferral(message: str) -> bool:
-        """Return whether the user explicitly deferred an outstanding lead question."""
+        """Return whether a pending lead ask must yield to normal product chat."""
 
-        return bool(LEAD_DEFERRAL_RE.fullmatch(message))
+        return bool(
+            LEAD_DEFERRAL_RE.fullmatch(message) or LEAD_CHAT_ESCAPE_RE.fullmatch(message)
+        )
 
     def commit_pending_answer(
         self,
@@ -204,7 +202,7 @@ class LeadFunnel:
         return ResponsePayload(
             text=INVALID_FIELD_ASKS[field],
             suggested_chips=[],
-            cta=CTA(label="Talk to a counsellor", action="lead_capture"),
+            cta=CTA(**lead_capture_cta(label="Talk to a counsellor", action="lead_capture")),
         )
 
     def captured_reply_response(
@@ -313,7 +311,7 @@ class LeadFunnel:
         return ResponsePayload(
             text=text,
             suggested_chips=["Keep exploring programs"],
-            cta=CTA(label="Talk to a counsellor", action="lead_capture"),
+            cta=CTA(**lead_capture_cta(label="Talk to a counsellor", action="lead_capture")),
         )
 
     def lead_reply_response(self, state: Any, message: str) -> ResponsePayload:
@@ -327,7 +325,7 @@ class LeadFunnel:
             text = "Thanks — I have your details. A DegreeBaba counsellor can contact you shortly."
         return ResponsePayload(
             text=text,
-            suggested_chips=["Explore MBA", "Compare programs"],
+            suggested_chips=["Browse programs", "Compare programs"],
             cta=CTA(label="Continue exploring", action="continue_chat"),
         )
 
@@ -353,7 +351,11 @@ class LeadFunnel:
                     f"{FIELD_ASKS[field].lower()}"
                 ),
                 "cta": payload.cta
-                or CTA(label="Talk to a counsellor", action="lead_capture"),
+                or CTA(
+                    **lead_capture_cta(
+                        label="Talk to a counsellor", action="lead_capture"
+                    )
+                ),
             }
         )
 

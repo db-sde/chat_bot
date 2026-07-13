@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 from rapidfuzz import fuzz
+from rapidfuzz.distance import DamerauLevenshtein
 
 from .alias_tables import normalize_text
 
@@ -42,6 +43,7 @@ class FuzzyHit:
     term: str
     entity_ids: frozenset[str]
     score: float
+    edit_distance: int | None = None
 
 
 def pragmatic_score(query: str, candidate: str) -> float:
@@ -97,9 +99,11 @@ def build_fuzzy_buckets(
         if not ids:
             continue
 
-        # Register only bands that a one-character edit can reach.  Search still
-        # reads exactly one bucket for the query.
-        possible_lengths = {max(1, len(compact) - 1), len(compact), len(compact) + 1}
+        # Search still reads exactly one bucket for the query. Long terms also
+        # register the two-character length bands used by the guarded adaptive
+        # matcher below; this remains bounded at five bucket entries per term.
+        radius = 2 if len(compact) >= 6 else 1
+        possible_lengths = {max(1, len(compact) + offset) for offset in range(-radius, radius + 1)}
         for possible_length in possible_lengths:
             buckets[bucket_key(term, assumed_length=possible_length)][term].update(ids)
 
@@ -120,23 +124,66 @@ def search_bucket(
     *,
     minimum_score: float = 80.0,
 ) -> tuple[FuzzyHit, ...]:
-    """Return all qualifying hits in the query's single bucket, best first."""
+    """Return qualifying hits from one bounded bucket, best first.
+
+    ``minimum_score`` remains the ordinary acceptance threshold.  A separate,
+    deliberately narrow adaptive path admits a two-edit typo only when both
+    values are long single tokens with stable first/last characters and the
+    best term has a clear score margin.  This covers mistakes such as
+    ``monypal`` -> ``manipal`` without making a global 70-ish score acceptable.
+    """
 
     normalized = normalize_text(query)
     if not normalized:
         return ()
-    hits = [
-        FuzzyHit(
-            term=item.term, entity_ids=item.entity_ids, score=pragmatic_score(normalized, item.term)
+    query_key = normalized.replace(" ", "")
+    # Exact acronym lookup already handles legitimate one-to-three-character
+    # catalog codes. Fuzzy matching such short prose tokens is unsafe (``BBA``
+    # must not become the generated ``BA`` acronym for Business Analytics).
+    if len(query_key) <= 3:
+        return ()
+    hits: list[FuzzyHit] = []
+    for item in buckets.get(bucket_key(normalized), ()):
+        # A single query token must not fuzzy-match a multiword alias. Its
+        # catalog's useful component tokens are indexed independently; allowing
+        # this comparison turns generic words such as ``online`` into MBA/MCA.
+        if " " not in normalized and " " in item.term:
+            continue
+        candidate_key = normalize_text(item.term).replace(" ", "")
+        hits.append(
+            FuzzyHit(
+                term=item.term,
+                entity_ids=item.entity_ids,
+                score=pragmatic_score(normalized, item.term),
+                edit_distance=DamerauLevenshtein.distance(query_key, candidate_key),
+            )
         )
-        for item in buckets.get(bucket_key(normalized), ())
-    ]
-    return tuple(
-        sorted(
-            (hit for hit in hits if hit.score >= minimum_score),
-            key=lambda hit: (-hit.score, hit.term),
-        )
-    )
+    ranked = sorted(hits, key=lambda hit: (-hit.score, hit.term))
+    accepted = [hit for hit in ranked if hit.score >= minimum_score]
+    if accepted:
+        return tuple(accepted)
+
+    # The adaptive path is MEDIUM evidence only.  Restrict it to long,
+    # single-token terms, two edits, stable endpoints, and a decisive margin
+    # over the next indexed term. Provider ids sharing the same winning term do
+    # not count as competing meanings; that ambiguity is retained downstream.
+    if " " in normalized or len(query_key) < 6 or not ranked:
+        return ()
+    best = ranked[0]
+    best_key = normalize_text(best.term).replace(" ", "")
+    if (
+        " " in best.term
+        or len(best_key) < 6
+        or best.edit_distance is None
+        or best.edit_distance > 2
+        or query_key[:1] != best_key[:1]
+        or query_key[-1:] != best_key[-1:]
+    ):
+        return ()
+    runner_up_score = ranked[1].score if len(ranked) > 1 else 0.0
+    if best.score - runner_up_score < 12.0:
+        return ()
+    return (best,)
 
 
 __all__ = [

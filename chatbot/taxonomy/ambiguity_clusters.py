@@ -9,7 +9,7 @@ from types import MappingProxyType
 from .alias_tables import normalize_text
 
 STOP_LEAD_TOKENS = frozenset({"online", "the", "of", "and", "university", "institute", "college"})
-KNOWN_BRAND_FAMILIES = frozenset({"amity", "jain", "manipal", "nmims", "symbiosis"})
+MIN_SHARED_TOKEN_LENGTH = 4
 
 
 def build_ambiguity_clusters(
@@ -27,7 +27,7 @@ def build_ambiguity_clusters(
                 clusters[slot_type][normalize_text(acronym)].update(entity_ids)
 
     leading: dict[tuple[str, str], set[str]] = defaultdict(set)
-    brand_families: dict[tuple[str, str], set[str]] = defaultdict(set)
+    token_families: dict[tuple[str, str], set[str]] = defaultdict(set)
     for entity_id, canonical_name in entity_names.items():
         slot_type = entity_slot_types.get(entity_id)
         tokens = normalize_text(canonical_name).split()
@@ -35,12 +35,16 @@ def build_ambiguity_clusters(
         if slot_type and first:
             leading[(slot_type, first)].add(entity_id)
         if slot_type:
-            for brand in set(tokens) & KNOWN_BRAND_FAMILIES:
-                brand_families[(slot_type, brand)].add(entity_id)
+            for token in set(tokens) - STOP_LEAD_TOKENS:
+                if len(token) >= MIN_SHARED_TOKEN_LENGTH:
+                    token_families[(slot_type, token)].add(entity_id)
     for (slot_type, first), entity_ids in leading.items():
         if len(entity_ids) > 1:
             clusters[slot_type][first].update(entity_ids)
-    for (slot_type, brand), entity_ids in brand_families.items():
+    # Shared catalog tokens identify provider/brand families without maintaining
+    # a list of known university names. Generic envelope words are excluded
+    # above, and only actual collisions become ambiguity clusters.
+    for (slot_type, brand), entity_ids in token_families.items():
         if len(entity_ids) > 1:
             clusters[slot_type][brand].update(entity_ids)
 

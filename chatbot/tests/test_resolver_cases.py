@@ -146,10 +146,10 @@ async def test_case_07_nmims_then_mba_resets_university(service) -> None:
 @pytest.mark.asyncio
 async def test_case_08_mba_marketing_lists_all_provider_candidates(service) -> None:
     result = await turn(service, "tell me about mba marketing", "case-08")
-    pending = result.state.pending_clarification
-    assert result.route == "clarification"
-    assert pending is not None and len(pending.candidates) >= 4
-    assert "Marketing at" in result.payload.text
+    assert result.route == "list_providers"
+    assert result.state.pending_clarification is None
+    assert result.state.focus.specialization == "Marketing"
+    assert "Marketing is offered by 5 published universities" in result.payload.text
 
 
 @pytest.mark.asyncio
@@ -264,11 +264,12 @@ def test_case_24_jain_token_resolves_online_university(service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_case_25_marketing_mba_keeps_provider_ambiguity(service) -> None:
+async def test_case_25_marketing_mba_keeps_provider_family_for_discovery(service) -> None:
     result = await turn(service, "marketing mba", "case-25")
-    assert result.route == "clarification"
-    assert result.state.pending_clarification is not None
-    assert len(result.state.pending_clarification.candidates) == 5
+    assert result.route == "list_providers"
+    assert result.state.pending_clarification is None
+    assert result.state.focus.specialization == "Marketing"
+    assert "Marketing is offered by 5 published universities" in result.payload.text
 
 
 @pytest.mark.asyncio
@@ -282,12 +283,7 @@ async def test_case_26_all_three_slots_resolve_independently(service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_pending_clarification_resolves_alias_and_ordinal_directly(service) -> None:
-    await turn(service, "mba marketing", "pending-alias")
-    alias = await turn(service, "nmims", "pending-alias")
-    assert alias.state.pending_clarification is None
-    assert alias.state.focus.entity_id == "spec-nmims-mba-marketing"
-
+async def test_pending_clarification_resolves_ordinal_directly(service) -> None:
     first = await turn(service, "manipal", "pending-ordinal")
     offered_first = first.state.pending_clarification.candidates[0]
     ordinal = await turn(service, "the first one", "pending-ordinal")
