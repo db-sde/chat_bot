@@ -692,6 +692,291 @@
             .chat-area-wrapper { padding: 12px; }
             .widget-mockup { max-height: none; height: 100%; border-radius: 0; border: none; }
         }
+
+        /* Message Readability & Typography (STEP 7) */
+        .message.bot {
+            font-family: var(--font-sans);
+            font-size: 14px;
+            line-height: 1.6;
+            letter-spacing: -0.005em;
+        }
+
+        .msg-para {
+            margin-bottom: 12px;
+        }
+        .msg-para:last-child {
+            margin-bottom: 0;
+        }
+
+        /* Section Headings Styling (STEP 3) */
+        .msg-heading {
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--primary-color);
+            margin-top: 16px;
+            margin-bottom: 8px;
+            letter-spacing: -0.01em;
+        }
+        .msg-para + .msg-heading {
+            margin-top: 16px;
+        }
+
+        /* Lists formatting (STEP 2) */
+        .msg-list {
+            margin-left: 18px;
+            margin-bottom: 12px;
+            padding-left: 0;
+        }
+        .msg-list li {
+            margin-bottom: 6px;
+            line-height: 1.5;
+        }
+        .msg-list li::marker {
+            color: var(--primary-color);
+        }
+
+        /* Program Card UI (STEP 4) */
+        .program-card {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            margin-top: 12px;
+            margin-bottom: 12px;
+            box-shadow: 0 4px 12px rgba(19, 93, 102, 0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            animation: msgIn 0.3s ease;
+        }
+        .program-card-header {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+        .program-card-title {
+            font-family: var(--font-display);
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+        .program-card-body {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 13px;
+            color: var(--text-main);
+        }
+        .program-card-row {
+            display: flex;
+            justify-content: space-between;
+        }
+        .program-card-label {
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .program-card-value {
+            font-weight: 500;
+            color: var(--text-main);
+        }
+        .program-card-actions {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+        .card-action-btn {
+            flex: 1;
+            min-width: 80px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--primary-color);
+            padding: 6px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .card-action-btn:hover {
+            background: var(--primary-color);
+            color: #ffffff;
+            border-color: var(--primary-color);
+        }
+
+        /* Suggested Chips Pill Style (STEP 5) */
+        .chips-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+            margin-bottom: 4px;
+        }
+        .chip {
+            background: #ffffff;
+            border: 1.5px solid var(--border-color);
+            color: var(--primary-color);
+            padding: 8px 16px;
+            border-radius: 24px;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: inline-flex;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.01);
+        }
+        .chip:hover {
+            background: var(--primary-color);
+            color: #ffffff;
+            border-color: var(--primary-color);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(19, 93, 102, 0.15);
+        }
+        .chip:active {
+            transform: translateY(0);
+        }
+
+        /* Welcome Card Dashboard (STEP 6) */
+        .welcome-card {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 10px 30px rgba(19, 93, 102, 0.08);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            animation: msgIn 0.4s ease;
+        }
+        .welcome-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 800;
+            box-shadow: 0 4px 12px rgba(19, 93, 102, 0.3);
+        }
+        .welcome-title {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 800;
+            color: var(--text-main);
+            margin-bottom: 4px;
+        }
+        .welcome-desc {
+            font-size: 13.5px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        .welcome-capabilities {
+            width: 100%;
+            text-align: left;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin: 4px 0;
+        }
+        .capability-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-main);
+            font-weight: 500;
+        }
+        .capability-item svg {
+            color: var(--primary-color);
+            flex-shrink: 0;
+        }
+        .welcome-quickstart {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 8px;
+        }
+        .quickstart-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            text-align: left;
+        }
+        .quickstart-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .quickstart-btn {
+            background: #ffffff;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            padding: 10px 14px;
+            border-radius: var(--radius-md);
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+        }
+        .quickstart-btn:hover {
+            border-color: var(--primary-color);
+            background: var(--bg-secondary);
+            color: var(--primary-color);
+            transform: translateY(-1px);
+        }
+        .quickstart-btn.highlight {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+            box-shadow: 0 4px 10px rgba(19, 93, 102, 0.2);
+        }
+        .quickstart-btn.highlight:hover {
+            background: var(--primary-hover);
+            color: white;
+        }
+
+        /* Typing Indicator Layout (STEP 9) */
+        .typing-indicator {
+            align-items: center;
+            gap: 8px;
+        }
+        .typing-text {
+            font-size: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        .typing-dots {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .typing-dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-dots span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dots span:nth-child(2) { animation-delay: -0.16s; }
+        .typing-dots span:nth-child(3) { animation-delay: -0.08s; }
     </style>
 </head>
 <body>
@@ -710,7 +995,12 @@
 
         <div class="server-input-group">
             <label for="serverUrl">Endpoint:</label>
-            <input type="text" id="serverUrl" value="http://127.0.0.1:8001" placeholder="http://127.0.0.1:8001">
+            <input type="text" id="serverUrl" list="endpoints" value="http://127.0.0.1:8001" placeholder="http://127.0.0.1:8001">
+            <datalist id="endpoints">
+                <option value="http://127.0.0.1:8001">Local Proxy (8001)</option>
+                <option value="http://127.0.0.1:8000">Local Server (8000)</option>
+                <option value="https://chat-bot-id1n.onrender.com">Production Backend (Render)</option>
+            </datalist>
         </div>
 
         <div class="header-actions">
@@ -790,7 +1080,10 @@
                     </div>
                     
                     <div class="typing-indicator" id="typingIndicator">
-                        <span></span><span></span><span></span>
+                        <div class="typing-text">DegreeBaba is typing</div>
+                        <div class="typing-dots">
+                            <span></span><span></span><span></span>
+                        </div>
                     </div>
                 </div>
 
@@ -827,6 +1120,9 @@
         let sessionId = sessionStorage.getItem('degreebaba_session_id') || '';
 
         function getBaseUrl() {
+            if (window.location.origin && window.location.origin.startsWith('http')) {
+                return window.location.origin;
+            }
             return serverUrlInput.value.replace(/\/$/, '');
         }
 
@@ -854,6 +1150,194 @@
             return div.innerHTML;
         }
 
+        function formatMessageText(text) {
+            if (!text) return "";
+            
+            // Normalize newlines
+            let normalized = text.replace(/\r\n/g, "\n").trim();
+            let lines = normalized.split("\n");
+            
+            // Check if there is a "Published Details:" or similar section that indicates structured program data
+            let cardData = null;
+            let heading = "";
+            
+            // Find the title (usually the first line)
+            if (lines.length > 0 && lines[0].trim()) {
+                heading = lines[0].trim();
+            }
+            
+            let details = {};
+            for (let line of lines) {
+                let clean = line.trim();
+                
+                // Remove bullets
+                if (clean.startsWith("•") || clean.startsWith("-") || clean.startsWith("*")) {
+                    clean = clean.substring(1).trim();
+                }
+                
+                let colonIdx = clean.indexOf(":");
+                if (colonIdx !== -1) {
+                    let key = clean.substring(0, colonIdx).trim().toLowerCase();
+                    let val = clean.substring(colonIdx + 1).trim();
+                    if (["duration", "fee", "total_fee", "mode", "eligibility", "starting fee"].includes(key)) {
+                        // Map to display keys
+                        let displayKey = key.charAt(0).toUpperCase() + key.slice(1);
+                        if (key === "total_fee") displayKey = "Fee";
+                        details[displayKey] = val;
+                    }
+                }
+            }
+            
+            // If we have both Duration and Fee, construct cardData
+            if (details["Duration"] && (details["Fee"] || details["Starting fee"])) {
+                cardData = {
+                    title: heading,
+                    details: details
+                };
+            }
+            
+            // Build standard text HTML
+            let html = "";
+            let inList = false;
+            let listType = null;
+            
+            const knownHeadings = [
+                "explore online programs",
+                "fee range",
+                "eligibility",
+                "specializations",
+                "recommended programs",
+                "course categories",
+                "placement support",
+                "admission steps",
+                "why choose"
+            ];
+            
+            // If we are rendering a card, we can hide the raw "Published Details" lines so we don't duplicate them
+            let skipDetails = false;
+            
+            for (let i = 0; i < lines.length; i++) {
+                let line = lines[i].trim();
+                if (!line) {
+                    if (inList) {
+                        html += `</${listType}>`;
+                        inList = false;
+                        listType = null;
+                    }
+                    continue;
+                }
+                
+                // If we hit "Published Details:", start skipping until we hit another heading
+                let lowerLine = line.toLowerCase();
+                if (cardData && lowerLine.startsWith("published details")) {
+                    skipDetails = true;
+                    if (inList) {
+                        html += `</${listType}>`;
+                        inList = false;
+                        listType = null;
+                    }
+                    continue;
+                }
+                
+                // Check for other sections to stop skipping
+                let isNewHeading = line.endsWith(":") || 
+                                    knownHeadings.includes(lowerLine) ||
+                                    knownHeadings.some(h => lowerLine.includes(h) && line.length < 40);
+                                    
+                if (isNewHeading && !lowerLine.startsWith("published details")) {
+                    skipDetails = false;
+                }
+                
+                // If we are skipping the details list items, continue
+                if (skipDetails) {
+                    continue;
+                }
+                
+                let bulletMatch = line.match(/^([•\*\-\+])\s*(.*)/);
+                let numberMatch = line.match(/^(\d+)\.\s*(.*)/);
+                
+                if (bulletMatch) {
+                    let content = bulletMatch[2];
+                    if (!inList || listType !== 'ul') {
+                        if (inList) html += `</${listType}>`;
+                        html += `<ul class="msg-list">`;
+                        inList = true;
+                        listType = 'ul';
+                    }
+                    html += `<li>${escapeHtml(content)}</li>`;
+                } else if (numberMatch) {
+                    let content = numberMatch[2];
+                    if (!inList || listType !== 'ol') {
+                        if (inList) html += `</${listType}>`;
+                        html += `<ol class="msg-list">`;
+                        inList = true;
+                        listType = 'ol';
+                    }
+                    html += `<li>${escapeHtml(content)}</li>`;
+                } else {
+                    if (inList) {
+                        html += `</${listType}>`;
+                        inList = false;
+                        listType = null;
+                    }
+                    
+                    if (isNewHeading) {
+                        let headingText = line.endsWith(":") ? line.slice(0, -1) : line;
+                        html += `<h4 class="msg-heading">${escapeHtml(headingText)}</h4>`;
+                    } else {
+                        html += `<p class="msg-para">${escapeHtml(line)}</p>`;
+                    }
+                }
+            }
+            
+            if (inList) {
+                html += `</${listType}>`;
+            }
+            
+            // Now append the Card UI if cardData was parsed successfully
+            if (cardData) {
+                let cardTitle = cardData.title;
+                // Strip description if title has it (e.g. "Lovely Professional University Online MBA is offered by...")
+                let cutoff = cardTitle.toLowerCase().indexOf("is offered by");
+                if (cutoff !== -1) {
+                    cardTitle = cardTitle.substring(0, cutoff).trim();
+                }
+                
+                let detailsHtml = "";
+                for (let [lbl, val] of Object.entries(cardData.details)) {
+                    let displayLabel = lbl;
+                    if (lbl === "Starting fee") displayLabel = "Starting Fee";
+                    
+                    detailsHtml += `
+                        <div class="program-card-row">
+                            <span class="program-card-label">${escapeHtml(displayLabel)}</span>
+                            <span class="program-card-value">${escapeHtml(val)}</span>
+                        </div>
+                    `;
+                }
+                
+                let escTitle = cardTitle.replace(/'/g, "\\'");
+                
+                html += `
+                    <div class="program-card">
+                        <div class="program-card-header">
+                            <div class="program-card-title">${escapeHtml(cardTitle)}</div>
+                        </div>
+                        <div class="program-card-body">
+                            ${detailsHtml}
+                        </div>
+                        <div class="program-card-actions">
+                            <button class="card-action-btn" onclick="sendQuick('${escTitle} Fees')">Fees</button>
+                            <button class="card-action-btn" onclick="sendQuick('${escTitle} Eligibility')">Eligibility</button>
+                            <button class="card-action-btn" onclick="sendQuick('Compare ${escTitle}')">Compare</button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            return html;
+        }
+
         function copyCorsCommand(btn) {
             const code = btn.previousElementSibling.textContent;
             navigator.clipboard.writeText(code);
@@ -865,7 +1349,12 @@
             const msg = document.createElement('div');
             msg.className = `message ${sender}`;
             
-            let contentHTML = `<div>${escapeHtml(text)}</div>`;
+            let contentHTML = '';
+            if (sender === 'user') {
+                contentHTML = `<div>${escapeHtml(text)}</div>`;
+            } else {
+                contentHTML = `<div>${formatMessageText(text)}</div>`;
+            }
             
             // Add suggested chips
             if (chips && chips.length > 0) {
@@ -900,6 +1389,44 @@
             return msg;
         }
 
+        function showWelcomeScreen() {
+            messagesEl.innerHTML = `
+                <div class="welcome-card">
+                    <div class="welcome-logo">DB</div>
+                    <div class="welcome-title">Welcome to DegreeBaba</div>
+                    <div class="welcome-desc">Your intelligent assistant for online education. Let's find your perfect online or distance program.</div>
+                    <div class="welcome-capabilities">
+                        <div class="capability-item">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                            <span>Course Duration & Mode</span>
+                        </div>
+                        <div class="capability-item">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                            <span>Published Fees & Plans</span>
+                        </div>
+                        <div class="capability-item">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            <span>UGC Approvals & Eligibility</span>
+                        </div>
+                        <div class="capability-item">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>
+                            <span>Compare Online Programs</span>
+                        </div>
+                    </div>
+                    <div class="welcome-quickstart">
+                        <div class="quickstart-title">Quick Start</div>
+                        <div class="quickstart-grid">
+                            <button class="quickstart-btn" onclick="sendQuick('Explore MBA')">Explore MBA</button>
+                            <button class="quickstart-btn" onclick="sendQuick('Explore MCA')">Explore MCA</button>
+                            <button class="quickstart-btn" onclick="sendQuick('Compare NMIMS and LPU')">Compare Universities</button>
+                            <button class="quickstart-btn highlight" onclick="sendQuick('Talk to a counsellor')">Talk to Counsellor</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            messagesWrapper.scrollTop = 0;
+        }
+
         function handleCta(action) {
             if (action === 'lead_capture' || action === 'start_lead_capture') {
                 sendQuick("Talk to a counsellor");
@@ -913,7 +1440,7 @@
             sessionStorage.removeItem('degreebaba_session_id');
             sessionId = '';
             log('req', 'System', 'Conversation context reset, session cleared.');
-            addMessage("👋 Welcome! Chat cleared. Start typing your query below.", "bot", "System");
+            showWelcomeScreen();
         }
 
         async function checkHealth(silent = false) {
@@ -1044,7 +1571,7 @@
                                         fullResponseText = '';
                                     }
                                     fullResponseText += parsed.token;
-                                    textContainer.textContent = fullResponseText;
+                                    textContainer.innerHTML = formatMessageText(fullResponseText);
                                     messagesWrapper.scrollTop = messagesWrapper.scrollHeight;
                                     
                                 } else if (eventType === 'response') {
@@ -1065,7 +1592,7 @@
                 log('res', 'POST /chat', `Complete! Text length: ${fullResponseText.length}`);
                 
                 // Replace message contents with the structured response including chips and CTA
-                let finalHTML = `<div>${escapeHtml(fullResponseText)}</div>`;
+                let finalHTML = `<div>${formatMessageText(fullResponseText)}</div>`;
                 
                 if (chips && chips.length > 0) {
                     finalHTML += `<div class="chips-container">`;
@@ -1120,7 +1647,11 @@
             }
         }
 
-        // Initialize health check
+        // Initialize health check & welcome dashboard
+        if (window.location.origin && window.location.origin.startsWith('http')) {
+            serverUrlInput.value = window.location.origin;
+        }
+        showWelcomeScreen();
         setTimeout(() => checkHealth(true), 500);
     </script>
 </body>

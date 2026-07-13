@@ -11,9 +11,10 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
+import os
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 import logging_setup
 from advisor.flow import advisor_can_consume, handle_advisor_turn
@@ -1011,6 +1012,16 @@ app = FastAPI(
     description="Catalog-grounded university and course assistant",
     lifespan=lifespan,
 )
+
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_index():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(current_dir, "index.html")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    return HTMLResponse(content="<h1>index.html not found</h1>", status_code=404)
 
 
 @app.post(

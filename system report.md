@@ -14,6 +14,7 @@ chatbot/
 ├── config.py
 ├── schemas.py
 ├── logging_setup.py
+├── index.html
 ├── data/
 │   ├── accessor.py
 │   ├── loader.py
