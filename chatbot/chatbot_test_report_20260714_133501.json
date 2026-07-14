@@ -1,0 +1,719 @@
+{
+  "generated_at": "2026-07-14T13:35:01.066118",
+  "base_url": "http://127.0.0.1:8000",
+  "single_turn_results": [
+    {
+      "suite": "CATEGORY",
+      "question": "Tell me about MBA",
+      "status": 200,
+      "latency_ms": 157,
+      "response": "MBA Programs\n\nMBA is available from 91 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Assam Down Town University\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Acharya Nagarjuna University\n• Arka Jain University\n• Andhra University\n• Bharathidasan University\n• Berhampur University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 74,000 to INR 2,22,000."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "MBA fees",
+      "status": 200,
+      "latency_ms": 151,
+      "response": "MBA Programs\n\nMBA is available from 91 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Assam Down Town University\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Acharya Nagarjuna University\n• Arka Jain University\n• Andhra University\n• Bharathidasan University\n• Berhampur University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 74,000 to INR 2,22,000."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "MBA eligibility",
+      "status": 200,
+      "latency_ms": 193,
+      "response": "MBA Eligibility\n\nEligibility varies by university. Check the final published program record before applying.\n\nPublished Requirements:\n• Assam Down Town University: Bachelor's degree in any discipline\n• Alagappa University: Bachelor's degree in any discipline\n• Amrita Vishwa Vidyapeetham: Bachelor's degree in any discipline\n• Acharya Nagarjuna University: Bachelor's degree in any discipline\n• Arka Jain University: Bachelor's degree in any discipline\n• Andhra University: Bachelor's degree in any discipline"
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "Which universities offer MBA?",
+      "status": 200,
+      "latency_ms": 117,
+      "response": "MBA Programs\n\nMBA is available from 91 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Assam Down Town University\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Acharya Nagarjuna University\n• Arka Jain University\n• Andhra University\n• Bharathidasan University\n• Berhampur University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 74,000 to INR 2,22,000."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "Tell me about MCA",
+      "status": 200,
+      "latency_ms": 100,
+      "response": "MCA Programs\n\nMCA is available from 22 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Amity University\n• Arka Jain University\n• Dr B R Ambedkar Open University\n• GITAM University\n• Jain University\n• Kalinga University\n• Krishna Kanta Handique State Open University\n• Kuvempu University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 64,000 to INR 1,86,000."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "MCA fees",
+      "status": 200,
+      "latency_ms": 105,
+      "response": "MCA Programs\n\nMCA is available from 22 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Amity University\n• Arka Jain University\n• Dr B R Ambedkar Open University\n• GITAM University\n• Jain University\n• Kalinga University\n• Krishna Kanta Handique State Open University\n• Kuvempu University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 64,000 to INR 1,86,000."
+    },
+    {
+      "suite": "CATEGORY",
+      "question": "MCA eligibility",
+      "status": 200,
+      "latency_ms": 102,
+      "response": "MCA Eligibility\n\nEligibility varies by university. Check the final published program record before applying.\n\nPublished Requirements:\n• Amity University: Graduation with Mathematics\n• Arka Jain University: Graduation with Mathematics\n• Dr B R Ambedkar Open University: Graduation with Mathematics\n• GITAM University: Graduation with Mathematics\n• Jain University: Graduation with Mathematics\n• Kalinga University: Graduation with Mathematics"
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about LPU",
+      "status": 200,
+      "latency_ms": 99,
+      "response": "Lovely Professional University Online\n\nLovely Professional University Online is offered by Lovely Professional University.\n\nOverview:\n• A UGC-entitled online learning platform offering career-focused degree programs at Lovely Professional University.\n\nPublished Details:\n• mode: Online\n• fee: INR 33,500 per semester\n\nApprovals & Accreditations:\n• NAAC grade A++\n• UGC Entitled\n\nPopular Specializations:\n• Finance Management\n• Healthcare Management"
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about NMIMS",
+      "status": 200,
+      "latency_ms": 183,
+      "response": "NMIMS Online\n\nNMIMS Online is offered by NMIMS.\n\nOverview:\n• A UGC-entitled online learning platform offering career-focused degree programs at NMIMS.\n\nPublished Details:\n• mode: Online\n• fee: INR 54,500 per semester\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC Entitled\n\nPopular Specializations:\n• Marketing\n• Business Analytics"
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about Amity",
+      "status": 200,
+      "latency_ms": 217,
+      "response": "Amity University Online\n\nAmity University Online is offered by Amity University.\n\nOverview:\n• Industry-aligned online degrees with placement support from Amity University.\n\nPublished Details:\n• mode: Online\n• fee: INR 53,500 per semester\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC-DEB Entitled"
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about Jain University",
+      "status": 200,
+      "latency_ms": 215,
+      "response": "Jain University Online\n\nJain University Online is offered by Jain University.\n\nOverview:\n• A UGC-entitled online learning platform offering career-focused degree programs at Jain University.\n\nPublished Details:\n• mode: Online\n• fee: INR 45,000 per semester\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC-DEB Entitled\n\nPopular Specializations:\n• Marketing"
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about IGNOU",
+      "status": 200,
+      "latency_ms": 140,
+      "response": "I couldn't find a match for \"Ignou\" in the published catalog. Could you check the spelling, or try a different university or course name?"
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about Manipal University Jaipur",
+      "status": 200,
+      "latency_ms": 167,
+      "response": "Manipal University Jaipur Online\n\nManipal University Jaipur Online is offered by Manipal University Jaipur.\n\nOverview:\n• A UGC-entitled online learning platform offering career-focused degree programs at Manipal University Jaipur.\n\nPublished Details:\n• mode: Online\n• fee: INR 37,000 per semester\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC-DEB Entitled\n\nPopular Specializations:\n• Business Analytics\n• Digital Marketing"
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about Sikkim Manipal University",
+      "status": 200,
+      "latency_ms": 1611,
+      "response": "Sikkim Manipal University Online\n\nSikkim Manipal University Online is offered by Sikkim Manipal University.\n\nOverview:\n• A UGC-entitled online learning platform offering career-focused degree programs at Sikkim Manipal University.\n\nPublished Details:\n• mode: Online\n• fee: INR 19,000 per semester\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC Entitled\n\nPopular Specializations:\n• Finance Management"
+    },
+    {
+      "suite": "UNIVERSITY",
+      "question": "Tell me about SMU",
+      "status": 200,
+      "latency_ms": 228,
+      "response": "Sikkim Manipal University Online\n\nSikkim Manipal University Online is offered by Sikkim Manipal University.\n\nOverview:\n• A UGC-entitled online learning platform offering career-focused degree programs at Sikkim Manipal University.\n\nPublished Details:\n• mode: Online\n• fee: INR 19,000 per semester\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC Entitled\n\nPopular Specializations:\n• Finance Management"
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What is the NAAC grade of NMIMS Online?",
+      "status": 200,
+      "latency_ms": 85,
+      "response": "NMIMS Online\n\nPublished accreditation details for NMIMS Online.\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC Entitled"
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "Is Amity Online UGC approved?",
+      "status": 200,
+      "latency_ms": 222,
+      "response": "Amity University Online\n\nPublished accreditation details for Amity University Online.\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC-DEB Entitled"
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What is the fee structure of LPU?",
+      "status": 200,
+      "latency_ms": 103,
+      "response": "The published starting fee for Lovely Professional University Online is INR 33,500 per semester."
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What programs does NMIMS offer?",
+      "status": 200,
+      "latency_ms": 207,
+      "response": "NMIMS Online\n\nPrograms currently listed for NMIMS Online.\n\nPublished Programs:\n• Online MBA (INR 2,16,000)\n• Online BBA (INR 1,66,000)"
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What is the starting fee at Jain University?",
+      "status": 200,
+      "latency_ms": 176,
+      "response": "The published starting fee for Jain University Online is INR 45,000 per semester."
+    },
+    {
+      "suite": "UNIVERSITY_FACTS",
+      "question": "What is the accreditation of IGNOU?",
+      "status": 200,
+      "latency_ms": 230,
+      "response": "I couldn't find a match for \"Ignou\" in the published catalog. Could you check the spelling, or try a different university or course name?"
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about LPU MBA",
+      "status": 200,
+      "latency_ms": 105,
+      "response": "Lovely Professional University Online MBA\n\nOnline MBA is offered by Lovely Professional University.\n\nOverview:\n• A 2 years online mba with practical, industry-aligned learning.\n\nPublished Details:\n• duration: 2 Years\n• mode: Online\n• fee: INR 1,34,000\n• starting fee: INR 33,500 per semester\n• eligibility: Bachelor's degree in any discipline\n\nApprovals & Accreditations:\n• NAAC grade A++\n• UGC Entitled\n\nPopular Specializations:\n• Finance Management\n• Healthcare Management"
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about NMIMS MBA",
+      "status": 200,
+      "latency_ms": 212,
+      "response": "NMIMS Online MBA\n\nOnline MBA is offered by NMIMS.\n\nOverview:\n• A 2 years online mba with practical, industry-aligned learning.\n\nPublished Details:\n• duration: 2 Years\n• mode: Online\n• fee: INR 2,16,000\n• starting fee: INR 54,500 per semester\n• eligibility: Bachelor's degree in any discipline\n\nApprovals & Accreditations:\n• UGC Entitled\n\nPopular Specializations:\n• Marketing\n• Business Analytics"
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about Amity MBA",
+      "status": 200,
+      "latency_ms": 93,
+      "response": "Amity University does not currently offer MBA in the published DegreeBaba catalog. Available providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about Jain MBA",
+      "status": 200,
+      "latency_ms": 102,
+      "response": "I found a few matches. Which one did you mean? 1. Online MBA at Arka Jain University; 2. Online MBA at Jain University"
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about LPU MCA",
+      "status": 200,
+      "latency_ms": 206,
+      "response": "Lovely Professional University does not currently offer MCA in the published DegreeBaba catalog. Available providers include: Amity University, Arka Jain University, Dr B R Ambedkar Open University, GITAM University, Jain University, Kalinga University, Krishna Kanta Handique State Open University, Kuvempu University, Mangalayatan University, Mangalmay Institute of Management, Medi-Caps University, MIT World Peace University, OM Sterling Global University, Parul University, Royal Global University, SASTRA Deemed University, Symbiosis Centre for Distance Learning, Swami Vivekanand Subharti University, Tamil Nadu Open University, Uttaranchal University, Vels University, Vivekananda Global University."
+    },
+    {
+      "suite": "COURSES",
+      "question": "Tell me about IGNOU MCA",
+      "status": 200,
+      "latency_ms": 101,
+      "response": "I couldn't find Ignou in the DegreeBaba catalog.\n\nAvailable MCA providers include: Amity University, Arka Jain University, Dr B R Ambedkar Open University, GITAM University, Jain University, Kalinga University, Krishna Kanta Handique State Open University, Kuvempu University, Mangalayatan University, Mangalmay Institute of Management, Medi-Caps University, MIT World Peace University, OM Sterling Global University, Parul University, Royal Global University, SASTRA Deemed University, Symbiosis Centre for Distance Learning, Swami Vivekanand Subharti University, Tamil Nadu Open University, Uttaranchal University, Vels University, Vivekananda Global University."
+    },
+    {
+      "suite": "COURSES",
+      "question": "What is the fee for LPU MBA?",
+      "status": 200,
+      "latency_ms": 149,
+      "response": "The published total fee for Online MBA is INR 1,34,000; the listed starting fee is INR 33,500 per semester."
+    },
+    {
+      "suite": "COURSES",
+      "question": "What is the eligibility for NMIMS MBA?",
+      "status": 200,
+      "latency_ms": 160,
+      "response": "For Online MBA, the published eligibility is: Bachelor's degree in any discipline."
+    },
+    {
+      "suite": "COURSES",
+      "question": "What is the duration of Amity MBA?",
+      "status": 200,
+      "latency_ms": 169,
+      "response": "Amity University does not currently offer MBA in the published DegreeBaba catalog. Available providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about MBA Marketing",
+      "status": 200,
+      "latency_ms": 75,
+      "response": "Marketing Programs\n\nMarketing is offered by 13 published universities.\n\nPublished Universities:\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Berhampur University\n• Centurion University\n• Christ University\n• Dr C V Raman University\n• Jain University\n• KIIT School of\n• NMIMS\n• Sharda University\n• Shobhit University\n• Suresh Gyan Vihar University\n• University of Mysore"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about Marketing specialization",
+      "status": 200,
+      "latency_ms": 164,
+      "response": "Marketing Programs\n\nMarketing is offered by 13 published universities.\n\nPublished Universities:\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Berhampur University\n• Centurion University\n• Christ University\n• Dr C V Raman University\n• Jain University\n• KIIT School of\n• NMIMS\n• Sharda University\n• Shobhit University\n• Suresh Gyan Vihar University\n• University of Mysore"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about LPU MBA Marketing",
+      "status": 200,
+      "latency_ms": 207,
+      "response": "Lovely Professional University does not currently offer Marketing in the published DegreeBaba catalog. Available providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about NMIMS MBA Marketing",
+      "status": 200,
+      "latency_ms": 223,
+      "response": "NMIMS MBA Marketing\n\nMarketing is offered by NMIMS.\n\nPublished Details:\n• duration: 2 Years\n• mode: Online\n• fee: INR 2,16,000\n\nPopular Specializations:\n• Information Technology\n• Business Analytics\n\nCareer Outcomes:\n• Marketing Manager (INR 8.0 LPA)"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about Jain MBA Finance",
+      "status": 200,
+      "latency_ms": 151,
+      "response": "Jain University does not currently offer Finance Management in the published DegreeBaba catalog. Available providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about NMIMS MBA Analytics",
+      "status": 200,
+      "latency_ms": 219,
+      "response": "NMIMS MBA Business Analytics\n\nBusiness Analytics is offered by NMIMS.\n\nPublished Details:\n• duration: 2 Years\n• mode: Online\n• fee: INR 2,16,000\n• eligibility: Bachelor's degree in any discipline\n\nPopular Specializations:\n• Marketing"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Tell me about HR specialization",
+      "status": 200,
+      "latency_ms": 171,
+      "response": "Human Resource Management Programs\n\nHuman Resource Management is offered by 4 published universities.\n\nPublished Universities:\n• Alagappa University\n• ITM University\n• Mats University\n• Ravenshaw University"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Which university offers Marketing specialization?",
+      "status": 200,
+      "latency_ms": 128,
+      "response": "Marketing Programs\n\nMarketing is offered by 13 published universities.\n\nPublished Universities:\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Berhampur University\n• Centurion University\n• Christ University\n• Dr C V Raman University\n• Jain University\n• KIIT School of\n• NMIMS\n• Sharda University\n• Shobhit University\n• Suresh Gyan Vihar University\n• University of Mysore"
+    },
+    {
+      "suite": "SPECIALIZATIONS",
+      "question": "Which university offers Finance specialization?",
+      "status": 200,
+      "latency_ms": 126,
+      "response": "Finance Management Programs\n\nFinance Management is offered by 10 published universities.\n\nPublished Universities:\n• Arka Jain University\n• Berhampur University\n• Bharathiar University\n• KL University\n• Lovely Professional University\n• Netaji Subhas Open University\n• Periyar University\n• Sikkim Manipal University\n• Swami Vivekanand Subharti University\n• The Assam Kaziranga University"
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare LPU and NMIMS",
+      "status": 200,
+      "latency_ms": 207,
+      "response": "University Comparison\n\nFor a like-for-like decision, compare the same program at each university.\n\nPublished Details:\n• Lovely Professional University Online: NAAC A++; UGC Entitled; published starting fee INR 33,500 per semester; 2 listed programs.\n• NMIMS Online: NAAC A+; UGC Entitled; published starting fee INR 54,500 per semester; 2 listed programs."
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare MBA fees of LPU and NMIMS",
+      "status": 200,
+      "latency_ms": 205,
+      "response": "MBA Comparison\n\nThis comparison uses the current catalog. Fee schedules can differ, so confirm the final program record before applying.\n\nPublished Details:\n• Lovely Professional University Online — Online MBA: published total fee INR 1,34,000.\n• NMIMS Online — Online MBA: published total fee INR 2,16,000."
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare LPU MBA and NMIMS MBA",
+      "status": 200,
+      "latency_ms": 103,
+      "response": "MBA Comparison\n\nThis comparison uses the current catalog. Fee schedules can differ, so confirm the final program record before applying.\n\nPublished Details:\n• Lovely Professional University Online — Online MBA: published total fee INR 1,34,000; duration 2 Years; mode Online.\n• NMIMS Online — Online MBA: published total fee INR 2,16,000; duration 2 Years; mode Online."
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare Amity MBA and Jain MBA",
+      "status": 200,
+      "latency_ms": 183,
+      "response": "University Comparison\n\nFor a like-for-like decision, compare the same program at each university.\n\nPublished Details:\n• Amity University Online: NAAC A+; UGC-DEB Entitled; published starting fee INR 53,500 per semester; 3 listed programs.\n• Jain University Online: NAAC A+; UGC-DEB Entitled; published starting fee INR 45,000 per semester; 3 listed programs."
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare MBA and MCA",
+      "status": 200,
+      "latency_ms": 224,
+      "response": "Course Category Comparison\n\nFees can use different schedules, so check the final program record before applying.\n\nPublished Details:\n• MBA: 91 university options; published fee range INR 74,000-INR 2,22,000.\n• MCA: 22 university options; published fee range INR 64,000-INR 1,86,000."
+    },
+    {
+      "suite": "COMPARISON",
+      "question": "Compare Marketing and Finance",
+      "status": 200,
+      "latency_ms": 103,
+      "response": "Specialization Comparison\n\nProvider availability and outcomes vary, so compare the concrete program records next.\n\nPublished Details:\n• Marketing: 13 provider options; published fee range INR 88,000-INR 2,16,000.\n• Finance Management: 10 provider options; published fee range INR 78,000-INR 1,80,000."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Show all MBA programs",
+      "status": 200,
+      "latency_ms": 189,
+      "response": "MBA Programs\n\nMBA is available from 91 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Assam Down Town University\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Acharya Nagarjuna University\n• Arka Jain University\n• Andhra University\n• Bharathidasan University\n• Berhampur University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 74,000 to INR 2,22,000."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Show all MCA programs",
+      "status": 200,
+      "latency_ms": 109,
+      "response": "MCA Programs\n\nMCA is available from 22 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Amity University\n• Arka Jain University\n• Dr B R Ambedkar Open University\n• GITAM University\n• Jain University\n• Kalinga University\n• Krishna Kanta Handique State Open University\n• Kuvempu University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 64,000 to INR 1,86,000."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Show MBA specializations",
+      "status": 200,
+      "latency_ms": 89,
+      "response": "MBA Specializations\n\nPublished Options:\n• Business Analytics\n• Digital Marketing\n• Finance Management\n• Healthcare Management\n• Human Resource Management\n• Information Technology\n• International Business\n• Marketing\n• Operations Management\n• Supply Chain Management"
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Which universities offer MBA?",
+      "status": 200,
+      "latency_ms": 126,
+      "response": "MBA Programs\n\nMBA is available from 91 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Assam Down Town University\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Acharya Nagarjuna University\n• Arka Jain University\n• Andhra University\n• Bharathidasan University\n• Berhampur University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 74,000 to INR 2,22,000."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "Which universities offer MCA?",
+      "status": 200,
+      "latency_ms": 133,
+      "response": "MCA Programs\n\nMCA is available from 22 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Amity University\n• Arka Jain University\n• Dr B R Ambedkar Open University\n• GITAM University\n• Jain University\n• Kalinga University\n• Krishna Kanta Handique State Open University\n• Kuvempu University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 64,000 to INR 1,86,000."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "I have completed graduation. Which online MBA options are available?",
+      "status": 200,
+      "latency_ms": 87,
+      "response": "MBA Programs\n\nMBA is available from 91 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Assam Down Town University\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Acharya Nagarjuna University\n• Arka Jain University\n• Andhra University\n• Bharathidasan University\n• Berhampur University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 74,000 to INR 2,22,000."
+    },
+    {
+      "suite": "DISCOVERY",
+      "question": "I want an MBA in Marketing. What are my options?",
+      "status": 200,
+      "latency_ms": 179,
+      "response": "Marketing Programs\n\nMarketing is offered by 13 published universities.\n\nPublished Universities:\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Berhampur University\n• Centurion University\n• Christ University\n• Dr C V Raman University\n• Jain University\n• KIIT School of\n• NMIMS\n• Sharda University\n• Shobhit University\n• Suresh Gyan Vihar University\n• University of Mysore"
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Suggest an affordable Online MBA",
+      "status": 200,
+      "latency_ms": 86,
+      "response": "Based only on the currently published fees, the lower-cost MBA options I found are Vinayaka Missions Research Foundation (INR 74,000), SASTRA Deemed University (INR 78,000), Sikkim Manipal University (INR 78,000). Please compare the full fee schedule before applying."
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Which Online MBA is best for Marketing?",
+      "status": 200,
+      "latency_ms": 221,
+      "response": "## Advisor profile\n\n### Current education\nWhat is your current or highest completed education?"
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Which university has the highest accreditation and reasonable fees?",
+      "status": 200,
+      "latency_ms": 204,
+      "response": "The highest published NAAC grade in the current catalog is A++. Universities with that grade, ordered by published starting fee, are: SASTRA Deemed University Online (INR 19,000 per semester), Kakatiya University Distance Education (INR 23,000 per semester), VIT Online (INR 25,500 per semester), ICFAI Foundation for Higher Education Online (INR 29,000 per semester), Alagappa University Distance Education (INR 30,000 per semester). Starting fees may use different per-semester schedules, so compare the total program fee before deciding."
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Which MBA should I choose?",
+      "status": 200,
+      "latency_ms": 105,
+      "response": "## Advisor profile\n\n### Current education\nWhat is your current or highest completed education?"
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "Which specialization has the best career opportunities?",
+      "status": 200,
+      "latency_ms": 143,
+      "response": "Using only published average-salary figures in the catalog, the available specialization data ranks as:\n1. Information Technology at Bangalore University — IT Project Manager (INR 8.5 LPA)\n2. Information Technology at Bharath Institute of Higher Education — IT Project Manager (INR 8.5 LPA)\n3. Information Technology at Bharati Vidyapeeth University — IT Project Manager (INR 8.5 LPA)\n4. Information Technology at JECRC University — IT Project Manager (INR 8.5 LPA)\n5. Information Technology at Kakatiya University — IT Project Manager (INR 8.5 LPA)\n6. Information Technology at Karnataka State Open University — IT Project Manager (INR 8.5 LPA)\nThis compares only records with published figures; it is not a placement guarantee, and missing data is not treated as a lower result."
+    },
+    {
+      "suite": "ADVISORY",
+      "question": "I have a budget of 1.8 lakh. Which MBA should I choose?",
+      "status": 200,
+      "latency_ms": 167,
+      "response": "## Advisor profile\n\n### Current education\nWhat is your current or highest completed education?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "Call me",
+      "status": 200,
+      "latency_ms": 205,
+      "response": "Absolutely — I can help arrange that. What name should our counsellor use?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "I need counselling",
+      "status": 200,
+      "latency_ms": 201,
+      "response": "Absolutely — I can help arrange that. What name should our counsellor use?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "Can someone contact me?",
+      "status": 200,
+      "latency_ms": 89,
+      "response": "Absolutely — I can help arrange that. What name should our counsellor use?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "I need admission guidance",
+      "status": 200,
+      "latency_ms": 96,
+      "response": "Absolutely — I can help arrange that. What name should our counsellor use?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "Talk to an advisor",
+      "status": 200,
+      "latency_ms": 97,
+      "response": "Absolutely — I can help arrange that. What name should our counsellor use?"
+    },
+    {
+      "suite": "LEADS",
+      "question": "Help me choose a university",
+      "status": 200,
+      "latency_ms": 187,
+      "response": "## Advisor profile\n\n### Current education\nWhat is your current or highest completed education?"
+    },
+    {
+      "suite": "TYPOS",
+      "question": "Tell me about manipal japiur",
+      "status": 200,
+      "latency_ms": 115,
+      "response": "Manipal University Jaipur Online\n\nManipal University Jaipur Online is offered by Manipal University Jaipur.\n\nOverview:\n• A UGC-entitled online learning platform offering career-focused degree programs at Manipal University Jaipur.\n\nPublished Details:\n• mode: Online\n• fee: INR 37,000 per semester\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC-DEB Entitled\n\nPopular Specializations:\n• Business Analytics\n• Digital Marketing"
+    },
+    {
+      "suite": "TYPOS",
+      "question": "Tell me about igno",
+      "status": 200,
+      "latency_ms": 67,
+      "response": "I couldn't confidently match that to the published catalog. Could you share a university name, a course category, or a specialization?"
+    },
+    {
+      "suite": "TYPOS",
+      "question": "Tell me about jian university",
+      "status": 200,
+      "latency_ms": 148,
+      "response": "Jain University Online\n\nJain University Online is offered by Jain University.\n\nOverview:\n• A UGC-entitled online learning platform offering career-focused degree programs at Jain University.\n\nPublished Details:\n• mode: Online\n• fee: INR 45,000 per semester\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC-DEB Entitled\n\nPopular Specializations:\n• Marketing"
+    },
+    {
+      "suite": "TYPOS",
+      "question": "lpu mba markting",
+      "status": 200,
+      "latency_ms": 196,
+      "response": "Lovely Professional University does not currently offer Marketing in the published DegreeBaba catalog. Available providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+    },
+    {
+      "suite": "TYPOS",
+      "question": "nmims mba analitics",
+      "status": 200,
+      "latency_ms": 87,
+      "response": "Did you mean Business Analytics at Dr B R Ambedkar Open University or Business Analytics at Kalinga University or Business Analytics at The Assam Kaziranga University or Business Analytics at KL University or Business Analytics at Manipal University Jaipur or Business Analytics at NMIMS or Business Analytics at Symbiosis Centre for Distance Learning or Business Analytics at Shoolini University? I've already got NMIMS Online + MBA ready."
+    },
+    {
+      "suite": "TYPOS",
+      "question": "monypal university",
+      "status": 200,
+      "latency_ms": 107,
+      "response": "Did you mean Manipal University Jaipur Online or Sikkim Manipal University Online?"
+    },
+    {
+      "suite": "TYPOS",
+      "question": "tell me about lpuu",
+      "status": 200,
+      "latency_ms": 135,
+      "response": "Did you mean Lovely Professional University Online?"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "Tell me about Marketing",
+      "status": 200,
+      "latency_ms": 111,
+      "response": "Marketing Programs\n\nMarketing is offered by 13 published universities.\n\nPublished Universities:\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Berhampur University\n• Centurion University\n• Christ University\n• Dr C V Raman University\n• Jain University\n• KIIT School of\n• NMIMS\n• Sharda University\n• Shobhit University\n• Suresh Gyan Vihar University\n• University of Mysore"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "MBA Marketing",
+      "status": 200,
+      "latency_ms": 91,
+      "response": "Marketing Programs\n\nMarketing is offered by 13 published universities.\n\nPublished Universities:\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Berhampur University\n• Centurion University\n• Christ University\n• Dr C V Raman University\n• Jain University\n• KIIT School of\n• NMIMS\n• Sharda University\n• Shobhit University\n• Suresh Gyan Vihar University\n• University of Mysore"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "Tell me about SMU",
+      "status": 200,
+      "latency_ms": 198,
+      "response": "Sikkim Manipal University Online\n\nSikkim Manipal University Online is offered by Sikkim Manipal University.\n\nOverview:\n• A UGC-entitled online learning platform offering career-focused degree programs at Sikkim Manipal University.\n\nPublished Details:\n• mode: Online\n• fee: INR 19,000 per semester\n\nApprovals & Accreditations:\n• NAAC grade A+\n• UGC Entitled\n\nPopular Specializations:\n• Finance Management"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "Which university offers Marketing specialization?",
+      "status": 200,
+      "latency_ms": 217,
+      "response": "Marketing Programs\n\nMarketing is offered by 13 published universities.\n\nPublished Universities:\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Berhampur University\n• Centurion University\n• Christ University\n• Dr C V Raman University\n• Jain University\n• KIIT School of\n• NMIMS\n• Sharda University\n• Shobhit University\n• Suresh Gyan Vihar University\n• University of Mysore"
+    },
+    {
+      "suite": "AMBIGUITY",
+      "question": "Tell me about Finance",
+      "status": 200,
+      "latency_ms": 103,
+      "response": "Finance Management Programs\n\nFinance Management is offered by 10 published universities.\n\nPublished Universities:\n• Arka Jain University\n• Berhampur University\n• Bharathiar University\n• KL University\n• Lovely Professional University\n• Netaji Subhas Open University\n• Periyar University\n• Sikkim Manipal University\n• Swami Vivekanand Subharti University\n• The Assam Kaziranga University"
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about IIT Bombay Online MBA",
+      "status": 200,
+      "latency_ms": 206,
+      "response": "I couldn't find IIT Bombay in the DegreeBaba catalog.\n\nAvailable MBA providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about Harvard MBA",
+      "status": 200,
+      "latency_ms": 110,
+      "response": "I couldn't find Harvard in the DegreeBaba catalog.\n\nAvailable MBA providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about Oxford Online MBA",
+      "status": 200,
+      "latency_ms": 136,
+      "response": "I couldn't find Oxford in the DegreeBaba catalog.\n\nAvailable MBA providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about BCA",
+      "status": 200,
+      "latency_ms": 162,
+      "response": "BCA Programs\n\nBCA is available from 24 published universities. I haven't selected one university for you.\n\nPublished Universities:\n• Assam Down Town University\n• Amity University\n• Annamalai University\n• Bharathidasan University\n• Bharati Vidyapeeth University\n• Dr C V Raman University\n• Desh Bhagat University\n• ITM University\n\nFees:\n• Across records with comparable fee data, the published range is about INR 60,000 to INR 1,44,000."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about MBA in Artificial Intelligence",
+      "status": 200,
+      "latency_ms": 191,
+      "response": "I couldn't find Artificial Intelligence in the DegreeBaba catalog.\n\nAvailable MBA providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Compare Harvard and LPU",
+      "status": 200,
+      "latency_ms": 166,
+      "response": "I couldn't find Harvard in the published catalog. I did match the rest of your request, so here's the available catalog information:\n\nPublished University Details\n\nMatched University:\n• Lovely Professional University Online: NAAC A++; UGC Entitled; published starting fee INR 33,500 per semester; 2 listed programs."
+    },
+    {
+      "suite": "NEGATIVE",
+      "question": "Tell me about XYZ University",
+      "status": 200,
+      "latency_ms": 147,
+      "response": "I couldn't find a match for \"XYZ\" in the published catalog. Could you check the spelling, or try a different university or course name?"
+    }
+  ],
+  "multi_turn_results": [
+    {
+      "conversation_number": 1,
+      "session_id": "test_2b2ff9dc",
+      "turns": [
+        {
+          "message": "Tell me about NMIMS MBA",
+          "status": 200,
+          "latency_ms": 176,
+          "response": "NMIMS Online MBA\n\nOnline MBA is offered by NMIMS.\n\nOverview:\n• A 2 years online mba with practical, industry-aligned learning.\n\nPublished Details:\n• duration: 2 Years\n• mode: Online\n• fee: INR 2,16,000\n• starting fee: INR 54,500 per semester\n• eligibility: Bachelor's degree in any discipline\n\nApprovals & Accreditations:\n• UGC Entitled\n\nPopular Specializations:\n• Marketing\n• Business Analytics"
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 189,
+          "response": "The published total fee for Online MBA is INR 2,16,000; the listed starting fee is INR 54,500 per semester."
+        },
+        {
+          "message": "What is the eligibility?",
+          "status": 200,
+          "latency_ms": 2099,
+          "response": "For Online MBA, the published eligibility is: Bachelor's degree in any discipline."
+        },
+        {
+          "message": "What is the duration?",
+          "status": 200,
+          "latency_ms": 192,
+          "response": "The published duration for Online MBA is 2 Years."
+        }
+      ]
+    },
+    {
+      "conversation_number": 2,
+      "session_id": "test_cb2f8235",
+      "turns": [
+        {
+          "message": "Tell me about LPU MBA",
+          "status": 200,
+          "latency_ms": 114,
+          "response": "Lovely Professional University Online MBA\n\nOnline MBA is offered by Lovely Professional University.\n\nOverview:\n• A 2 years online mba with practical, industry-aligned learning.\n\nPublished Details:\n• duration: 2 Years\n• mode: Online\n• fee: INR 1,34,000\n• starting fee: INR 33,500 per semester\n• eligibility: Bachelor's degree in any discipline\n\nApprovals & Accreditations:\n• NAAC grade A++\n• UGC Entitled\n\nPopular Specializations:\n• Finance Management\n• Healthcare Management"
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 162,
+          "response": "The published total fee for Online MBA is INR 1,34,000; the listed starting fee is INR 33,500 per semester."
+        },
+        {
+          "message": "What is the duration?",
+          "status": 200,
+          "latency_ms": 138,
+          "response": "The published duration for Online MBA is 2 Years."
+        }
+      ]
+    },
+    {
+      "conversation_number": 3,
+      "session_id": "test_96bcb9c1",
+      "turns": [
+        {
+          "message": "Tell me about NMIMS MBA",
+          "status": 200,
+          "latency_ms": 119,
+          "response": "NMIMS Online MBA\n\nOnline MBA is offered by NMIMS.\n\nOverview:\n• A 2 years online mba with practical, industry-aligned learning.\n\nPublished Details:\n• duration: 2 Years\n• mode: Online\n• fee: INR 2,16,000\n• starting fee: INR 54,500 per semester\n• eligibility: Bachelor's degree in any discipline\n\nApprovals & Accreditations:\n• UGC Entitled\n\nPopular Specializations:\n• Marketing\n• Business Analytics"
+        },
+        {
+          "message": "Tell me about LPU MBA",
+          "status": 200,
+          "latency_ms": 162,
+          "response": "Lovely Professional University Online MBA\n\nOnline MBA is offered by Lovely Professional University.\n\nOverview:\n• A 2 years online mba with practical, industry-aligned learning.\n\nPublished Details:\n• duration: 2 Years\n• mode: Online\n• fee: INR 1,34,000\n• starting fee: INR 33,500 per semester\n• eligibility: Bachelor's degree in any discipline\n\nApprovals & Accreditations:\n• NAAC grade A++\n• UGC Entitled\n\nPopular Specializations:\n• Finance Management\n• Healthcare Management"
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 139,
+          "response": "The published total fee for Online MBA is INR 1,34,000; the listed starting fee is INR 33,500 per semester."
+        }
+      ]
+    },
+    {
+      "conversation_number": 4,
+      "session_id": "test_7512b11f",
+      "turns": [
+        {
+          "message": "Tell me about MBA Marketing",
+          "status": 200,
+          "latency_ms": 73,
+          "response": "Marketing Programs\n\nMarketing is offered by 13 published universities.\n\nPublished Universities:\n• Alagappa University\n• Amrita Vishwa Vidyapeetham\n• Berhampur University\n• Centurion University\n• Christ University\n• Dr C V Raman University\n• Jain University\n• KIIT School of\n• NMIMS\n• Sharda University\n• Shobhit University\n• Suresh Gyan Vihar University\n• University of Mysore"
+        },
+        {
+          "message": "LPU MBA Marketing",
+          "status": 200,
+          "latency_ms": 229,
+          "response": "Lovely Professional University does not currently offer Marketing in the published DegreeBaba catalog. Available providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 208,
+          "response": "The published total fee for Marketing is INR 2,16,000."
+        }
+      ]
+    },
+    {
+      "conversation_number": 5,
+      "session_id": "test_72fa8b34",
+      "turns": [
+        {
+          "message": "Tell me about Jain MBA Finance",
+          "status": 200,
+          "latency_ms": 100,
+          "response": "Jain University does not currently offer Finance Management in the published DegreeBaba catalog. Available providers include: Assam Down Town University, Alagappa University, Amrita Vishwa Vidyapeetham, Acharya Nagarjuna University, Arka Jain University, Andhra University, Bharathidasan University, Berhampur University, Bharathiar University, Bharath Institute of Higher Education, Dr B R Ambedkar Open University, Bangalore University, Bharati Vidyapeeth University, Capital University, Centurion University, Chhattisgarh Open University, Christ University, Chandigarh University, Dr C V Raman University, Desh Bhagat University, Dr D Y Patil Vidyapeeth, Delhi University School of Open Learning, Ganpat University, GITAM University, Gulbarga University, Hindustan Institute of Technology, ICFAI University, ICFAI Foundation for Higher Education, IIMT University, ITM University, Jain University, JECRC University, Kalinga University, Karunya Institute of Technology, The Assam Kaziranga University, Krishna Kanta Handique State Open University, Koneru Lakshmaiah Education Foundation, KL University, KIIT School of, Karnataka State Open University, Kakatiya University, Lovely Professional University, Mangalayatan University, Mangalmay Institute of Management, Manipal University Jaipur, Mats University, Medi-Caps University, MIT World Peace University, Maharishi Markandeshwar University, Manav Rachna University, Mumbai University School of, University of Mysore, NMIMS, Nalanda Open University, Netaji Subhas Open University, OM Sterling Global University, Odisha State Open University, Osmania University, Periyar University, Poornima University, Rai University, Ravenshaw University, Royal Global University, Rungta College of Engineering, Sabarmati University, Sage University, Sanskriti University, SASTRA Deemed University, Sri Balaji University, Symbiosis Centre for Distance Learning, Suresh Gyan Vihar University, Sharda University, Shobhit University, Shoolini University, Sikkim Manipal University, Sri Sri University, SRM University, Swami Vivekanand Subharti University, Sunrise University, Tamil Nadu Open University, Uttar Pradesh Rajarshi Tandon Open University, Utkal University, Uttaranchal University, Vels University, Vignan's Foundation for Science Technology and Research, Vivekananda Global University, Vignan University, VIT, Vardhaman Mahaveer Open University, Vinayaka Missions Research Foundation, Yashwantrao Chavan Maharashtra Open University."
+        },
+        {
+          "message": "What is the fee?",
+          "status": 200,
+          "latency_ms": 209,
+          "response": "The published total fee for Finance Management is INR 1,26,000."
+        },
+        {
+          "message": "What jobs can I get?",
+          "status": 200,
+          "latency_ms": 202,
+          "response": "I don't have published career-outcome information for Finance Management yet. Would you like to check another detail or speak with a counsellor?"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "single_turn_count": 83,
+    "multi_turn_conversations": 5
+  }
+}

@@ -41,12 +41,12 @@ _COMPARE_MARKER = re.compile(
     re.IGNORECASE,
 )
 _RECOMMEND_MARKER = re.compile(
-    r"\b(?:best\b[^?]{0,80}\bfor\s+me|cheapest|lowest[-\s]+cost|top|"
+    r"\b(?:(?:the\s+)?best\b[^?]{0,80}\bfor\s+me|cheapest|lowest[-\s]+cost|top|"
     r"(?:under|below|within|up\s*to|upto)\s*"
     r"(?:a\s+budget\s+of\s*)?(?:₹\s*|rs\.?\s*|inr\s*)?\d|"
     r"recommend|suggest|help\s+me\s+choose|"
     r"career\s+(?:guidance|growth)|working\s+professional\s+(?:advice|guidance)|"
-    r"which\b[^?]{0,80}\b(?:should\s+i|is\s+best|has\s+the\s+best)|"
+    r"which\b[^?]{0,80}\b(?:should\s+i|(?:is|are)\s+(?:the\s+)?best|has\s+the\s+best)|"
     r"which\s+university\b[^?]{0,80}\b(?:highest|reasonable\s+fees?))\b",
     re.IGNORECASE,
 )

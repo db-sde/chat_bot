@@ -9,12 +9,13 @@ import re
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
-import os
 
 from fastapi import FastAPI, Header, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
 
 import logging_setup
 from advisor.flow import advisor_can_consume, handle_advisor_turn
@@ -31,6 +32,7 @@ from nlu.action_classifier import mention_summary as summarize_mentions
 from nlu.callback_detector import is_callback_request
 from nlu.intent import Intent, decide_action, heuristic_intent, should_use_reasoning_llm
 from nlu.mention_extractor import extract_mentions
+from presentation import enrich_response
 from resilience.health import dependency_health
 from resilience.intent_metrics import ActionSource, IntentMetrics
 from resilience.intent_metrics import intent_metrics as process_intent_metrics
@@ -51,8 +53,21 @@ from session.state import ConversationState, hydrate_focus_concepts
 from session.store import SessionStore
 from taxonomy.entity_matcher import EntityMatcher, configure_matcher
 from taxonomy.index_builder import TaxonomyIndexes, build_indexes
+from widget.config import (
+    InvalidSiteKeyError,
+    UnknownSiteKeyError,
+    WidgetConfigLoadError,
+    WidgetConfigStore,
+)
 
 LOGGER = logging.getLogger(__name__)
+APP_DIR = Path(__file__).resolve().parent
+WIDGET_DIR = APP_DIR / "widget"
+
+
+def _allowed_widget_origins(value: str) -> list[str]:
+    origins = [item.strip() for item in str(value or "").split(",") if item.strip()]
+    return ["*"] if "*" in origins else origins
 
 
 def _looks_like_product_turn(
@@ -193,6 +208,27 @@ def _resolver_intent(action: Action) -> str:
     }.get(action, Intent.FACTUAL.value)
 
 
+def _presentation_operand_ids(*groups: Any) -> tuple[str, ...]:
+    """Select one concrete resolved comparison level for card presentation."""
+
+    for group in groups:
+        values: list[str] = []
+        for item in group or ():
+            if isinstance(item, (str, int)):
+                entity_id = str(item)
+            elif isinstance(item, dict):
+                entity_id = str(item.get("entity_id") or item.get("id") or "")
+            else:
+                entity_id = str(
+                    getattr(item, "entity_id", None) or getattr(item, "id", None) or ""
+                )
+            if entity_id and entity_id not in values:
+                values.append(entity_id)
+        if len(values) >= 2:
+            return tuple(values[:3])
+    return ()
+
+
 @dataclass(slots=True)
 class TurnResult:
     session_id: str
@@ -200,6 +236,7 @@ class TurnResult:
     payload: ResponsePayload
     route: str
     synthesis_prompt: str | None = None
+    presentation_operands: tuple[str, ...] = ()
 
 
 class ChatbotService:
@@ -341,6 +378,19 @@ class ChatbotService:
         await self.session_store.set(state)
 
     async def process_turn(self, chat: ChatRequest) -> TurnResult:
+        """Run the unchanged decision pipeline, then add presentation metadata."""
+
+        result = await self._process_turn(chat)
+        result.payload = enrich_response(
+            result.payload,
+            state=result.state,
+            route=result.route,
+            catalog=self.catalog,
+            operands=result.presentation_operands,
+        )
+        return result
+
+    async def _process_turn(self, chat: ChatRequest) -> TurnResult:
         turn_start = time.monotonic()
         message_metric = self.intent_metrics.begin_message()
 
@@ -373,6 +423,106 @@ class ChatbotService:
         preflight_action = classify_action(mentions, chat.message)
         preflight_heuristic = heuristic_intent(chat.message)
 
+        previous_assistant = next(
+            (
+                item.get("content", "")
+                for item in reversed(state.history[:-1])
+                if item.get("role") == "assistant"
+            ),
+            "",
+        )
+        preference_followup = any(
+            marker in previous_assistant.casefold()
+            for marker in ("what matters most", "which direction is closer")
+        ) and any(
+            marker in chat.message.casefold()
+            for marker in (
+                "fee",
+                "budget",
+                "affordable",
+                "placement",
+                "career",
+                "job",
+                "salary",
+                "special",
+                "business",
+                "management",
+                "technology",
+                "software",
+                "computer",
+            )
+        )
+        domain_topic = knowledge_topic(chat.message)
+        selected_topic = topic_from_message(chat.message)
+        safe_focused_followup = bool(
+            _has_focus(state)
+            and not domain_topic
+            and (mentions.reference or selected_topic != "about")
+        )
+        action_start = time.monotonic()
+        used_gemini = False
+        gemini_needs_clarification = False
+        action = preflight_action
+        if action is not None:
+            action_source = "deterministic_rule"
+            source_label = "action-rule"
+        elif has_deferred_clarification(mentions):
+            # MEDIUM taxonomy evidence must reach the resolver/clarifier without
+            # paying for Gemini or dispatching an empty pre-resolution clarify.
+            action = Action.GET_FACTS
+            action_source = "deterministic_rule"
+            source_label = "matcher-confirmation"
+        elif preference_followup:
+            action = Action.RECOMMEND
+            action_source = "heuristic_regex"
+            source_label = "preference-followup"
+        else:
+            heuristic = preflight_heuristic
+            if heuristic is not Intent.FACTUAL:
+                action = action_from_intent(heuristic)
+                action_source = "heuristic_regex"
+                source_label = "heuristic-regex"
+            elif domain_topic:
+                action = Action.GET_FACTS
+                action_source = "deterministic_rule"
+                source_label = "knowledge-fast-path"
+            elif safe_focused_followup:
+                action = Action.GET_FACTS
+                action_source = "deterministic_rule"
+                source_label = "focused-topic-fast-path"
+            elif should_use_reasoning_llm(chat.message):
+                used_gemini = True
+                outcome = await decide_action(
+                    chat.message,
+                    summarize_mentions(mentions),
+                    self.llm,
+                    metrics=self.intent_metrics,
+                    message_metric=message_metric,
+                )
+                action = outcome.action
+                gemini_needs_clarification = outcome.needs_clarification
+                action_source = "gemini" if outcome.source == "gemini" else "heuristic_regex"
+                source_label = outcome.source
+            else:
+                # Recognition, typo handling, ordinary unsupported subjects, and
+                # unrelated questions never depend on Gemini. Attribute-only
+                # turns can still resolve against context; other no-evidence
+                # turns are safely unrelated.
+                action = (
+                    Action.GET_FACTS if getattr(mentions, "attributes", ()) else Action.UNRELATED
+                )
+                action_source = "heuristic_regex"
+                source_label = "local-nonreasoning"
+
+        is_product_action = action not in {
+            Action.CHITCHAT,
+            Action.UNRELATED,
+            Action.CALLBACK,
+            Action.OPEN_LEAD_FORM,
+            Action.FALLBACK,
+            None,
+        }
+
         # Lead collection is an explicit, isolated flow. Lifecycle commands and
         # valid field answers are handled here; every informational turn exits the
         # flow and continues through ordinary catalog routing untouched.
@@ -392,13 +542,17 @@ class ChatbotService:
             pending_answer = None
 
         if pending_answer is not None:
-            product_turn = _looks_like_product_turn(
-                chat.message,
-                mentions,
-                action_hint=preflight_action,
-                heuristic=preflight_heuristic,
-            )
             deferral = self.lead_funnel.is_deferral(chat.message)
+            if is_product_action:
+                product_turn = True
+            else:
+                product_turn = _looks_like_product_turn(
+                    chat.message,
+                    mentions,
+                    action_hint=preflight_action,
+                    heuristic=preflight_heuristic,
+                )
+
             # A standalone valid name can resemble an unknown Title Case entity.
             # In an active legacy name prompt, resolved catalog evidence or an
             # actual query marker is required to steal it from the funnel.
@@ -542,6 +696,10 @@ class ChatbotService:
                 payload,
                 route,
                 self._synthesis_prompt(state, chat.message, route, payload),
+                _presentation_operand_ids(
+                    dispatch_kwargs.get("entity_ids"),
+                    dispatch_kwargs.get("universities"),
+                ),
             )
         if state.pending_clarification is not None and not pending.new_topic:
             payload = await self.router.dispatch(state, Action.CLARIFY, chat.message)
@@ -550,98 +708,8 @@ class ChatbotService:
             tl.info("chatbot.routing", "route: clarification (still pending)")
             return TurnResult(session_id, state, payload, "clarification")
 
-        # Action selection is layered: resolved-shape rules, bounded regex intent,
-        # existing contextual fast paths, then one strict Gemini JSON decision.
-        previous_assistant = next(
-            (
-                item.get("content", "")
-                for item in reversed(state.history[:-1])
-                if item.get("role") == "assistant"
-            ),
-            "",
-        )
-        preference_followup = any(
-            marker in previous_assistant.casefold()
-            for marker in ("what matters most", "which direction is closer")
-        ) and any(
-            marker in chat.message.casefold()
-            for marker in (
-                "fee",
-                "budget",
-                "affordable",
-                "placement",
-                "career",
-                "job",
-                "salary",
-                "special",
-                "business",
-                "management",
-                "technology",
-                "software",
-                "computer",
-            )
-        )
-        domain_topic = knowledge_topic(chat.message)
-        selected_topic = topic_from_message(chat.message)
-        safe_focused_followup = bool(
-            _has_focus(state)
-            and not domain_topic
-            and (mentions.reference or selected_topic != "about")
-        )
-        action_start = time.monotonic()
-        used_gemini = False
-        gemini_needs_clarification = False
-        action = preflight_action
-        if action is not None:
-            action_source: ActionSource = "deterministic_rule"
-            source_label = "action-rule"
-        elif has_deferred_clarification(mentions):
-            # MEDIUM taxonomy evidence must reach the resolver/clarifier without
-            # paying for Gemini or dispatching an empty pre-resolution clarify.
-            action = Action.GET_FACTS
-            action_source = "deterministic_rule"
-            source_label = "matcher-confirmation"
-        elif preference_followup:
-            action = Action.RECOMMEND
-            action_source = "heuristic_regex"
-            source_label = "preference-followup"
-        else:
-            heuristic = preflight_heuristic
-            if heuristic is not Intent.FACTUAL:
-                action = action_from_intent(heuristic)
-                action_source = "heuristic_regex"
-                source_label = "heuristic-regex"
-            elif domain_topic:
-                action = Action.GET_FACTS
-                action_source = "deterministic_rule"
-                source_label = "knowledge-fast-path"
-            elif safe_focused_followup:
-                action = Action.GET_FACTS
-                action_source = "deterministic_rule"
-                source_label = "focused-topic-fast-path"
-            elif should_use_reasoning_llm(chat.message):
-                used_gemini = True
-                outcome = await decide_action(
-                    chat.message,
-                    summarize_mentions(mentions),
-                    self.llm,
-                    metrics=self.intent_metrics,
-                    message_metric=message_metric,
-                )
-                action = outcome.action
-                gemini_needs_clarification = outcome.needs_clarification
-                action_source = "gemini" if outcome.source == "gemini" else "heuristic_regex"
-                source_label = outcome.source
-            else:
-                # Recognition, typo handling, ordinary unsupported subjects, and
-                # unrelated questions never depend on Gemini. Attribute-only
-                # turns can still resolve against context; other no-evidence
-                # turns are safely unrelated.
-                action = (
-                    Action.GET_FACTS if getattr(mentions, "attributes", ()) else Action.UNRELATED
-                )
-                action_source = "heuristic_regex"
-                source_label = "local-nonreasoning"
+        # Action classification runs above the lead funnel check so product turns
+        # cannot be consumed as contact-field answers.
         record_action_source(action_source)
         action_ms = (time.monotonic() - action_start) * 1000
         tl.info(
@@ -951,6 +1019,13 @@ class ChatbotService:
             payload,
             route,
             synthesis_prompt,
+            _presentation_operand_ids(
+                update.comparison_entity_ids,
+                update.comparison_universities,
+            )
+            if route == "comparison"
+            and not (decision is not None and decision.needs_clarification)
+            else (),
         )
 
 
@@ -989,7 +1064,7 @@ async def _event_stream(service: ChatbotService, result: TurnResult):
     # partial sentence followed by a contradictory deterministic fallback.
     for token in tokens:
         yield _sse("token", {"session_id": result.session_id, "token": token})
-    final_payload = result.payload.model_copy(update={"text": text})
+    final_payload = result.payload.model_copy(update={"text": text, "message": text})
     # Focus/session state was persisted before streaming. Do not write this older whole-state
     # snapshot after a slow stream: a newer turn for the same session may already exist.
     yield _payload_event(result, final_payload)
@@ -1013,15 +1088,72 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_runtime_settings = get_settings()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_widget_origins(_runtime_settings.widget_allowed_origins),
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Accept", "Content-Type"],
+    expose_headers=["X-Session-ID"],
+)
+widget_config_store = WidgetConfigStore(_runtime_settings.widget_config_path)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(current_dir, "index.html")
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
+    path = APP_DIR / "index.html"
+    if path.exists():
+        return FileResponse(path, media_type="text/html")
     return HTMLResponse(content="<h1>index.html not found</h1>", status_code=404)
+
+
+@app.get("/widget.js", include_in_schema=False)
+@app.get("/widget/widget.js", include_in_schema=False)
+async def widget_script() -> FileResponse:
+    """Stable, unversioned embed URL; the loader resolves versioned sibling assets."""
+
+    return FileResponse(
+        WIDGET_DIR / "widget.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@app.get("/widget.css", include_in_schema=False)
+@app.get("/widget/widget.css", include_in_schema=False)
+async def widget_stylesheet() -> FileResponse:
+    return FileResponse(
+        WIDGET_DIR / "widget.css",
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/widget/demo.html", include_in_schema=False)
+async def widget_demo() -> FileResponse:
+    return FileResponse(WIDGET_DIR / "demo.html", media_type="text/html")
+
+
+@app.get("/api/widget/config/{site_key}")
+async def widget_config_endpoint(site_key: str) -> dict[str, Any]:
+    """Return presentation-only settings selected by the public tenant key."""
+
+    try:
+        return widget_config_store.payload(site_key)
+    except InvalidSiteKeyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except UnknownSiteKeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown widget site_key: {exc.site_key}",
+        ) from exc
+    except WidgetConfigLoadError as exc:
+        LOGGER.exception("Widget configuration is unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Widget configuration is unavailable",
+        ) from exc
 
 
 @app.post(

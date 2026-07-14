@@ -32,8 +32,15 @@ Do not create or activate a separate virtual environment. `uv` maintains the ign
 `POST /chat` accepts:
 
 ```json
-{"session_id": "optional-stable-id", "message": "What is the fee for NMIMS MBA?"}
+{
+  "session_id": "optional-stable-id",
+  "message": "What is the fee for NMIMS MBA?",
+  "site_key": "degreebaba",
+  "page_university_slug": "nmims"
+}
 ```
+
+`site_key` and `page_university_slug` are optional context fields used by embedded clients.
 
 It returns `text/event-stream`. Templated responses emit one `response` event immediately.
 LLM-backed responses emit real `token` events as provider deltas arrive, followed by a
@@ -42,18 +49,49 @@ LLM-backed responses emit real `token` events as provider deltas arrive, followe
 ```json
 {
   "text": "...",
+  "message": "...",
   "suggested_chips": ["Eligibility", "EMI options"],
-  "cta": null
+  "cta": null,
+  "components": [
+    {
+      "type": "quick_actions",
+      "actions": [
+        {"label": "Eligibility", "message": "Eligibility", "action": "send_message"}
+      ]
+    }
+  ]
 }
 ```
 
 Every event also includes the effective `session_id`; send it on later turns to retain focus.
+Legacy `text`, `suggested_chips`, and `cta` remain available. New clients should render the
+advisor-style `message` and typed `components` when present.
 
 - `GET /health` reports catalog/database, Redis, and LLM states separately.
 - `GET /metrics` reports deterministic/Gemini routing rates, Gemini failures, and intent latency
   percentiles for the current process lifetime.
 - `POST /admin/reindex` refreshes the configured catalog source and atomically replaces the
   taxonomy indexes. If `ADMIN_API_KEY` is set, send it as `Authorization: Bearer <key>`.
+
+## Widget 2.0
+
+Embed the standalone widget on any allowed partner page:
+
+```html
+<script
+  src="https://ai.degreebaba.com/widget.js"
+  data-site-key="degreebaba"
+></script>
+```
+
+The loader fetches tenant branding from `GET /api/widget/config/{site_key}`, creates an
+isolated Shadow DOM UI, and uses the existing `/chat` SSE transport. It supports university,
+program, comparison, callback, and quick-action components without adding dependencies to the
+host site. Add `data-page-university-slug="nmims"` on university pages to preserve page context.
+
+For local review, run the API and open `http://127.0.0.1:8000/widget/demo.html`. See
+[`docs/WIDGET_2_ARCHITECTURE.md`](docs/WIDGET_2_ARCHITECTURE.md) for configuration, response
+examples, CORS guidance, and the rollout plan.
 
 ## Configuration
 
@@ -76,6 +114,10 @@ Copy `.env.example` to `.env`. Important settings are:
 - `CRM_WEBHOOK_URL` and `CRM_WEBHOOK_SECRET`: optional CRM destination. Each newly captured
   lead field schedules a background update, but collection starts only from an explicit
   callback/counsellor action. Exhausted retries are written to `DEAD_LETTER_PATH`.
+- `WIDGET_CONFIG_PATH`: optional site-keyed Widget 2 configuration file. When blank, the
+  bundled `widget/configs.json` is used.
+- `WIDGET_ALLOWED_ORIGINS`: `*` for public local embeds or a comma-separated production
+  origin allowlist.
 
 See `.env.example` for model names, timeouts, circuit-breaker thresholds, and admin
 authentication. Legacy lead-timing variables remain accepted for deployment compatibility but

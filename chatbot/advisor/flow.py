@@ -41,7 +41,7 @@ _CONTEXT_BUDGET_RE = re.compile(
 )
 
 _PERSONAL_ADVISOR_RE = re.compile(
-    r"\b(?:best\b[^?]{0,50}\bfor\s+me|which\b[^?]{0,50}\bis\s+best\b|"
+    r"\b(?:(?:the\s+)?best\b[^?]{0,50}\bfor\s+me|which\b[^?]{0,50}\b(?:is|are)\s+(?:the\s+)?best\b|"
     r"recommend(?:\s+me)?\s+(?:a\s+)?"
     r"(?:universit(?:y|ies)|programs?|courses?)|recommend\b[^?]{0,60}\bfor\s+me|"
     r"help\s+me\s+(?:choose|decide)|which\b[^?]{0,80}\bshould\s+i\s+choose)\b",

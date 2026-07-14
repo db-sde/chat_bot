@@ -1,0 +1,11 @@
+{
+  "degreebaba": {
+    "bot_name": "DegreeBaba AI Advisor",
+    "avatar_url": null,
+    "primary_color": "#FF6B00",
+    "welcome_message": "Hi! I can help you explore universities and online programs.",
+    "show_typing_indicator": true,
+    "show_avatar": true,
+    "auto_open": false
+  }
+}

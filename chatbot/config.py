@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     catalog_url: str | None = None
     catalog_path: Path | None = None
     catalog_timeout_seconds: float = Field(default=5.0, gt=0)
+    widget_config_path: Path | None = None
+    widget_allowed_origins: str = "*"
 
     @field_validator("catalog_url", mode="before")
     @classmethod
@@ -43,13 +45,13 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("catalog_path", mode="before")
+    @field_validator("catalog_path", "widget_config_path", mode="before")
     @classmethod
     def _blank_path_is_none(cls, value: object) -> object:
-        """Treat ``CATALOG_PATH=`` (blank) as unset.
+        """Treat blank optional filesystem paths as unset.
 
         Without this, Pydantic coerces '' to Path('.'), which is a directory,
-        causing a silent load failure and fallback to the sample catalog.
+        causing a silent load failure or an unintended configuration lookup.
         """
         if isinstance(value, str) and not value.strip():
             return None

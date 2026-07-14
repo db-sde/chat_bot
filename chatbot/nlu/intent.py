@@ -46,8 +46,8 @@ _CATALOG_COMPARISON = re.compile(
     re.IGNORECASE,
 )
 _CATALOG_ADVISORY = re.compile(
-    r"\b(?:best\b[^?]{0,80}\bfor\s+me|"
-    r"which\b[^?]{0,80}\b(?:should\s+i|is\s+best|has\s+the\s+best)|"
+    r"\b(?:(?:the\s+)?best\b[^?]{0,80}\bfor\s+me|"
+    r"which\b[^?]{0,80}\b(?:should\s+i|(?:is|are)\s+(?:the\s+)?best|has\s+the\s+best)|"
     r"which\s+university\b[^?]{0,80}\b(?:highest|reasonable\s+fees?)|"
     r"recommend|suggest|suit(?:s|able)?\s+(?:me|my)|help\s+me\s+choose|"
     r"career\s+(?:guidance|growth)|working\s+professional\s+(?:advice|guidance))\b",
