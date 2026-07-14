@@ -1102,10 +1102,10 @@ widget_config_store = WidgetConfigStore(_runtime_settings.widget_config_path)
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
-    path = APP_DIR / "index.html"
+    path = WIDGET_DIR / "demo.html"
     if path.exists():
         return FileResponse(path, media_type="text/html")
-    return HTMLResponse(content="<h1>index.html not found</h1>", status_code=404)
+    return HTMLResponse(content="<h1>demo.html not found</h1>", status_code=404)
 
 
 @app.get("/widget.js", include_in_schema=False)
