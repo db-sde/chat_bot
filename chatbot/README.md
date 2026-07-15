@@ -36,11 +36,14 @@ Do not create or activate a separate virtual environment. `uv` maintains the ign
   "session_id": "optional-stable-id",
   "message": "What is the fee for NMIMS MBA?",
   "site_key": "degreebaba",
-  "page_university_slug": "nmims"
+  "page_type": "course",
+  "page_entity_slug": "nmims-online-mba"
 }
 ```
 
-`site_key` and `page_university_slug` are optional context fields used by embedded clients.
+`site_key`, `page_type`, and `page_entity_slug` are optional context fields used by embedded
+clients. The legacy `page_university_slug` field remains accepted. Exact page context seeds the
+existing session focus only when that focus is empty; it never overrides a user-selected entity.
 
 It returns `text/event-stream`. Templated responses emit one `response` event immediately.
 LLM-backed responses emit real `token` events as provider deltas arrive, followed by a
@@ -52,6 +55,17 @@ LLM-backed responses emit real `token` events as provider deltas arrive, followe
   "message": "...",
   "suggested_chips": ["Eligibility", "EMI options"],
   "cta": null,
+  "quick_actions": [
+    {"label": "Am I eligible?", "message": "NMIMS Online MBA eligibility", "action": "send_message"}
+  ],
+  "context": {
+    "university": "NMIMS",
+    "course": "Online MBA",
+    "specialization": null,
+    "entity_id": "course-nmims-mba",
+    "label": "NMIMS · Online MBA"
+  },
+  "metadata": {"route": "factual", "page_type": "course", "entity_id": "course-nmims-mba"},
   "components": [
     {
       "type": "quick_actions",
@@ -65,7 +79,7 @@ LLM-backed responses emit real `token` events as provider deltas arrive, followe
 
 Every event also includes the effective `session_id`; send it on later turns to retain focus.
 Legacy `text`, `suggested_chips`, and `cta` remain available. New clients should render the
-advisor-style `message` and typed `components` when present.
+advisor-style `message`, `components`, `quick_actions`, and existing-focus `context` when present.
 
 - `GET /health` reports catalog/database, Redis, and LLM states separately.
 - `GET /metrics` reports deterministic/Gemini routing rates, Gemini failures, and intent latency
@@ -86,10 +100,30 @@ Embed the standalone widget on any allowed partner page:
 
 The loader fetches tenant branding from `GET /api/widget/config/{site_key}`, creates an
 isolated Shadow DOM UI, and uses the existing `/chat` SSE transport. It supports university,
-program, comparison, callback, and quick-action components without adding dependencies to the
-host site. Add `data-page-university-slug="nmims"` on university pages to preserve page context.
+program, specialization, stacked comparison, picker, guided-finder, detail, callback, and
+quick-action states without adding dependencies to the host site. Add exact page context on
+entity pages:
 
-For local review, run the API and open `http://127.0.0.1:8000/widget/demo.html`. See
+```html
+<script
+  src="https://ai.degreebaba.com/widget.js"
+  data-site-key="degreebaba"
+  data-page-type="course"
+  data-page-entity-slug="nmims-online-mba"
+></script>
+```
+
+The experience layer uses these additive public endpoints:
+
+- `GET /api/widget/page-context` resolves an exact page id, slug, or unique publisher alias.
+- `GET /api/widget/catalog/{university|program|specialization}` supplies grounded picker data.
+- `POST /api/widget/finder` applies the four deterministic catalog filters and returns at most
+  three cheapest/middle/premium cards.
+- `POST /api/widget/context/clear` calls the existing `Focus.clear()` for a session.
+- `POST /api/widget/lead` validates one phone field and reuses the existing lead/CRM funnel.
+
+For local review, run the API and open `http://127.0.0.1:8000/widget/demo.html`. Append
+`?context=home`, `?context=course`, or `?context=specialization` to exercise other opening states. See
 [`docs/WIDGET_2_ARCHITECTURE.md`](docs/WIDGET_2_ARCHITECTURE.md) for configuration, response
 examples, CORS guidance, and the rollout plan.
 

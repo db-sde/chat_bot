@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-university-slug="nmims">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -245,12 +245,26 @@
       </section>
     </main>
     <p class="demo-note">Widget 2.0 preview →</p>
-    <script
-      src="/widget.js"
-      data-site-key="degreebaba"
-      data-page-university-slug="nmims"
-      data-auto-open="true"
-      defer
-    ></script>
+    <script>
+      (() => {
+        const views = {
+          home: {},
+          university: { pageType: "university", pageEntitySlug: "nmims-online" },
+          course: { pageType: "course", pageEntitySlug: "nmims-online-mba" },
+          specialization: {
+            pageType: "specialization",
+            pageEntitySlug: "nmims-mba-analytics",
+          },
+        };
+        const requested = new URLSearchParams(window.location.search).get("context") || "university";
+        const context = views[requested] || views.university;
+        const embed = document.createElement("script");
+        embed.src = "/widget.js";
+        embed.dataset.siteKey = "degreebaba";
+        embed.dataset.autoOpen = "true";
+        Object.assign(embed.dataset, context);
+        document.body.appendChild(embed);
+      })();
+    </script>
   </body>
 </html>

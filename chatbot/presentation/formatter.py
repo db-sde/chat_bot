@@ -11,6 +11,8 @@ from schemas import CardFact, ComparisonCard, ComparisonItem, ProgramCard, Unive
 
 _BULLET_RE = re.compile(r"^\s*[•*-]\s+")
 _SPACE_RE = re.compile(r"\s+")
+_SENTENCE_BOUNDARY_RE = re.compile(r"(?<=[.!?])\s+")
+_MARKDOWN_PREFIX_RE = re.compile(r"(?m)^\s*(?:#{1,4}\s*|[•*-]\s+)")
 _LEADING_DURATION_RE = re.compile(r"^(A|An)\s+(\d+)\s+years\s+", re.IGNORECASE)
 _PROGRAM_ACRONYM_RE = re.compile(
     r"\b(mba|bba|mca|bca|mcom|bcom|msc|bsc)\b",
@@ -117,6 +119,32 @@ def _sentence(value: Any, *, max_chars: int = 360) -> str:
     return rendered if rendered.endswith((".", "!", "?")) else f"{rendered}."
 
 
+def _within_word_limit(value: Any, *, limit: int = 50) -> str:
+    """Keep widget copy readable while the legacy ``text`` stays complete."""
+
+    rendered = _SPACE_RE.sub(
+        " ",
+        _MARKDOWN_PREFIX_RE.sub("", str(value or "")).replace("**", ""),
+    ).strip()
+    words = rendered.split()
+    if len(words) <= limit:
+        return rendered
+
+    selected: list[str] = []
+    count = 0
+    for sentence in _SENTENCE_BOUNDARY_RE.split(rendered):
+        sentence_words = sentence.split()
+        if selected and count + len(sentence_words) > limit:
+            break
+        if len(sentence_words) > limit:
+            break
+        selected.append(sentence)
+        count += len(sentence_words)
+    if selected:
+        return " ".join(selected).strip()
+    return " ".join(words[: limit - 1]).rstrip(" ,;:") + "…"
+
+
 def _joined_labels(values: Iterable[str], *, limit: int = 3) -> str:
     labels = [clean_text(value) for value in values if clean_text(value)][:limit]
     if len(labels) < 2:
@@ -136,6 +164,7 @@ def _next_step(actions: Iterable[Any], fallback: str) -> str:
     if lowered.startswith("compare "):
         return f"Would you like me to compare {action[8:]}?"
     for suffix, prompt in (
+        (" fees and emi", "review the published fees for"),
         (" fees", "review the published fees for"),
         (" eligibility", "check the published eligibility for"),
         (" specializations", "explore the published specializations for"),
@@ -271,13 +300,15 @@ def advisor_message(
     """Create concise advisor copy, leaving raw facts to the component card."""
 
     if isinstance(card, UniversityCard):
-        return _university_advisor_message(card, next_actions)
+        return _within_word_limit(_university_advisor_message(card, next_actions))
     if isinstance(card, ProgramCard):
-        return _program_advisor_message(card, next_actions)
+        return _within_word_limit(_program_advisor_message(card, next_actions))
     if isinstance(card, ComparisonCard):
-        return _comparison_advisor_message(card, next_actions)
+        return _within_word_limit(_comparison_advisor_message(card, next_actions))
     legacy = str(text or "").strip()
-    return legacy or "What would you like to explore about online universities or programs?"
+    return _within_word_limit(
+        legacy or "What would you like to explore about online universities or programs?"
+    )
 
 
 def _parsed_fact(value: str) -> CardFact | None:

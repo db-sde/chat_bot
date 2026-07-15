@@ -33,6 +33,12 @@ from nlu.callback_detector import is_callback_request
 from nlu.intent import Intent, decide_action, heuristic_intent, should_use_reasoning_llm
 from nlu.mention_extractor import extract_mentions
 from presentation import enrich_response
+from presentation.experience import (
+    catalog_options,
+    context_from_entity,
+    finder_results,
+    resolve_page_entity,
+)
 from resilience.health import dependency_health
 from resilience.intent_metrics import ActionSource, IntentMetrics
 from resilience.intent_metrics import intent_metrics as process_intent_metrics
@@ -48,7 +54,21 @@ from routing.knowledge_handler import handle_knowledge, knowledge_topic
 from routing.router import Router, action_from_intent, select_route
 from routing.unsupported_handler import handle_unsupported_entity
 from routing.validation_handler import handle_invalid_combination
-from schemas import ChatRequest, HealthResponse, ReindexResponse, ResponsePayload
+from schemas import (
+    CatalogOptionsResponse,
+    ChatRequest,
+    ContextClearRequest,
+    ContextClearResponse,
+    FinderRequest,
+    FinderResponse,
+    HealthResponse,
+    PageContextResponse,
+    ReindexResponse,
+    ResponseContext,
+    ResponsePayload,
+    WidgetLeadRequest,
+    WidgetLeadResponse,
+)
 from session.state import ConversationState, hydrate_focus_concepts
 from session.store import SessionStore
 from taxonomy.entity_matcher import EntityMatcher, configure_matcher
@@ -334,6 +354,41 @@ class ChatbotService:
             limit=self.settings.session_history_limit,
         )
 
+    def _seed_page_focus(self, state: ConversationState, chat: ChatRequest) -> None:
+        """Seed an empty existing Focus from an exact page entity, never from fuzzy text."""
+
+        if _has_focus(state):
+            return
+        reference = chat.page_entity_slug or chat.page_university_slug
+        if not reference:
+            return
+        entity = resolve_page_entity(self.catalog, reference, chat.page_type)
+        entity_id = str(safe_get(entity, "id", "") or "") if entity is not None else ""
+        metadata = self.catalog.get_metadata(entity_id) if entity_id else None
+        if entity is None or metadata is None:
+            return
+
+        focus = state.focus
+        focus.entity_id = metadata.id
+        focus.university_concept = metadata.university_name
+        focus.course_concept = metadata.category
+        focus.specialization_concept = metadata.specialization_name
+        focus.university = (
+            metadata.id
+            if metadata.page_type == "university"
+            else str(safe_get(entity, "linked_university", "") or "") or None
+        )
+        focus.category = metadata.category
+        focus.specialization = metadata.specialization_name
+        focus.source = "context"
+        for slot, value in (
+            ("university", focus.university_concept),
+            ("course", focus.course_concept),
+            ("specialization", focus.specialization_concept),
+        ):
+            if value:
+                focus.sources[slot] = "context"
+
     def _synthesis_prompt(
         self,
         state: ConversationState,
@@ -387,6 +442,7 @@ class ChatbotService:
             route=result.route,
             catalog=self.catalog,
             operands=result.presentation_operands,
+            message=chat.message,
         )
         return result
 
@@ -410,6 +466,8 @@ class ChatbotService:
         # The callback detector remains the first routing probe after that cheap,
         # catalog-derived pass.
         mentions = extract_mentions(chat.message, self.matcher)
+        if not mentions.has_explicit_mentions:
+            self._seed_page_focus(state, chat)
         cb_match = is_callback_request(chat.message)
         tl.info("chatbot.nlu", "callback_detector: %s", "match" if cb_match else "no match")
         if cb_match:
@@ -1064,7 +1122,7 @@ async def _event_stream(service: ChatbotService, result: TurnResult):
     # partial sentence followed by a contradictory deterministic fallback.
     for token in tokens:
         yield _sse("token", {"session_id": result.session_id, "token": token})
-    final_payload = result.payload.model_copy(update={"text": text, "message": text})
+    final_payload = result.payload.model_copy(update={"text": text})
     # Focus/session state was persisted before streaming. Do not write this older whole-state
     # snapshot after a slow stream: a newer turn for the same session may already exist.
     yield _payload_event(result, final_payload)
@@ -1156,6 +1214,120 @@ async def widget_config_endpoint(site_key: str) -> dict[str, Any]:
         ) from exc
 
 
+@app.get(
+    "/api/widget/catalog/{kind}",
+    response_model=CatalogOptionsResponse,
+)
+async def widget_catalog_endpoint(
+    kind: str,
+    request: Request,
+    university: str | None = None,
+    program: str | None = None,
+    q: str | None = None,
+) -> CatalogOptionsResponse:
+    service: ChatbotService = request.app.state.service
+    try:
+        options, popular = catalog_options(
+            service.catalog,
+            kind,
+            university=university,
+            program=program,
+            query=q,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return CatalogOptionsResponse(
+        kind=kind,  # type: ignore[arg-type]
+        options=options,
+        items=options,
+        popular=popular,
+    )
+
+
+@app.post("/api/widget/finder", response_model=FinderResponse)
+async def widget_finder_endpoint(
+    filters: FinderRequest,
+    request: Request,
+) -> FinderResponse:
+    service: ChatbotService = request.app.state.service
+    results, matched_count = finder_results(
+        service.catalog,
+        program=filters.program,
+        area=filters.area,
+        approval=filters.approval,
+        budget=filters.budget,
+    )
+    return FinderResponse(
+        results=results,
+        matched_count=matched_count,
+        filters=filters.model_dump(exclude_none=True),
+    )
+
+
+@app.post("/api/widget/context/clear", response_model=ContextClearResponse)
+async def widget_context_clear_endpoint(
+    command: ContextClearRequest,
+    request: Request,
+) -> ContextClearResponse:
+    service: ChatbotService = request.app.state.service
+    state_value = await service.session_store.get_or_create(command.session_id)
+    state_value.focus.clear()
+    state_value.pending_clarification = None
+    await service.session_store.set(state_value)
+    return ContextClearResponse(session_id=command.session_id, context=ResponseContext())
+
+
+@app.get("/api/widget/page-context", response_model=PageContextResponse)
+async def widget_page_context_endpoint(
+    request: Request,
+    page_type: str | None = None,
+    page_entity_slug: str | None = None,
+    entity_slug: str | None = None,
+    page_university_slug: str | None = None,
+) -> PageContextResponse:
+    service: ChatbotService = request.app.state.service
+    reference = page_entity_slug or entity_slug or page_university_slug
+    if not reference:
+        return PageContextResponse()
+    if page_type not in {None, "university", "course", "specialization"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid page_type")
+    entity = resolve_page_entity(service.catalog, reference, page_type)
+    if entity is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page entity not found")
+    resolved_type = str(safe_get(entity, "_meta.page_type", ""))
+    entity_id = str(safe_get(entity, "id", "") or "") or None
+    slug = str(safe_get(entity, "slug", "") or "") or None
+    return PageContextResponse(
+        page_type=resolved_type,  # type: ignore[arg-type]
+        entity_id=entity_id,
+        slug=slug,
+        context=context_from_entity(entity, service.catalog),
+    )
+
+
+@app.post("/api/widget/lead", response_model=WidgetLeadResponse)
+async def widget_lead_endpoint(
+    lead: WidgetLeadRequest,
+    request: Request,
+) -> WidgetLeadResponse:
+    service: ChatbotService = request.app.state.service
+    session_id = lead.session_id or str(uuid4())
+    state_value = await service.session_store.get_or_create(session_id)
+    try:
+        service.lead_funnel.capture_phone_only(
+            state_value,
+            lead.phone,
+            source=lead.source,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await service.session_store.set(state_value)
+    return WidgetLeadResponse(
+        session_id=session_id,
+        message="Thanks — a DegreeBaba counsellor can contact you shortly.",
+    )
+
+
 @app.post(
     "/chat",
     response_class=StreamingResponse,
@@ -1173,6 +1345,13 @@ async def chat_endpoint(chat: ChatRequest, request: Request) -> StreamingRespons
             "I couldn't complete that lookup just now. Which university or course should I check?",
             suggested_chips=["Browse course categories", "Browse universities"],
             cta=lead_capture_cta(),
+        )
+        payload = enrich_response(
+            payload,
+            state=state,
+            route="fallback",
+            catalog=service.catalog,
+            message=chat.message,
         )
         result = TurnResult(session_id, state, payload, "fallback")
     return StreamingResponse(

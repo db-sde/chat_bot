@@ -29,6 +29,8 @@ class ChatRequest(TransportModel):
     message: str = Field(min_length=1, max_length=4000)
     session_id: str | None = Field(default=None, min_length=1, max_length=200)
     site_key: str | None = Field(default=None)
+    page_type: PageType | None = None
+    page_entity_slug: str | None = Field(default=None)
     page_university_slug: str | None = Field(default=None)
 
     @field_validator("message")
@@ -54,6 +56,27 @@ class CardFact(TransportModel):
     value: str = Field(min_length=1)
 
 
+class CardReview(TransportModel):
+    text: str = Field(min_length=1)
+    reviewer_name: str | None = None
+    reviewer_label: str | None = None
+
+
+class CardFAQ(TransportModel):
+    question: str = Field(min_length=1)
+    answer: str = Field(min_length=1)
+
+
+class CardDetails(TransportModel):
+    """Progressively disclosed, catalog-backed content for an entity card."""
+
+    description: str | None = None
+    accreditations: list[str] = Field(default_factory=list)
+    admission_steps: str | None = None
+    reviews: list[CardReview] = Field(default_factory=list)
+    faqs: list[CardFAQ] = Field(default_factory=list)
+
+
 class UniversityCard(TransportModel):
     type: Literal["university_card"] = "university_card"
     id: str | None = None
@@ -62,8 +85,15 @@ class UniversityCard(TransportModel):
     summary: str | None = None
     logo_url: str | None = None
     details_url: str | None = None
+    established_year: str | None = None
+    starting_fee: str | None = None
+    program_count: int | None = Field(default=None, ge=0)
+    learning_mode: str | None = None
+    naac_grade: str | None = None
+    ugc_status: str | None = None
     highlights: list[CardFact] = Field(default_factory=list)
     programs: list[str] = Field(default_factory=list)
+    details: CardDetails | None = None
 
 
 class ProgramCard(TransportModel):
@@ -79,10 +109,17 @@ class ProgramCard(TransportModel):
     fee: str | None = None
     eligibility: str | None = None
     mode: str | None = None
+    naac_grade: str | None = None
+    ugc_status: str | None = None
+    specialization_count: int | None = Field(default=None, ge=0)
+    emi: str | None = None
+    career_outcome: str | None = None
+    average_salary: str | None = None
     specializations: list[str] = Field(default_factory=list)
     career_outcomes: list[str] = Field(default_factory=list)
     highlights: list[CardFact] = Field(default_factory=list)
     details_url: str | None = None
+    details: CardDetails | None = None
 
 
 class ComparisonItem(TransportModel):
@@ -96,6 +133,13 @@ class ComparisonCard(TransportModel):
     type: Literal["comparison_card"] = "comparison_card"
     title: str = "Comparison"
     items: list[ComparisonItem] = Field(min_length=2, max_length=3)
+    verdict: str | None = None
+
+
+class CardListComponent(TransportModel):
+    type: Literal["card_list"] = "card_list"
+    title: str | None = None
+    items: list[UniversityCard | ProgramCard] = Field(min_length=1, max_length=3)
 
 
 class LeadCTAComponent(TransportModel):
@@ -117,10 +161,79 @@ class QuickActionsComponent(TransportModel):
     actions: list[QuickAction] = Field(min_length=1, max_length=6)
 
 
+class ResponseContext(TransportModel):
+    """Read-only projection of the existing session focus for widget display."""
+
+    university: str | None = None
+    course: str | None = None
+    specialization: str | None = None
+    entity_id: str | None = None
+    label: str | None = None
+
+
+class CatalogOption(TransportModel):
+    id: str
+    slug: str
+    page_type: PageType
+    name: str
+    university_name: str | None = None
+    category: str | None = None
+    meta: str | None = None
+
+
+class CatalogOptionsResponse(TransportModel):
+    kind: Literal["university", "program", "specialization"]
+    options: list[CatalogOption] = Field(default_factory=list)
+    items: list[CatalogOption] = Field(default_factory=list)
+    popular: list[CatalogOption] = Field(default_factory=list)
+
+
+class FinderRequest(TransportModel):
+    program: str | None = None
+    area: str | None = None
+    approval: str | None = None
+    budget: str | float | int | None = None
+
+
+class FinderResponse(TransportModel):
+    results: list[ProgramCard] = Field(default_factory=list, max_length=3)
+    matched_count: int = Field(ge=0)
+    filters: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContextClearRequest(TransportModel):
+    session_id: str = Field(min_length=1, max_length=200)
+
+
+class ContextClearResponse(TransportModel):
+    session_id: str
+    context: ResponseContext = Field(default_factory=ResponseContext)
+
+
+class WidgetLeadRequest(TransportModel):
+    session_id: str | None = Field(default=None, min_length=1, max_length=200)
+    phone: str = Field(min_length=10, max_length=24)
+    source: str | None = Field(default=None, max_length=100)
+
+
+class WidgetLeadResponse(TransportModel):
+    success: Literal[True] = True
+    session_id: str
+    message: str
+
+
+class PageContextResponse(TransportModel):
+    page_type: PageType | None = None
+    entity_id: str | None = None
+    slug: str | None = None
+    context: ResponseContext = Field(default_factory=ResponseContext)
+
+
 ResponseComponent = Annotated[
     UniversityCard
     | ProgramCard
     | ComparisonCard
+    | CardListComponent
     | LeadCTAComponent
     | QuickActionsComponent,
     Field(discriminator="type"),
@@ -133,6 +246,9 @@ class ResponsePayload(TransportModel):
     suggested_chips: list[str] = Field(default_factory=list)
     cta: CTA | None = None
     components: list[ResponseComponent] = Field(default_factory=list)
+    quick_actions: list[QuickAction] = Field(default_factory=list)
+    context: ResponseContext = Field(default_factory=ResponseContext)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def default_message_from_legacy_text(self) -> ResponsePayload:

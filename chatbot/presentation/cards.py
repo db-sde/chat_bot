@@ -14,6 +14,8 @@ from response.cards import (
     entity_page_type,
     entity_university,
     first_value,
+    iter_catalog_entities,
+    parse_money,
 )
 from response.templates import (
     accreditation_items,
@@ -23,7 +25,10 @@ from response.templates import (
 )
 from schemas import (
     CTA,
+    CardDetails,
     CardFact,
+    CardFAQ,
+    CardReview,
     ComparisonCard,
     ComparisonItem,
     LeadCTAComponent,
@@ -82,6 +87,124 @@ def _details_url(entity: Any) -> str | None:
     )
 
 
+def _linked_entity(entity: Any, path: str, catalog: Any) -> Any:
+    reference = safe_get(entity, path, None)
+    if isinstance(reference, Mapping):
+        embedded_type = entity_page_type(reference)
+        if embedded_type:
+            return reference
+        reference = first_value(reference, "id", "entity_id", "slug", default=None)
+    return catalog_get_entity(catalog, reference) if reference is not None else None
+
+
+def _first_catalog_value(entity: Any, catalog: Any, *paths: str) -> Any:
+    value = first_value(entity, *paths, default=None)
+    if value is not None and clean_text(value):
+        return value
+    for relation in ("linked_course", "linked_university"):
+        linked = _linked_entity(entity, relation, catalog)
+        if linked is not None:
+            value = first_value(linked, *paths, default=None)
+            if value is not None and clean_text(value):
+                return value
+    return None
+
+
+def _integer_value(value: Any) -> int | None:
+    if isinstance(value, int):
+        return max(value, 0)
+    rendered = clean_text(value)
+    if not rendered:
+        return None
+    digits = "".join(character for character in rendered if character.isdigit())
+    return int(digits) if digits else None
+
+
+def _card_details(entity: Any, catalog: Any = None) -> CardDetails | None:
+    description = optional_text(
+        first_value(
+            entity,
+            "hero_description",
+            "about_content",
+            "why_choose_content",
+            default=None,
+        ),
+        max_chars=2400,
+    )
+    accreditations = accreditation_items(entity)
+    if not accreditations:
+        for relation in ("linked_course", "linked_university"):
+            linked = _linked_entity(entity, relation, catalog)
+            if linked is not None and (accreditations := accreditation_items(linked)):
+                break
+    admission_steps = optional_text(
+        first_value(entity, "admission_steps", "admission_fee_note", default=None),
+        max_chars=2400,
+    )
+
+    reviews: list[CardReview] = []
+    for review in safe_get(entity, "reviews", []) or []:
+        text = optional_text(safe_get(review, "review_text", None), max_chars=900)
+        if not text:
+            continue
+        reviews.append(
+            CardReview(
+                text=text,
+                reviewer_name=optional_text(safe_get(review, "reviewer_name", None)),
+                reviewer_label=optional_text(safe_get(review, "reviewer_label", None)),
+            )
+        )
+        if len(reviews) >= 6:
+            break
+
+    faqs: list[CardFAQ] = []
+    for faq in safe_get(entity, "faqs", []) or []:
+        question = optional_text(safe_get(faq, "question", None), max_chars=300)
+        answer = optional_text(safe_get(faq, "answer", None), max_chars=1600)
+        if question and answer:
+            faqs.append(CardFAQ(question=question, answer=answer))
+        if len(faqs) >= 8:
+            break
+
+    details = CardDetails(
+        description=description,
+        accreditations=accreditations[:8],
+        admission_steps=admission_steps,
+        reviews=reviews,
+        faqs=faqs,
+    )
+    return details if any(details.model_dump().values()) else None
+
+
+def _specialization_count(entity: Any, catalog: Any) -> int | None:
+    published = _integer_value(safe_get(entity, "num_specializations", None))
+    if published is not None:
+        return published
+    entity_id = _identifier(entity)
+    if entity_page_type(entity) == "course" and entity_id:
+        count = sum(
+            1
+            for candidate in iter_catalog_entities(catalog)
+            if entity_page_type(candidate) == "specialization"
+            and clean_text(
+                first_value(candidate, "linked_course.id", "linked_course", default=None)
+            )
+            == entity_id
+        )
+        return count or None
+    other_specs = safe_get(entity, "other_specs", []) or []
+    return len(other_specs) or None
+
+
+def _career_pair(entity: Any) -> tuple[str | None, str | None]:
+    for profile in safe_get(entity, "job_profiles", []) or []:
+        career = optional_text(first_value(profile, "job_title", "role", "name", default=None))
+        salary = optional_text(first_value(profile, "avg_salary", "salary", default=None))
+        if career or salary:
+            return career, salary
+    return None, None
+
+
 def _approval_fact(entity: Any) -> CardFact | None:
     values = accreditation_items(entity)
     return card_fact("Approvals & accreditations", "; ".join(values[:4])) if values else None
@@ -100,19 +223,28 @@ def build_university_card(entity: Any) -> UniversityCard:
         fields=("program_name", "name", "title"),
         limit=8,
     )
+    program_rows = safe_get(entity, "programs_table", None) or []
+    program_count = _integer_value(safe_get(entity, "num_programs", None))
+    if program_count is None and isinstance(program_rows, Iterable) and not isinstance(
+        program_rows, (str, bytes, Mapping)
+    ):
+        program_count = len(list(program_rows))
+    established_year = optional_text(safe_get(entity, "established_year", None))
+    learning_mode = optional_text(
+        first_value(entity, "mode_of_learning", "mode", default=None)
+    )
+    starting_fee = optional_text(first_value(entity, "starting_fee", default=None))
+    naac_grade = optional_text(safe_get(entity, "naac_grade", None))
+    ugc_status = optional_text(
+        first_value(entity, "ugc_approved", "ugc_status", default=None)
+    )
     highlights = unique_facts(
         (
-            card_fact("Established", safe_get(entity, "established_year", None)),
-            card_fact(
-                "Learning mode",
-                first_value(entity, "mode_of_learning", "mode", default=None),
-            ),
-            card_fact("Starting fee", first_value(entity, "starting_fee", default=None)),
-            card_fact("NAAC grade", safe_get(entity, "naac_grade", None)),
-            card_fact(
-                "UGC status",
-                first_value(entity, "ugc_approved", "ugc_status", default=None),
-            ),
+            card_fact("Established", established_year),
+            card_fact("Learning mode", learning_mode),
+            card_fact("Starting fee", starting_fee),
+            card_fact("NAAC grade", naac_grade),
+            card_fact("UGC status", ugc_status),
             _approval_fact(entity),
             _ranking_fact(entity),
             card_fact(
@@ -138,8 +270,15 @@ def build_university_card(entity: Any) -> UniversityCard:
             )
         ),
         details_url=_details_url(entity),
+        established_year=established_year,
+        starting_fee=starting_fee,
+        program_count=program_count,
+        learning_mode=learning_mode,
+        naac_grade=naac_grade,
+        ugc_status=ugc_status,
         highlights=highlights,
         programs=programs,
+        details=_card_details(entity),
     )
 
 
@@ -156,6 +295,21 @@ def build_program_card(entity: Any, catalog: Any = None) -> ProgramCard:
         ),
         max_chars=300,
     )
+    naac_grade = optional_text(_first_catalog_value(entity, catalog, "naac_grade"))
+    ugc_status = optional_text(
+        _first_catalog_value(entity, catalog, "ugc_status", "ugc_approved")
+    )
+    eligibility = optional_text(
+        _first_catalog_value(
+            entity,
+            catalog,
+            "eligibility_summary",
+            "eligibility_content",
+        ),
+        max_chars=320,
+    )
+    emi = optional_text(_first_catalog_value(entity, catalog, "emi_amount", "emi_content"))
+    career_outcome, average_salary = _career_pair(entity)
     highlights = unique_facts(
         (
             _approval_fact(entity),
@@ -174,20 +328,19 @@ def build_program_card(entity: Any, catalog: Any = None) -> ProgramCard:
         summary=_summary(entity),
         duration=optional_text(safe_get(entity, "duration", None)),
         fee=optional_text(entity_fee(entity)),
-        eligibility=optional_text(
-            first_value(
-                entity,
-                "eligibility_summary",
-                "eligibility_content",
-                default=None,
-            ),
-            max_chars=320,
-        ),
+        eligibility=eligibility,
         mode=optional_text(first_value(entity, "mode", "mode_of_learning", default=None)),
+        naac_grade=naac_grade,
+        ugc_status=ugc_status,
+        specialization_count=_specialization_count(entity, catalog),
+        emi=emi,
+        career_outcome=career_outcome,
+        average_salary=average_salary,
         specializations=specialization_items(entity, catalog),
         career_outcomes=career_items(entity),
         highlights=highlights,
         details_url=_details_url(entity),
+        details=_card_details(entity, catalog),
     )
 
 
@@ -213,47 +366,37 @@ def _resolve_operand(operand: Any, catalog: Any) -> Any:
 def _comparison_item(entity: Any, catalog: Any = None) -> ComparisonItem:
     page_type = entity_page_type(entity)
     provider = entity_university(entity)
-    program_count = len(
-        catalog_strings(
-            safe_get(entity, "programs_table", None),
-            fields=("program_name", "name", "title"),
-            limit=8,
-        )
-    )
     specializations = specialization_items(entity, catalog)
-    approvals = accreditation_items(entity)
-    rankings = ranking_items(entity)
-    careers = career_items(entity)
-    placement = optional_text(
-        first_value(
-            entity,
-            "placement_content",
-            "placement_support",
-            "placements_content",
-            default=None,
-        ),
-        max_chars=240,
+    specialization_count = _specialization_count(entity, catalog)
+    specialization_value = (
+        str(specialization_count)
+        if specialization_count is not None
+        else ", ".join(specializations[:5])
     )
     facts = unique_facts(
         (
-            card_fact("Fee", entity_fee(entity)),
+            card_fact("Fees", entity_fee(entity)),
             card_fact("Duration", safe_get(entity, "duration", None)),
             card_fact("Mode", first_value(entity, "mode", "mode_of_learning", default=None)),
+            card_fact("NAAC grade", _first_catalog_value(entity, catalog, "naac_grade")),
+            card_fact(
+                "UGC status",
+                _first_catalog_value(entity, catalog, "ugc_status", "ugc_approved"),
+            ),
+            card_fact("Specializations", specialization_value),
+            card_fact(
+                "EMI",
+                _first_catalog_value(entity, catalog, "emi_amount", "emi_content"),
+            ),
             card_fact(
                 "Eligibility",
-                first_value(
+                _first_catalog_value(
                     entity,
+                    catalog,
                     "eligibility_summary",
                     "eligibility_content",
-                    default=None,
                 ),
             ),
-            card_fact("Programs", str(program_count) if program_count else None),
-            card_fact("Specializations", ", ".join(specializations[:5])),
-            card_fact("Approvals", "; ".join(approvals[:3])),
-            card_fact("Rankings", "; ".join(rankings[:2])),
-            card_fact("Placement support", placement),
-            card_fact("Career outcomes", ", ".join(careers[:4])),
         ),
         limit=8,
     )
@@ -263,6 +406,30 @@ def _comparison_item(entity: Any, catalog: Any = None) -> ComparisonItem:
         subtitle=provider if page_type != "university" and provider else None,
         facts=facts,
     )
+
+
+def _comparison_verdict(items: Iterable[ComparisonItem]) -> str | None:
+    priced: list[tuple[float, str]] = []
+    for item in items:
+        fee = next(
+            (
+                fact.value
+                for fact in item.facts
+                if fact.label in {"Fees", "Fee", "Starting fee", "Fee range"}
+            ),
+            None,
+        )
+        amount = parse_money(fee)
+        if amount is not None:
+            label = f"{item.subtitle} — {item.name}" if item.subtitle else item.name
+            priced.append((amount, label))
+    if len(priced) < 2:
+        return "There isn't enough comparable published fee data for a fee-based verdict."
+    lowest = min(amount for amount, _ in priced)
+    winners = [name for amount, name in priced if amount == lowest]
+    if len(winners) == 1:
+        return f"{winners[0]} has the lowest published fee among these options."
+    return "The lowest published fee is tied between " + " and ".join(winners) + "."
 
 
 def build_comparison_card(
@@ -289,7 +456,11 @@ def build_comparison_card(
             break
     if len(items) < 2:
         return None
-    return ComparisonCard(title=clean_text(title) or "Comparison", items=items)
+    return ComparisonCard(
+        title=clean_text(title) or "Comparison",
+        items=items,
+        verdict=_comparison_verdict(items),
+    )
 
 
 def build_comparison_card_from_text(
@@ -302,7 +473,11 @@ def build_comparison_card_from_text(
     items = comparison_items_from_text(text)
     if len(items) < 2:
         return None
-    return ComparisonCard(title=clean_text(title) or "Comparison", items=items)
+    return ComparisonCard(
+        title=clean_text(title) or "Comparison",
+        items=items,
+        verdict=_comparison_verdict(items),
+    )
 
 
 def build_lead_cta(cta: CTA | Mapping[str, Any]) -> LeadCTAComponent:

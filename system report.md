@@ -18,6 +18,7 @@ chatbot/
 ├── data/
 │   ├── accessor.py
 │   ├── loader.py
+│   ├── catalog.sample.json
 │   └── models/
 │       ├── __init__.py
 │       ├── university.py
@@ -54,12 +55,26 @@ chatbot/
 │   ├── advisory_handler.py
 │   ├── list_handler.py
 │   ├── knowledge_handler.py
+│   ├── unsupported_handler.py
+│   ├── validation_handler.py
 │   └── fallback_handler.py
 ├── response/
 │   ├── builder.py
 │   ├── cta.py
 │   ├── cards.py
 │   └── templates.py
+├── presentation/
+│   ├── __init__.py
+│   ├── cards.py
+│   ├── formatter.py
+│   └── response_builder.py
+├── widget/
+│   ├── __init__.py
+│   ├── config.py
+│   ├── configs.json
+│   ├── demo.html
+│   ├── widget.css
+│   └── widget.js
 ├── leads/
 │   ├── funnel.py
 │   ├── webhook.py
@@ -76,7 +91,7 @@ chatbot/
 
 ## 2. Request Lifecycle & Architecture Flow
 
-The request lifecycle is split into deterministic matching, LLM classification, slot resolution, and routing:
+The request lifecycle is split into deterministic matching, LLM classification, slot resolution, routing, and presentation enrichment:
 
 ```mermaid
 sequenceDiagram
@@ -88,6 +103,7 @@ sequenceDiagram
     participant Resolver as resolver/focus_updater.py & clarifier.py
     participant Router as routing/router.py
     participant Handler as routing/*_handler.py
+    participant Presentation as presentation/response_builder.py
     participant CRM as leads/funnel.py & webhook.py
 
     User->>API: POST /chat {message, session_id}
@@ -110,6 +126,8 @@ sequenceDiagram
         Router->>Handler: Execute handler (e.g. factual_handler / list_handler)
         Handler-->>API: Renders template response
     end
+    API->>Presentation: enrich_response() (resolves entities/cards)
+    Presentation-->>API: Return ResponsePayload (with message & components)
     API-->>User: Streaming token / Response event (SSE)
 ```
 
@@ -378,6 +396,18 @@ sequenceDiagram
     *   `handle_knowledge` ([routing/knowledge_handler.py:L11-26](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/routing/knowledge_handler.py#L11-L26)): Maps educational query terms to predefined answers.
 *   **Core Imports**: `response.builder.build_response`.
 
+#### [routing/unsupported_handler.py](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/routing/unsupported_handler.py)
+*   **Purpose**: Handles references to entities/names that are recognized but absent from the published catalog.
+*   **Key Components**:
+    *   `handle_unsupported_entity` ([routing/unsupported_handler.py:L24-62](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/routing/unsupported_handler.py#L24-L62)): Returns a polite response indicating that the specific entity was not found, while listing active providers within the requested course category to guide the user back into catalog scope.
+*   **Core Imports**: `response.builder.build_response`, `routing.category_handler.category_summary`.
+
+#### [routing/validation_handler.py](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/routing/validation_handler.py)
+*   **Purpose**: Handles valid entities that cannot form a valid published program/university combination.
+*   **Key Components**:
+    *   `handle_invalid_combination` ([routing/validation_handler.py:L13-46](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/routing/validation_handler.py#L13-L46)): Identifies conflict states (e.g. university X not offering course Y) and returns alternative universities offering that category.
+*   **Core Imports**: `response.builder.build_response`, `routing.category_handler.category_summary`.
+
 #### [routing/fallback_handler.py](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/routing/fallback_handler.py)
 *   **Purpose**: General recovery flow when query intent cannot be resolved.
 *   **Key Components**:
@@ -470,3 +500,55 @@ sequenceDiagram
     *   `IntentMetrics` ([resilience/intent_metrics.py:L41-164](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/resilience/intent_metrics.py#L41-L164)): Safe collector supporting multi-thread updates, snapshot summaries with calculated percentile latency tails (P50/P95), and epoch-scoped resets.
     *   `MessageMetricToken` ([resilience/intent_metrics.py:L24-30](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/resilience/intent_metrics.py#L24-L30)): Tracks metrics tracking states across epochs.
 *   **Core Imports**: `threading`, `time`, `collections.deque`.
+
+---
+
+### 3.12 Additive Rich-Response Presentation Layer
+
+#### [presentation/response_builder.py](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/response_builder.py)
+*   **Purpose**: Post-processes and enriches standard dialog responses with rich card data components.
+*   **Key Components**:
+    *   `enrich_response` ([presentation/response_builder.py:L128-210](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/response_builder.py#L128-L210)): Maps the dialog route names (factual, university, program, comparison) to target cards structures. Wraps outputs into the updated `ResponsePayload` with clean text copies and active components.
+*   **Core Imports**: `response.builder.build_transport_components`, `presentation.cards`, `presentation.formatter.advisor_message`, `schemas.ResponsePayload`.
+
+#### [presentation/cards.py](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/cards.py)
+*   **Purpose**: Maps raw catalog fields to typed Pydantic card components.
+*   **Key Components**:
+    *   `build_university_card` ([presentation/cards.py:L95-143](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/cards.py#L95-L143)): Generates university details components containing NAAC grades, establishment years, list of programs, and accreditation badges.
+    *   `build_program_card` ([presentation/cards.py:L146-191](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/cards.py#L146-L191)): Generates course or specialization detail card grids, including durations, eligibility guidelines, starting fees, and career outlines.
+    *   `build_comparison_card` ([presentation/cards.py:L268-292](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/cards.py#L268-L292)): Compiles side-by-side matrices comparing fee policies, program modes, and rankings for multiple target universities.
+    *   `build_lead_cta` ([presentation/cards.py:L308-315](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/cards.py#L308-L315)): Builds structured callback scheduling component targets.
+    *   `build_quick_actions` ([presentation/cards.py:L318-330](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/cards.py#L318-L330)): Generates action prompt chips containing message parameters.
+*   **Core Imports**: `data.accessor.safe_get`, `schemas.UniversityCard`, `schemas.ProgramCard`, `schemas.ComparisonCard`.
+
+#### [presentation/formatter.py](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/formatter.py)
+*   **Purpose**: Formatting primitives and advisor messaging layout rules.
+*   **Key Components**:
+    *   `advisor_message` ([presentation/formatter.py:L265-280](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/formatter.py#L265-L280)): Polishes and structures catalog descriptions, separating raw database metrics (which go in the card details) from advisor text bubbles.
+    *   `comparison_items_from_text` ([presentation/formatter.py:L294-336](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/presentation/formatter.py#L294-L336)): Parses plaintext lists of comparative parameters back into structured side-by-side components.
+*   **Core Imports**: `response.cards.clean_text`, `schemas.CardFact`, `schemas.ComparisonItem`.
+
+---
+
+### 3.13 Widget Configuration & Embed System
+
+#### [widget/config.py](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/widget/config.py)
+*   **Purpose**: Validates, sanitizes, and exposes file-backed appearance configurations for widgets.
+*   **Key Components**:
+    *   `WidgetConfig` ([widget/config.py:L61-102](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/widget/config.py#L61-L102)): Validates widget theme profiles (colors, welcome alerts, avatar image links, and visibility settings).
+    *   `WidgetConfigStore` ([widget/config.py:L130-241](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/widget/config.py#L130-L241)): Atomically loads configurations from `configs.json` with multi-thread locking safety and automatic file-monitoring live-reload properties.
+*   **Core Imports**: `pydantic.BaseModel`, `pydantic.field_validator`, `urllib.parse.urlsplit`.
+
+#### [widget/configs.json](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/widget/configs.json)
+*   **Purpose**: File-backed storage holding active key-value branding settings. Maps public tenant identifiers (like `degreebaba`) to colors, name descriptions, and welcome prompts.
+
+#### [widget/demo.html](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/widget/demo.html)
+*   **Purpose**: Premium landing template used to test and showcase the integrated conversational widget. Employs modern CSS grids and embeds `widget.js` dynamically.
+
+#### [widget/widget.js](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/widget/widget.js)
+*   **Purpose**: Client-side widget launcher and display script.
+*   **Key Components**:
+    *   `degreeBabaWidgetBootstrap` ([widget/widget.js:L1-595](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/widget/widget.js#L1-L595)): Self-invoking module that initializes configuration parameters, builds shadow DOM nodes (to isolate widget styles), sets up custom event streams, and registers controls under the global `window.DegreeBabaWidget` instance namespace.
+
+#### [widget/widget.css](file:///Users/aryankinha/Documents/Degree/CHAT%20BOT/chatbot/widget/widget.css)
+*   **Purpose**: Comprehensive floating UI layout styling library containing chat bubbles, custom card grids, quick chips, and bouncing loading dots.

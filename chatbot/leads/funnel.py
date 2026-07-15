@@ -380,13 +380,44 @@ class LeadFunnel:
             )
         )
 
-    def _schedule_push(self, state: Any, changed: list[str]) -> None:
+    def capture_phone_only(
+        self,
+        state: Any,
+        phone: str,
+        *,
+        source: str | None = None,
+    ) -> str:
+        """Capture the widget's single-field lead form through the existing CRM path."""
+
+        compact = re.sub(r"[()\s-]", "", str(phone or ""))
+        match = PHONE_RE.fullmatch(compact)
+        if match is None:
+            raise ValueError("phone must be a valid 10-digit Indian mobile number")
+        normalized = match.group(1)
+        state.lead.phone = normalized
+        self.complete(state)
+        self._schedule_push(
+            state,
+            ["phone"],
+            extra_context={"widget_source": source} if source else None,
+        )
+        return normalized
+
+    def _schedule_push(
+        self,
+        state: Any,
+        changed: list[str],
+        *,
+        extra_context: dict[str, Any] | None = None,
+    ) -> None:
         snapshot = (state.lead.name, state.lead.phone, state.lead.email)
         if self._last_sent.get(state.session_id) == snapshot:
             return
         self._last_sent[state.session_id] = snapshot
         focus = getattr(state, "focus", None)
         context = focus.model_dump(exclude_none=True) if hasattr(focus, "model_dump") else {}
+        if extra_context:
+            context.update(extra_context)
         event = CRMLeadEvent(
             session_id=state.session_id,
             name=state.lead.name,
