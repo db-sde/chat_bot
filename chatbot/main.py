@@ -13,9 +13,9 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi import Body, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, StreamingResponse
 
 import logging_setup
 from advisor.flow import advisor_can_consume, handle_advisor_turn
@@ -39,6 +39,7 @@ from presentation.experience import (
     finder_results,
     resolve_page_entity,
 )
+from presentation.guided_navigation import guide_catalog, guide_comparison, guide_context
 from resilience.health import dependency_health
 from resilience.intent_metrics import ActionSource, IntentMetrics
 from resilience.intent_metrics import intent_metrics as process_intent_metrics
@@ -1191,6 +1192,137 @@ async def widget_stylesheet() -> FileResponse:
 @app.get("/widget/demo.html", include_in_schema=False)
 async def widget_demo() -> FileResponse:
     return FileResponse(WIDGET_DIR / "demo.html", media_type="text/html")
+
+
+@app.get("/widget/prototype", include_in_schema=False)
+async def guided_prototype_redirect() -> RedirectResponse:
+    """Keep relative simulator assets stable when the short URL is opened."""
+
+    return RedirectResponse(
+        url="/widget/prototype/",
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    )
+
+
+@app.get("/widget/prototype/", include_in_schema=False)
+@app.get("/widget/prototype/index.html", include_in_schema=False)
+async def guided_prototype() -> FileResponse:
+    """Serve the isolated guided-navigation testing simulator."""
+
+    return FileResponse(WIDGET_DIR / "prototype" / "index.html", media_type="text/html")
+
+
+@app.get("/widget/prototype/prototype.css", include_in_schema=False)
+async def guided_prototype_stylesheet() -> FileResponse:
+    return FileResponse(
+        WIDGET_DIR / "prototype" / "prototype.css",
+        media_type="text/css",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/widget/prototype/prototype.js", include_in_schema=False)
+async def guided_prototype_script() -> FileResponse:
+    return FileResponse(
+        WIDGET_DIR / "prototype" / "prototype.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/api/widget/guide/context")
+async def widget_guide_context_endpoint(
+    request: Request,
+    page_type: str | None = None,
+    university: str | None = None,
+    course: str | None = None,
+    specialization: str | None = None,
+    entity_id: str | None = None,
+) -> dict[str, Any]:
+    """Project page context directly from the catalog, bypassing the chat pipeline."""
+
+    service: ChatbotService = request.app.state.service
+    try:
+        result = guide_context(
+            service.catalog,
+            page_type=page_type or "homepage",
+            university=university,
+            course=course,
+            specialization=specialization,
+            entity_id=entity_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Guided catalog context not found",
+        )
+    return result
+
+
+@app.get("/api/widget/guide/catalog/{kind}")
+async def widget_guide_catalog_endpoint(
+    kind: str,
+    request: Request,
+    q: str | None = None,
+    university: str | None = None,
+    course: str | None = None,
+) -> dict[str, Any]:
+    """Return catalog-grounded category/card rows without conversational routing."""
+
+    service: ChatbotService = request.app.state.service
+    try:
+        items = guide_catalog(
+            service.catalog,
+            kind,
+            query=q,
+            university=university,
+            course=course,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return {"items": items}
+
+
+@app.post("/api/widget/guide/compare")
+async def widget_guide_compare_endpoint(
+    request: Request,
+    payload: Any = Body(...),
+) -> dict[str, Any]:
+    """Compare two or three exact catalog records using the shared card builder."""
+
+    if not isinstance(payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Request body must contain an entity_ids list",
+        )
+    entity_ids = payload.get("entity_ids")
+    if (
+        not isinstance(entity_ids, list)
+        or not 2 <= len(entity_ids) <= 3
+        or any(not isinstance(item, str) or not item.strip() for item in entity_ids)
+        or len(set(entity_ids)) != len(entity_ids)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="entity_ids must contain two or three distinct catalog ids",
+        )
+
+    service: ChatbotService = request.app.state.service
+    unknown = [entity_id for entity_id in entity_ids if entity_id not in service.catalog.entities]
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Catalog entity not found: {unknown[0]}",
+        )
+    comparison = guide_comparison(service.catalog, entity_ids)
+    if comparison is None:  # Defensive: distinct resolved operands should always build a card.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The selected catalog entities cannot be compared",
+        )
+    return comparison
 
 
 @app.get("/api/widget/config/{site_key}")

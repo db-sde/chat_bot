@@ -127,6 +127,12 @@ For local review, run the API and open `http://127.0.0.1:8000/widget/demo.html`.
 [`docs/WIDGET_2_ARCHITECTURE.md`](docs/WIDGET_2_ARCHITECTURE.md) for configuration, response
 examples, CORS guidance, and the rollout plan.
 
+The isolated guided-navigation simulator is available at
+`http://127.0.0.1:8000/widget/prototype`. It uses read-only catalog guide endpoints for every
+guided click while keeping typed messages on the existing `/chat` transport. See
+[`docs/GUIDED_NAVIGATION_PROTOTYPE.md`](docs/GUIDED_NAVIGATION_PROTOTYPE.md) for its architecture,
+catalog data constraints, scenario mappings, and production integration path.
+
 ## Configuration
 
 Copy `.env.example` to `.env`. Important settings are:

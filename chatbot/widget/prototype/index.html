@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#0e1f3d">
+    <title>DegreeBaba Guided Navigation Prototype</title>
+    <link rel="stylesheet" href="./prototype.css">
+  </head>
+  <body>
+    <main class="simulator">
+      <header class="simulator__intro">
+        <div>
+          <p class="eyebrow">DegreeBaba experience lab</p>
+          <h1>Guided admissions explorer</h1>
+          <p class="simulator__lede">
+            Test page-aware catalog navigation alongside the current chatbot.
+          </p>
+        </div>
+        <div class="route-legend" aria-label="Prototype routing behavior">
+          <span><i class="route-legend__dot route-legend__dot--guided" aria-hidden="true"></i>Guided clicks use catalog data</span>
+          <span><i class="route-legend__dot route-legend__dot--chat" aria-hidden="true"></i>Typed messages use the chat pipeline</span>
+        </div>
+      </header>
+
+      <div class="simulator__layout">
+        <aside class="testing-panel" aria-labelledby="testing-panel-title">
+          <div class="testing-panel__header">
+            <div>
+              <p class="eyebrow">Testing controls</p>
+              <h2 id="testing-panel-title">Simulated page</h2>
+            </div>
+            <span class="testing-badge">Prototype</span>
+          </div>
+
+          <form id="scenario-form" class="scenario-form">
+            <fieldset>
+              <legend class="sr-only">Choose the page hosting the widget</legend>
+              <label class="scenario-option">
+                <input type="radio" name="scenario" value="homepage" checked>
+                <span class="scenario-option__indicator" aria-hidden="true"></span>
+                <span>
+                  <strong>Homepage</strong>
+                  <small>No catalog context</small>
+                </span>
+              </label>
+              <label class="scenario-option">
+                <input type="radio" name="scenario" value="university">
+                <span class="scenario-option__indicator" aria-hidden="true"></span>
+                <span>
+                  <strong>University</strong>
+                  <small>University context</small>
+                </span>
+              </label>
+              <label class="scenario-option">
+                <input type="radio" name="scenario" value="course">
+                <span class="scenario-option__indicator" aria-hidden="true"></span>
+                <span>
+                  <strong>Course</strong>
+                  <small>University + course context</small>
+                </span>
+              </label>
+              <label class="scenario-option">
+                <input type="radio" name="scenario" value="specialization">
+                <span class="scenario-option__indicator" aria-hidden="true"></span>
+                <span>
+                  <strong>Specialization</strong>
+                  <small>Full catalog context</small>
+                </span>
+              </label>
+            </fieldset>
+          </form>
+
+          <section class="context-preview" aria-labelledby="context-preview-title">
+            <div class="context-preview__heading">
+              <h3 id="context-preview-title">Simulated URL context</h3>
+              <span class="context-preview__status"><i aria-hidden="true"></i>Live</span>
+            </div>
+            <pre><code id="context-json">{
+  "page_type": "homepage"
+}</code></pre>
+          </section>
+
+          <section class="architecture-note" aria-labelledby="architecture-note-title">
+            <div class="architecture-note__icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="img">
+                <path d="M12 3v6m0 6v6M6 9h12M6 15h12" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/>
+                <circle cx="12" cy="3" r="2" fill="currentColor"/>
+                <circle cx="6" cy="9" r="2" fill="currentColor"/>
+                <circle cx="18" cy="9" r="2" fill="currentColor"/>
+                <circle cx="6" cy="15" r="2" fill="currentColor"/>
+                <circle cx="18" cy="15" r="2" fill="currentColor"/>
+                <circle cx="12" cy="21" r="2" fill="currentColor"/>
+              </svg>
+            </div>
+            <div>
+              <h3 id="architecture-note-title">Two compatible paths</h3>
+              <p>Guided actions read the catalog directly. Only a submitted message enters the existing Chat → NLU → Resolver → Router flow.</p>
+            </div>
+          </section>
+        </aside>
+
+        <section class="device-stage" aria-labelledby="device-stage-title">
+          <h2 id="device-stage-title" class="sr-only">Chat widget preview</h2>
+          <div id="widget-shell" class="widget-shell">
+            <header class="widget-header">
+              <div class="widget-brand">
+                <span class="widget-brand__mark" aria-hidden="true">DB</span>
+                <span>
+                  <strong>DegreeBaba</strong>
+                  <small><i aria-hidden="true"></i>Admissions guide</small>
+                </span>
+              </div>
+              <span class="widget-header__mode">Guided demo</span>
+            </header>
+
+            <div id="context-bar" class="context-bar" hidden>
+              <div class="context-bar__trail" aria-label="Active catalog context">
+                <span class="prototype-context__label" data-context-label></span>
+              </div>
+              <button id="clear-context" class="icon-button context-bar__clear" type="button" aria-label="Clear active context">
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <path d="m6.5 6.5 7 7m0-7-7 7" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/>
+                </svg>
+              </button>
+            </div>
+
+            <section id="feed" class="conversation-feed" aria-label="Conversation and guided results" aria-live="polite" aria-relevant="additions"></section>
+
+            <section class="guide-panel" aria-labelledby="guide-heading">
+              <h3 id="guide-heading">What would you like to explore?</h3>
+              <div id="guide-actions" class="guide-actions"></div>
+              <div id="more-actions" class="more-actions" hidden></div>
+            </section>
+
+            <form id="chat-form" class="chat-composer">
+              <label class="sr-only" for="chat-input">Ask DegreeBaba a question</label>
+              <input id="chat-input" name="message" type="text" autocomplete="off" placeholder="Ask about courses, fees, eligibility…">
+              <button id="chat-submit" type="submit" aria-label="Send message">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m4.5 4.5 16 7.5-16 7.5 2.2-6.1 7.8-1.4-7.8-1.4-2.2-6.1Z" fill="currentColor"/>
+                </svg>
+              </button>
+            </form>
+
+            <button id="sheet-backdrop" class="sheet-backdrop" type="button" aria-label="Close open panel" hidden></button>
+
+            <section id="picker-sheet" class="bottom-sheet picker-sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" aria-hidden="true" hidden>
+              <div class="sheet-handle" aria-hidden="true"></div>
+              <header class="bottom-sheet__header">
+                <div>
+                  <p class="eyebrow">Choose from the catalog</p>
+                  <h2 id="sheet-title">Browse</h2>
+                </div>
+                <button id="sheet-close" class="icon-button" type="button" aria-label="Close catalog picker">
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="m6 6 8 8m0-8-8 8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/>
+                  </svg>
+                </button>
+              </header>
+              <div class="sheet-search">
+                <svg viewBox="0 0 20 20" aria-hidden="true">
+                  <circle cx="8.7" cy="8.7" r="5.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                  <path d="m12.5 12.5 3.8 3.8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.6"/>
+                </svg>
+                <label class="sr-only" for="sheet-search">Search catalog</label>
+                <input id="sheet-search" type="search" autocomplete="off" placeholder="Search">
+              </div>
+              <div id="sheet-list" class="sheet-list" role="list"></div>
+            </section>
+
+            <section id="lead-sheet" class="bottom-sheet lead-sheet" role="dialog" aria-modal="true" aria-labelledby="lead-title" aria-describedby="lead-description" aria-hidden="true" hidden>
+              <div class="sheet-handle" aria-hidden="true"></div>
+              <header class="bottom-sheet__header">
+                <div>
+                  <p class="eyebrow">Free admissions support</p>
+                  <h2 id="lead-title">Talk to a counsellor</h2>
+                </div>
+                <button id="lead-close" class="icon-button" type="button" aria-label="Close counsellor form">
+                  <svg viewBox="0 0 20 20" aria-hidden="true">
+                    <path d="m6 6 8 8m0-8-8 8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.8"/>
+                  </svg>
+                </button>
+              </header>
+              <p id="lead-description" class="lead-sheet__description">Share your mobile number and the admissions team can follow up about the context you are exploring.</p>
+              <form id="lead-form" class="lead-form">
+                <label for="lead-phone">Mobile number</label>
+                <div class="phone-field">
+                  <span aria-hidden="true">+91</span>
+                  <input id="lead-phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit number" required>
+                </div>
+                <p class="field-note">Your number is used only for this counselling request.</p>
+                <button class="primary-button" type="submit">Request a callback</button>
+              </form>
+            </section>
+
+            <div id="status-region" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+          </div>
+          <p class="device-stage__caption">A standalone simulator — no production page required.</p>
+        </section>
+      </div>
+    </main>
+
+    <template id="loading-template">
+      <div class="loading-card" aria-label="Loading catalog information">
+        <span></span><span></span><span></span>
+      </div>
+    </template>
+
+    <template id="empty-state-template">
+      <div class="empty-state">
+        <span class="empty-state__icon" aria-hidden="true">i</span>
+        <div><strong>Nothing published here yet</strong><p>Choose another guided option or ask a question below.</p></div>
+      </div>
+    </template>
+
+    <noscript>
+      <p class="noscript-message">JavaScript is required to run this guided-navigation simulator.</p>
+    </noscript>
+    <script src="./prototype.js" defer></script>
+  </body>
+</html>
