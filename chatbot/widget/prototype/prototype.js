@@ -59,7 +59,8 @@
   ]);
 
   const PROGRAM_CATEGORIES = Object.freeze(["MBA", "MCA", "BBA", "MSc"]);
-  const EMPTY_COPY = "This information has not been published in the DegreeBaba catalog yet.";
+  const GUIDED_THINKING_MS = 650;
+  const EMPTY_COPY = "I don't have this confirmed yet — I'd rather not guess.";
 
   function byId(id) {
     return document.getElementById(id);
@@ -412,6 +413,8 @@
       picker: null,
       compareSelections: [],
       chatBusy: false,
+      guidedBusy: false,
+      viewedActions: new Set(),
       requestLog: [],
     };
   }
@@ -488,6 +491,20 @@
     return node;
   }
 
+  function collapsePrimaryCards(dom) {
+    dom.feed.querySelectorAll('[data-primary-card="true"]').forEach((card) => {
+      if (card.closest(".prototype-collapsed-answer")) return;
+      const title = firstText(
+        card.querySelector(".prototype-card__title")?.textContent,
+        "Previous answer",
+      );
+      const disclosure = element("details", "prototype-collapsed-answer");
+      disclosure.append(element("summary", "prototype-collapsed-answer__summary", title));
+      card.replaceWith(disclosure);
+      disclosure.appendChild(card);
+    });
+  }
+
   function feedMessage(role, text) {
     const wrapper = element("article", `prototype-message prototype-message--${role}`);
     const bubble = element("div", "prototype-message__bubble");
@@ -502,6 +519,24 @@
     spinner.setAttribute("aria-hidden", "true");
     wrapper.append(spinner, element("p", "prototype-state__copy", label));
     return wrapper;
+  }
+
+  function thinkingIndicator() {
+    const wrapper = element("article", "prototype-message prototype-message--guide");
+    const bubble = element("div", "prototype-message__bubble prototype-thinking");
+    bubble.setAttribute("role", "status");
+    bubble.setAttribute("aria-label", "DegreeBaba is thinking");
+    for (let index = 0; index < 3; index += 1) {
+      const dot = element("span", "prototype-thinking__dot");
+      dot.setAttribute("aria-hidden", "true");
+      bubble.appendChild(dot);
+    }
+    wrapper.appendChild(bubble);
+    return wrapper;
+  }
+
+  function wait(milliseconds) {
+    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
   }
 
   function errorCard(message, onRetry, onLead) {
@@ -519,21 +554,27 @@
   }
 
   function emptyInfoCopy(container, subject) {
-    container.appendChild(element("p", "prototype-empty", `${EMPTY_COPY}${subject ? ` (${subject})` : ""}`));
+    const copy = subject
+      ? `I don't have confirmed ${subject} yet — I'd rather not guess.`
+      : EMPTY_COPY;
+    container.appendChild(element("p", "prototype-empty", copy));
   }
 
   function renderContinuation(navigator, actions) {
     const wrapper = element("div", "prototype-next-steps");
     wrapper.appendChild(element("p", "prototype-next-steps__label", "Continue exploring"));
     const row = element("div", "prototype-next-steps__actions");
-    actions.forEach(([label, action]) => {
-      row.appendChild(makeButton(label, "prototype-chip", () => navigator.handleAction(action)));
+    const viewed = navigator.state.viewedActions;
+    const available = actions.filter(([, action]) => !viewed.has(action));
+    const hasLead = available.some(([, action]) => action === "lead");
+    const visible = available.filter(([, action]) => action !== "lead").slice(0, hasLead ? 2 : 3);
+    if (hasLead) visible.push(available.find(([, action]) => action === "lead"));
+    else if (!viewed.has("lead")) visible.splice(2, 0, ["Talk To Counsellor", "lead"]);
+    visible.slice(0, 3).forEach(([label, action]) => {
+      row.appendChild(makeButton(label, "prototype-chip", () => navigator.handleAction(action, label)));
     });
-    if (!actions.some((item) => item[1] === "lead")) {
-      row.appendChild(makeButton("Talk To Counsellor", "prototype-chip prototype-chip--accent", () => {
-        navigator.handleAction("lead");
-      }));
-    }
+    const lead = row.querySelector("button:last-child");
+    if (lead && visible.slice(0, 3).at(-1)?.[1] === "lead") lead.classList.add("prototype-chip--accent");
     wrapper.appendChild(row);
     return wrapper;
   }
@@ -590,16 +631,31 @@
     appendFacts(card, entityFacts(item));
 
     const actions = element("div", "prototype-card__actions");
-    actions.appendChild(makeButton("View Details", "prototype-button prototype-button--primary", () => {
-      navigator.showEntityDetails(item);
-    }));
-    if (entityId(item)) {
-      actions.appendChild(makeButton("Compare", "prototype-button", () => navigator.startCompare(item)));
-    }
     if (options.selectable) {
-      actions.replaceChildren(makeButton("Choose", "prototype-button prototype-button--primary", () => {
+      actions.appendChild(makeButton("Choose", "prototype-button prototype-button--primary", () => {
         navigator.selectEntity(item);
       }));
+    } else if (options.guidedAnswer) {
+      [
+        ["Career & Salary", "career"],
+        ["Syllabus", "syllabus"],
+        ["Talk To Counsellor", "lead"],
+      ].filter(([, action]) => !navigator.state.viewedActions.has(action)).slice(0, 3).forEach(
+        ([label, action], index) => {
+          actions.appendChild(makeButton(
+            label,
+            `prototype-button${index === 0 ? " prototype-button--primary" : ""}`,
+            () => navigator.handleAction(action, label),
+          ));
+        },
+      );
+    } else {
+      actions.appendChild(makeButton("View Details", "prototype-button prototype-button--primary", () => {
+        navigator.showEntityDetails(item);
+      }));
+      if (entityId(item)) {
+        actions.appendChild(makeButton("Compare", "prototype-button", () => navigator.startCompareWithChoice(item)));
+      }
     }
     card.appendChild(actions);
     return card;
@@ -707,7 +763,7 @@
     }
     card.appendChild(renderContinuation(navigator, [
       ["Check Eligibility", "eligibility"],
-      [navigator.state.logicalContext.page_type === "university" ? "Browse Programs" : "Browse Specializations", navigator.state.logicalContext.page_type === "university" ? "programs_here" : "specializations"],
+      ["Admission Steps", "admission_steps"],
     ]));
     return card;
   }
@@ -759,7 +815,7 @@
     if (!appendStringList(card, recruiters, "prototype-tag-list")) {
       card.appendChild(element("p", "prototype-empty", "Recruiter information has not been published."));
     }
-    card.appendChild(renderContinuation(navigator, [["View Syllabus", "syllabus"], ["Other Specializations", "other_specializations"]]));
+    card.appendChild(renderContinuation(navigator, [["View Syllabus", "syllabus"], ["View Fees", "fees"]]));
     return card;
   }
 
@@ -906,7 +962,7 @@
       element("p", "prototype-copy", verdict || "No catalog-grounded verdict is available for this selection."),
     );
     card.appendChild(verdictSection);
-    card.appendChild(renderContinuation(navigator, [["Compare Other Options", "compare"], ["Browse Universities", "browse_universities"]]));
+    card.appendChild(renderContinuation(navigator, [["Check Eligibility", "eligibility"], ["View Fees", "fees"]]));
     return card;
   }
 
@@ -932,21 +988,6 @@
     return card;
   }
 
-  function renderHelpChoose(navigator) {
-    const card = element("section", "prototype-card prototype-info-card prototype-info-card--chooser");
-    card.append(
-      makeSectionEyebrow("Start with your goal"),
-      element("h3", "prototype-card__title", "Which program are you considering?"),
-      element("p", "prototype-copy", "Choose a category to see catalog options. This step uses no chat or intent classification."),
-    );
-    const options = element("div", "prototype-choice-grid");
-    PROGRAM_CATEGORIES.forEach((category) => {
-      options.appendChild(makeButton(category, "prototype-choice", () => navigator.showProgramCategory(category)));
-    });
-    card.append(options, renderContinuation(navigator, [["Browse Universities", "browse_universities"]]));
-    return card;
-  }
-
   class GuidedNavigator {
     constructor(state, dom, api) {
       this.state = state;
@@ -959,6 +1000,73 @@
       this.state.sessionId = newSessionId();
     }
 
+    appendUserChoice(label) {
+      const value = cleanText(label);
+      if (value) appendFeed(this.dom, feedMessage("user", value));
+    }
+
+    appendGuidePrompt(message, choices = []) {
+      appendFeed(this.dom, feedMessage("guide", message));
+      if (!choices.length) return;
+      const row = element("div", "prototype-chat-actions prototype-exploration-choices");
+      const renderPage = (offset = 0) => {
+        row.replaceChildren();
+        const pageSize = offset === 0 ? 3 : 2;
+        if (offset > 0) {
+          row.appendChild(makeButton("Back", "prototype-chip", () => renderPage(offset <= 3 ? 0 : offset - 2)));
+        }
+        choices.slice(offset, offset + pageSize).forEach(([label, handler, accent = false]) => {
+          row.appendChild(makeButton(
+            label,
+            `prototype-chip${accent ? " prototype-chip--accent" : ""}`,
+            handler,
+          ));
+        });
+        if (offset + pageSize < choices.length) {
+          row.appendChild(makeButton("More", "prototype-chip", () => renderPage(offset + pageSize)));
+        }
+      };
+      renderPage();
+      appendFeed(this.dom, row);
+    }
+
+    async runGuidedResponse(callback) {
+      if (this.state.guidedBusy) return undefined;
+      this.state.guidedBusy = true;
+      const contextGeneration = this.state.contextGeneration;
+      const thinking = thinkingIndicator();
+      appendFeed(this.dom, thinking);
+      try {
+        await wait(GUIDED_THINKING_MS);
+        thinking.remove();
+        if (contextGeneration !== this.state.contextGeneration) return undefined;
+        return await callback();
+      } finally {
+        thinking.remove();
+        this.state.guidedBusy = false;
+      }
+    }
+
+    presentPrimaryCard(card, replaceNode = null) {
+      this.dom.guidePanel.hidden = true;
+      collapsePrimaryCards(this.dom);
+      card.dataset.primaryCard = "true";
+      if (replaceNode?.isConnected) {
+        replaceNode.replaceWith(card);
+        revealFeedNode(this.dom, card);
+      } else {
+        appendFeed(this.dom, card);
+      }
+      return card;
+    }
+
+    showPickerChoice(label, kind, options = {}) {
+      if (this.state.guidedBusy) return undefined;
+      this.appendUserChoice(label);
+      this.dom.guidePanel.hidden = true;
+      return this.runGuidedResponse(() => this.openPicker(kind, options));
+    }
+
     setScenario(name) {
       const scenario = Object.prototype.hasOwnProperty.call(SCENARIOS, name) ? name : "homepage";
       this.state.scenario = scenario;
@@ -967,10 +1075,12 @@
       this.state.entityReference = "";
       this.state.bundle = null;
       this.state.compareSelections = [];
+      this.state.viewedActions.clear();
+      this.state.guidedBusy = false;
       this.freshSession();
       updateContextSurfaces(this.dom, this.state);
       this.renderActionBank();
-      return this.loadContext();
+      return this.loadContext("page");
     }
 
     clearContext() {
@@ -1012,11 +1122,14 @@
       };
     }
 
-    selectEntity(entity) {
+    selectEntity(entity, selectionLabel) {
+      if (this.state.guidedBusy) return undefined;
       const item = unwrapItem(entity) || {};
       const id = entityId(item);
       if (!id && !entitySlug(item)) return;
       this.closePicker();
+      this.appendUserChoice(selectionLabel || entityName(item));
+      this.dom.guidePanel.hidden = true;
       this.state.logicalContext = this.contextForEntity(item);
       this.state.resolvedContext = null;
       this.state.entityReference = id || entitySlug(item);
@@ -1029,16 +1142,21 @@
       this.freshSession();
       updateContextSurfaces(this.dom, this.state);
       this.renderActionBank();
-      return this.loadContext();
+      return this.loadContext("selection");
     }
 
-    async loadContext() {
+    async loadContext(origin = "page") {
       this.state.contextGeneration += 1;
       const generation = this.state.contextGeneration;
+      const preserveConversation = origin === "selection";
+      if (preserveConversation) this.state.guidedBusy = true;
       if (this.state.contextController) this.state.contextController.abort();
       const controller = new AbortController();
       this.state.contextController = controller;
-      this.dom.feed.replaceChildren(loadingCard("Loading guided catalog context…"));
+      const thinking = thinkingIndicator();
+      const minimumDelay = wait(GUIDED_THINKING_MS);
+      if (preserveConversation) appendFeed(this.dom, thinking);
+      else this.dom.feed.replaceChildren(thinking);
       statusMessage(this.dom, "Loading guided context");
       try {
         const payload = await this.api.context(
@@ -1046,7 +1164,11 @@
           this.state.entityReference,
           controller.signal,
         );
-        if (generation !== this.state.contextGeneration) return;
+        if (generation !== this.state.contextGeneration) {
+          thinking.remove();
+          return;
+        }
+        await minimumDelay;
         this.state.bundle = {
           context: payload.context || null,
           entity: payload.entity || null,
@@ -1057,120 +1179,255 @@
         const resolvedEntityId = entityId(payload.entity);
         if (resolvedEntityId) this.state.entityReference = resolvedEntityId;
         updateContextSurfaces(this.dom, this.state);
-        this.renderBundle();
+        thinking.remove();
+        this.renderBundle(origin);
+        if (preserveConversation) this.state.guidedBusy = false;
         statusMessage(this.dom, "Guided context ready");
       } catch (error) {
-        if (error && error.name === "AbortError") return;
-        if (generation !== this.state.contextGeneration) return;
+        if (error && error.name === "AbortError") {
+          thinking.remove();
+          return;
+        }
+        if (generation !== this.state.contextGeneration) {
+          thinking.remove();
+          return;
+        }
+        await minimumDelay;
         console.warn("DegreeBaba guided context failed", error);
-        this.dom.feed.replaceChildren(errorCard(
+        const failure = errorCard(
           cleanText(error.message),
-          () => this.loadContext(),
+          () => this.loadContext(origin),
           () => this.openLead(),
-        ));
+        );
+        if (preserveConversation) thinking.replaceWith(failure);
+        else this.dom.feed.replaceChildren(failure);
+        if (preserveConversation) this.state.guidedBusy = false;
         statusMessage(this.dom, "Guided context could not be loaded");
       }
     }
 
-    renderBundle() {
-      this.dom.feed.replaceChildren();
+    renderBundle(origin = "page") {
+      const preserveConversation = origin === "selection";
+      if (!preserveConversation) this.dom.feed.replaceChildren();
       const pageType = this.state.logicalContext.page_type;
+      this.dom.guidePanel.hidden = preserveConversation || pageType === "specialization";
+      const entity = unwrapItem(this.state.bundle?.entity) || null;
       if (pageType === "homepage") {
         this.dom.feed.appendChild(feedMessage(
           "guide",
           "Explore universities and programs from the catalog, or type a question below to use the existing chatbot.",
         ));
-      } else if (this.state.bundle?.entity) {
-        this.dom.feed.appendChild(renderEntityCard(this, this.state.bundle.entity));
-      } else {
-        this.dom.feed.appendChild(errorCard(
+      } else if (!entity) {
+        const failure = errorCard(
           "This page context is not available in the current catalog.",
           () => this.openPicker(pageType === "university" ? "universities" : pageType === "course" ? "programs" : "specializations"),
           () => this.openLead(),
+        );
+        if (preserveConversation) appendFeed(this.dom, failure);
+        else this.dom.feed.appendChild(failure);
+      } else if (pageType === "university") {
+        if (preserveConversation) this.showUniversityPrograms();
+        else this.dom.feed.appendChild(feedMessage(
+          "guide",
+          `You're viewing ${entityName(entity)}.\n\nWhat would you like to know?`,
+        ));
+      } else if (pageType === "course") {
+        if (preserveConversation) this.showCourseSpecializations();
+        else this.dom.feed.appendChild(feedMessage(
+          "guide",
+          `You're viewing ${contextDisplayValues(this.state).join(" ")}.\n\nWhat would you like to know?`,
+        ));
+      } else {
+        const specialization = firstText(entity.specialization, entity.name, "this specialization");
+        const university = contextDisplayValues(this.state)[0];
+        const intro = preserveConversation
+          ? `Here's the strongest catalog match for ${specialization}${university ? ` at ${university}` : ""}.`
+          : `You're viewing ${contextDisplayValues(this.state).join(" • ")}.\n\nHere's the specialization at a glance.`;
+        const message = feedMessage("guide", intro);
+        if (preserveConversation) appendFeed(this.dom, message);
+        else this.dom.feed.appendChild(message);
+        const card = renderEntityCard(this, entity, { guidedAnswer: true });
+        if (preserveConversation) this.presentPrimaryCard(card);
+        else {
+          card.dataset.primaryCard = "true";
+          this.dom.feed.appendChild(card);
+        }
+      }
+      if (pageType === "homepage") {
+        this.dom.feed.appendChild(feedMessage(
+          "guide",
+          "Choose a guided action below to begin.",
         ));
       }
-      const contextualHint = pageType === "homepage"
-        ? "Choose a guided action above to begin."
-        : "Use the guided actions above for catalog-backed details and the next step.";
-      this.dom.feed.appendChild(feedMessage("guide", contextualHint));
       if (this.dom.guidePanel) {
         this.dom.feed.appendChild(this.dom.guidePanel);
       }
-      this.dom.feed.scrollTop = 0;
+      if (!preserveConversation) this.dom.feed.scrollTop = 0;
+    }
+
+    programLabel(item) {
+      return displayConcept(firstText(item.category, entityName(item).replace(/^online\s+/i, "")));
+    }
+
+    showUniversityPrograms() {
+      const entity = unwrapItem(this.state.bundle?.entity) || {};
+      const programs = arrayOf(this.state.bundle?.related?.courses).map(unwrapItem).filter(Boolean);
+      const count = entity.program_count === 0 || entity.program_count
+        ? entity.program_count
+        : programs.length;
+      const message = programs.length
+        ? `${entityName(entity)} offers ${count} online program${Number(count) === 1 ? "" : "s"}.\n\nWhich one interests you?`
+        : `Programs haven't been published for ${entityName(entity)} yet.\n\nWould you like to browse other programs or talk to a counsellor?`;
+      const choices = programs.slice(0, 4).map((program) => {
+        const label = this.programLabel(program);
+        return [label, () => this.selectEntity(program, label)];
+      });
+      if (programs.length > 4) {
+        choices.push(["View all programs", () => {
+          this.showPickerChoice("View all programs", "programs", {
+            university: this.universityFilter(),
+          });
+        }]);
+      }
+      if (!choices.length) {
+        choices.push(
+          ["Browse Programs", () => this.handleAction("browse_programs", "Browse Programs")],
+          ["Talk To Counsellor", () => this.handleAction("lead", "Talk To Counsellor"), true],
+        );
+      }
+      this.appendGuidePrompt(message, choices);
+    }
+
+    showCourseSpecializations() {
+      const entity = unwrapItem(this.state.bundle?.entity) || {};
+      const specializations = arrayOf(this.state.bundle?.related?.specializations).map(unwrapItem).filter(Boolean);
+      const isSpecializationContext = this.state.logicalContext.page_type === "specialization";
+      const count = isSpecializationContext
+        ? specializations.length
+        : entity.specialization_count === 0 || entity.specialization_count
+          ? entity.specialization_count
+          : specializations.length;
+      const contextName = contextDisplayValues(this.state).slice(0, 2).join(" ");
+      const message = specializations.length
+        ? isSpecializationContext
+          ? `${contextName} has ${count} other specialization${Number(count) === 1 ? "" : "s"} available.\n\nWhich one interests you?`
+          : `${contextName} offers ${count} specialization${Number(count) === 1 ? "" : "s"}.\n\nWhich area interests you?`
+        : "Specializations haven't been published for this course yet.\n\nWould you like to see fees or eligibility instead?";
+      const choices = specializations.slice(0, 4).map((specialization) => {
+        const label = entityName(specialization);
+        return [label, () => this.selectEntity(specialization, label)];
+      });
+      if (specializations.length > 4) {
+        choices.push(["View all specializations", () => {
+          this.showPickerChoice("View all specializations", "specializations", {
+            university: this.universityFilter(),
+            course: this.courseFilter(),
+          });
+        }]);
+      }
+      if (!choices.length) {
+        choices.push(
+          ["Fees & EMI", () => this.handleAction("fees", "Fees & EMI")],
+          ["Eligibility", () => this.handleAction("eligibility", "Eligibility")],
+        );
+      }
+      this.appendGuidePrompt(message, choices);
+    }
+
+    showProgramQuestion(message = "Which program are you considering?") {
+      const choices = PROGRAM_CATEGORIES.map((category) => [
+        category,
+        () => this.showProgramCategory(category),
+      ]);
+      this.appendGuidePrompt(message, choices);
     }
 
     renderActionBank() {
       const pageType = this.state.logicalContext.page_type;
-      this.dom.guideHeading.textContent = pageType === "homepage" ? "How can we help?" : "Explore this page";
-      this.dom.guideActions.replaceChildren();
-      (ACTION_BANKS[pageType] || ACTION_BANKS.homepage).forEach(([label, action]) => {
-        const button = makeButton(label, "prototype-guide-action", () => this.handleAction(action));
+      this.dom.guideHeading.textContent = pageType === "homepage" ? "How can we help?" : "Choose an option";
+      const viewed = this.state.viewedActions;
+      const primary = (ACTION_BANKS[pageType] || ACTION_BANKS.homepage).filter(
+        ([, action]) => !viewed.has(action),
+      );
+      const primaryLimit = pageType === "homepage" ? 4 : 3;
+      const secondary = (pageType === "homepage" ? MORE_ACTIONS : primary.slice(primaryLimit)).filter(
+        ([, action]) => !viewed.has(action),
+      );
+      const appendAction = (container, [label, action], secondaryAction = false) => {
+        const button = makeButton(label, "prototype-guide-action", () => this.handleAction(action, label));
+        if (secondaryAction) button.classList.add("prototype-guide-action--secondary");
         button.dataset.guideAction = action;
-        this.dom.guideActions.appendChild(button);
-      });
-      this.dom.moreActions.replaceChildren();
-      this.dom.moreActions.hidden = pageType !== "homepage";
-      if (pageType === "homepage") {
-        const details = element("details", "prototype-more");
-        const summary = element("summary", "prototype-more__summary", "More");
-        const grid = element("div", "prototype-more__grid");
-        MORE_ACTIONS.forEach(([label, action]) => {
-          const button = makeButton(label, "prototype-guide-action prototype-guide-action--secondary", () => {
-            details.open = false;
-            this.handleAction(action);
-          });
-          button.dataset.guideAction = action;
-          grid.appendChild(button);
-        });
-        details.append(summary, grid);
-        this.dom.moreActions.appendChild(details);
-      }
+        container.appendChild(button);
+      };
+      const renderPrimary = () => {
+        this.dom.guideActions.replaceChildren();
+        primary.slice(0, primaryLimit).forEach((item) => appendAction(this.dom.guideActions, item));
+        this.dom.moreActions.replaceChildren();
+        this.dom.moreActions.hidden = !secondary.length;
+        if (secondary.length) {
+          this.dom.moreActions.appendChild(makeButton("More", "prototype-more__summary", () => {
+            renderSecondary(0);
+          }));
+        }
+      };
+      const renderSecondary = (offset) => {
+        this.dom.guideActions.replaceChildren();
+        this.dom.moreActions.replaceChildren();
+        this.dom.moreActions.hidden = true;
+        this.dom.guideActions.appendChild(makeButton("Back", "prototype-guide-action prototype-guide-action--secondary", renderPrimary));
+        secondary.slice(offset, offset + 2).forEach((item) => appendAction(this.dom.guideActions, item, true));
+        if (offset + 2 < secondary.length) {
+          this.dom.guideActions.appendChild(makeButton("More", "prototype-guide-action prototype-guide-action--secondary", () => {
+            renderSecondary(offset + 2);
+          }));
+        }
+      };
+      renderPrimary();
     }
 
-    handleAction(action) {
+    handleAction(action, label) {
       const pageType = this.state.logicalContext.page_type;
       const handlers = {
         browse_universities: () => this.openPicker("universities"),
         browse_programs: () => this.openPicker("programs", { mode: "categories" }),
-        help_choose: () => appendFeed(this.dom, renderHelpChoose(this)),
-        online_validity: () => appendFeed(this.dom, renderValidity(this)),
-        programs_here: () => this.openPicker("programs", { university: this.universityFilter() }),
-        reviews: () => appendFeed(this.dom, renderReviews(this)),
-        accreditations: () => appendFeed(this.dom, renderAccreditations(this)),
+        help_choose: () => this.showProgramQuestion(),
+        online_validity: () => this.presentPrimaryCard(renderValidity(this)),
+        programs_here: () => this.showUniversityPrograms(),
+        reviews: () => this.presentPrimaryCard(renderReviews(this)),
+        accreditations: () => this.presentPrimaryCard(renderAccreditations(this)),
         compare: () => this.startCompare(),
         fees: () => {
           if (pageType === "homepage") this.renderChooseFirst("fees and EMI", "programs");
-          else appendFeed(this.dom, renderFees(this));
+          else this.presentPrimaryCard(renderFees(this));
         },
         eligibility: () => {
           if (pageType === "homepage") this.renderChooseFirst("eligibility", "programs");
-          else appendFeed(this.dom, renderEligibility(this));
+          else this.presentPrimaryCard(renderEligibility(this));
         },
-        specializations: () => this.openPicker("specializations", {
-          university: this.universityFilter(),
-          course: this.courseFilter(),
-        }),
-        career: () => appendFeed(this.dom, renderCareer(this)),
-        syllabus: () => appendFeed(this.dom, renderSyllabus(this)),
-        other_specializations: () => this.openPicker("specializations", {
-          university: this.universityFilter(),
-          course: this.courseFilter(),
-        }),
+        admission_steps: () => this.presentPrimaryCard(
+          renderEntityDetails(this, unwrapItem(this.state.bundle?.entity) || {}),
+        ),
+        specializations: () => this.showCourseSpecializations(),
+        career: () => this.presentPrimaryCard(renderCareer(this)),
+        syllabus: () => this.presentPrimaryCard(renderSyllabus(this)),
+        other_specializations: () => this.showCourseSpecializations(),
         lead: () => this.openLead(),
       };
       const handler = handlers[action];
-      if (handler) handler();
+      if (!handler || this.state.guidedBusy) return undefined;
+      this.state.viewedActions.add(action);
+      this.appendUserChoice(label);
+      this.dom.guidePanel.hidden = true;
+      return this.runGuidedResponse(handler);
     }
 
     renderChooseFirst(subject, kind) {
-      const card = element("section", "prototype-card prototype-info-card");
-      card.append(
-        makeSectionEyebrow("Choose an option first"),
-        element("h3", "prototype-card__title", `Select a program to check ${subject}`),
-        element("p", "prototype-copy", "The guided layer needs a catalog entity so it can show grounded information."),
-        renderContinuation(this, [["Browse Programs", kind === "programs" ? "browse_programs" : "browse_universities"]]),
+      const action = kind === "programs" ? "browse_programs" : "browse_universities";
+      const label = kind === "programs" ? "Browse Programs" : "Browse Universities";
+      this.appendGuidePrompt(
+        `First, choose a program so I can show the right ${subject}.`,
+        [[label, () => this.handleAction(action, label)]],
       );
-      appendFeed(this.dom, card);
     }
 
     universityFilter() {
@@ -1198,7 +1455,13 @@
     }
 
     showEntityDetails(entity) {
-      appendFeed(this.dom, renderEntityDetails(this, entity));
+      if (this.state.guidedBusy) return undefined;
+      this.state.viewedActions.add("details");
+      this.appendUserChoice("View Details");
+      this.dom.guidePanel.hidden = true;
+      return this.runGuidedResponse(() => {
+        this.presentPrimaryCard(renderEntityDetails(this, entity));
+      });
     }
 
     openPicker(kind, options = {}) {
@@ -1219,12 +1482,14 @@
         courses: "Choose a Program",
         specializations: "Browse Specializations",
       };
-      this.dom.sheetTitle.textContent = titles[kind] || "Browse Catalog";
+      this.dom.sheetTitle.textContent = options.title || titles[kind] || "Browse Catalog";
       this.dom.sheetSearch.value = "";
       this.dom.sheetSearch.placeholder = kind === "specializations"
         ? "Search specializations"
         : kind === "universities"
           ? "Search universities"
+          : options.display === "university"
+            ? "Search universities"
           : "Search programs";
       this.dom.sheetSearch.hidden = kind === "programs" && options.mode === "categories";
       this.dom.sheetBackdrop.hidden = false;
@@ -1297,7 +1562,6 @@
           return haystack.includes(category.toLowerCase());
         });
         const row = makeButton("", "prototype-picker-row", () => {
-          this.closePicker();
           this.showProgramCategory(category);
         });
         const icon = element("span", "prototype-picker-row__monogram", initials(category));
@@ -1354,12 +1618,19 @@
       }
       const list = element("div", "prototype-picker-list");
       items.forEach((item) => {
-        const row = makeButton("", "prototype-picker-row", () => this.selectEntity(item));
-        const monogram = element("span", "prototype-picker-row__monogram", initials(entityName(item)));
+        const displayAsUniversity = this.state.picker?.options?.display === "university";
+        const label = displayAsUniversity
+          ? firstText(item.university_name, entityName(item))
+          : entityName(item);
+        const meta = displayAsUniversity
+          ? [entityName(item), firstText(item.fee), firstText(item.duration)].filter(Boolean).join(" • ")
+          : this.pickerMeta(item, this.state.picker?.kind);
+        const row = makeButton("", "prototype-picker-row", () => this.selectEntity(item, label));
+        const monogram = element("span", "prototype-picker-row__monogram", initials(label));
         const copy = element("span", "prototype-picker-row__copy");
         copy.append(
-          element("strong", "prototype-picker-row__title", entityName(item)),
-          element("span", "prototype-picker-row__meta", this.pickerMeta(item, this.state.picker?.kind)),
+          element("strong", "prototype-picker-row__title", label),
+          element("span", "prototype-picker-row__meta", meta),
         );
         row.append(monogram, copy, element("span", "prototype-picker-row__arrow", "›"));
         list.appendChild(row);
@@ -1367,34 +1638,19 @@
       this.dom.sheetList.appendChild(list);
     }
 
-    async showProgramCategory(category) {
-      const panel = element("section", "prototype-card prototype-result-panel");
-      panel.append(
-        makeSectionEyebrow("Catalog programs"),
-        element("h3", "prototype-card__title", category),
-      );
-      const loading = loadingCard(`Finding ${category} programs…`);
-      panel.appendChild(loading);
-      appendFeed(this.dom, panel);
-      try {
-        const payload = await this.api.catalog("courses", { course: slugify(category) });
-        const items = arrayOf(payload.items || payload.options || payload.results).map(unwrapItem).filter(Boolean);
-        loading.remove();
-        if (!items.length) {
-          panel.appendChild(element("p", "prototype-empty", `No ${category} catalog options are published right now.`));
-        } else {
-          const cards = element("div", "prototype-card-list");
-          items.slice(0, 8).forEach((item) => cards.appendChild(renderEntityCard(this, item, { selectable: true })));
-          panel.appendChild(cards);
-        }
-        panel.appendChild(renderContinuation(this, [["Browse Other Programs", "browse_programs"], ["Browse Universities", "browse_universities"]]));
-      } catch (error) {
-        loading.remove();
-        panel.appendChild(errorCard(cleanText(error.message), () => {
-          panel.remove();
-          this.showProgramCategory(category);
-        }, () => this.openLead()));
-      }
+    showProgramCategory(category) {
+      if (this.state.guidedBusy) return undefined;
+      this.closePicker();
+      this.appendUserChoice(category);
+      this.dom.guidePanel.hidden = true;
+      return this.runGuidedResponse(() => {
+        this.appendGuidePrompt(`Which university would you like to explore for ${category}?`);
+        this.openPicker("courses", {
+          course: slugify(category),
+          display: "university",
+          title: `Choose a University for ${category}`,
+        });
+      });
     }
 
     compareKind() {
@@ -1402,6 +1658,14 @@
       if (pageType === "course") return "courses";
       if (pageType === "specialization") return "specializations";
       return "universities";
+    }
+
+    startCompareWithChoice(startingEntity) {
+      if (this.state.guidedBusy) return undefined;
+      this.state.viewedActions.add("compare");
+      this.appendUserChoice("Compare");
+      this.dom.guidePanel.hidden = true;
+      return this.runGuidedResponse(() => this.startCompare(startingEntity));
     }
 
     startCompare(startingEntity) {
@@ -1481,17 +1745,25 @@
 
     async submitComparison() {
       const ids = this.state.compareSelections.map(entityId).filter(Boolean).slice(0, 3);
-      if (ids.length < 2) return;
+      if (ids.length < 2 || this.state.guidedBusy) return;
       this.closePicker();
-      const loading = loadingCard("Building a catalog comparison…");
-      appendFeed(this.dom, loading);
+      this.appendUserChoice("Compare Selected");
+      this.state.guidedBusy = true;
+      const thinking = thinkingIndicator();
+      const minimumDelay = wait(GUIDED_THINKING_MS);
+      appendFeed(this.dom, thinking);
       try {
         const payload = await this.api.compare(ids);
+        await minimumDelay;
         const comparison = renderComparison(this, payload);
-        loading.replaceWith(comparison);
-        revealFeedNode(this.dom, comparison);
+        thinking.remove();
+        this.presentPrimaryCard(comparison);
       } catch (error) {
-        loading.replaceWith(errorCard(cleanText(error.message), () => this.startCompare(), () => this.openLead()));
+        await minimumDelay;
+        thinking.replaceWith(errorCard(cleanText(error.message), () => this.startCompare(), () => this.openLead()));
+      } finally {
+        thinking.remove();
+        this.state.guidedBusy = false;
       }
     }
 
@@ -1540,7 +1812,7 @@
           element("p", "prototype-copy", status.textContent),
           renderContinuation(this, [["Keep Exploring", this.state.logicalContext.page_type === "homepage" ? "browse_universities" : "compare"]]),
         );
-        appendFeed(this.dom, confirmation);
+        this.presentPrimaryCard(confirmation);
         window.setTimeout(() => this.closeLead(), 700);
       } catch (error) {
         status.textContent = cleanText(error.message) || "We couldn’t save your request. Please try again.";
@@ -1747,6 +2019,8 @@
           entityReference: state.entityReference,
           sessionId: state.sessionId,
           chatBusy: state.chatBusy,
+          guidedBusy: state.guidedBusy,
+          viewedActions: [...state.viewedActions],
           picker: state.picker ? { kind: state.picker.kind, mode: state.picker.mode, query: state.picker.query } : null,
         });
       },

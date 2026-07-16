@@ -32,6 +32,46 @@ publisher has not supplied a field. The bundled sample catalog, for example, doe
 semester-wise syllabus data, rating breakdowns, testimonials, or recruiter lists. The
 prototype does not invent those facts.
 
+## Conversation sequencing
+
+The interaction layer treats navigation and answers differently without introducing another
+router or state machine:
+
+- **Exploration:** bot prompt -> chips or picker -> next bot prompt. University and program
+  choices update context but do not render entity cards.
+- **Information:** an explicit fees, eligibility, career, reviews, syllabus, accreditation,
+  comparison, or details request renders the existing answer card.
+- **Resolved recommendation:** choosing a specialization produces a short bot introduction and
+  then the existing specialization card.
+
+The UX audit found five places where navigation previously looked like a catalog dashboard:
+
+| Previous behavior | Current behavior |
+| --- | --- |
+| University page immediately rendered a university card | Bot acknowledges the university and asks what the visitor wants to know |
+| Course page immediately rendered a course card | Bot acknowledges the course and presents its information actions |
+| University picker selection rendered a university card | Bot states the catalog program count and presents program chips |
+| Program/category selection rendered selectable course cards | Bot asks for a university through the existing searchable picker, then presents specialization chips |
+| Help/choose-first prompts used card containers | Bot bubbles and chips handle those exploration steps |
+
+Specialization, information, comparison, lead-confirmation, explicit details, and typed-chat
+cards remain answer states. Counts and labels come from the existing guide payload; the bundled
+NMIMS sample currently resolves to two programs and two MBA specializations.
+
+The prototype also applies four deliberately small pacing rules:
+
+- Guided responses show an accessible three-dot thinking indicator for a fixed 650 ms. Catalog
+  requests begin immediately, so the delay is a pacing floor rather than added network latency.
+- Exploration prompts show three choices and progressively disclose extras with `More`. Opening
+  context shows four homepage actions or three page actions, with secondary actions behind
+  `More`.
+- Completed actions are tracked for the current simulated-page journey and removed from later
+  follow-ups.
+- Rendering a new primary answer collapses the previous primary card into a quiet disclosure.
+
+These behaviors live only in the simulator controller. They do not add a workflow engine or
+change the guide API, catalog projections, card data, or typed-chat transport.
+
 ## Local review
 
 From the `chatbot` directory:

@@ -84,8 +84,84 @@ def test_guide_and_chat_transports_are_kept_separate() -> None:
     assert 'dom.chatForm.addEventListener("submit"' in source
     assert '"/chat"' not in guided_section
     assert "chatTransport" not in guided_section
-    assert 'this.api.catalog("courses"' in guided_section
+    assert "this.api.catalog(picker.requestKind" in guided_section
     assert ".innerHTML" not in source
+
+
+def test_exploration_states_use_prompts_and_choices_instead_of_entity_cards() -> None:
+    source = _source("prototype.js")
+    render_bundle = source.split('renderBundle(origin = "page") {', maxsplit=1)[1].split(
+        "programLabel(item)", maxsplit=1
+    )[0]
+    select_entity = source.split("selectEntity(entity, selectionLabel) {", maxsplit=1)[1].split(
+        'async loadContext(origin = "page")', maxsplit=1
+    )[0]
+    category_flow = source.split("showProgramCategory(category) {", maxsplit=1)[1].split(
+        "compareKind()", maxsplit=1
+    )[0]
+
+    assert render_bundle.count("renderEntityCard(") == 1
+    assert re.search(
+        r'pageType\s*===\s*"university"[\s\S]+pageType\s*===\s*"course"[\s\S]+'
+        r"renderEntityCard\(",
+        render_bundle,
+    )
+    assert "What would you like to know?" in render_bundle
+    assert "showUniversityPrograms()" in render_bundle
+    assert "showCourseSpecializations()" in render_bundle
+    assert "renderEntityCard(" not in select_entity
+    assert "renderEntityCard(" not in category_flow
+    assert 'this.openPicker("courses"' in category_flow
+    assert "renderHelpChoose" not in source
+
+
+def test_specialization_and_information_states_remain_answer_cards() -> None:
+    source = _source("prototype.js")
+    handlers = source.split("handleAction(action, label) {", maxsplit=1)[1].split(
+        "\n    renderChooseFirst(subject", maxsplit=1
+    )[0]
+    comparison = source.split("async submitComparison() {", maxsplit=1)[1].split(
+        "openLead()", maxsplit=1
+    )[0]
+
+    assert "strongest catalog match" in source
+    for renderer in (
+        "renderFees(this)",
+        "renderEligibility(this)",
+        "renderCareer(this)",
+        "renderReviews(this)",
+        "renderSyllabus(this)",
+        "renderAccreditations(this)",
+    ):
+        assert renderer in handlers
+    assert "renderComparison(this, payload)" in comparison
+
+
+def test_guided_responses_are_paced_and_choices_are_progressively_disclosed() -> None:
+    source = _source("prototype.js")
+    delay = re.search(r"const GUIDED_THINKING_MS = (\d+);", source)
+
+    assert delay is not None
+    assert 500 <= int(delay.group(1)) <= 900
+    assert "function thinkingIndicator()" in source
+    assert "async runGuidedResponse(callback)" in source
+    assert "await wait(GUIDED_THINKING_MS)" in source
+    assert 'const pageSize = offset === 0 ? 3 : 2;' in source
+    assert 'const primaryLimit = pageType === "homepage" ? 4 : 3;' in source
+    assert "visible.slice(0, 3)" in source
+
+
+def test_viewed_actions_are_filtered_and_previous_answer_cards_collapse() -> None:
+    source = _source("prototype.js")
+    styles = _source("prototype.css")
+
+    assert "viewedActions: new Set()" in source
+    assert "this.state.viewedActions.add(action)" in source
+    assert "!viewed.has(action)" in source
+    assert "function collapsePrimaryCards(dom)" in source
+    assert 'card.dataset.primaryCard = "true"' in source
+    assert ".prototype-thinking" in styles
+    assert ".prototype-collapsed-answer" in styles
 
 
 def test_lead_form_preserves_the_existing_phone_only_contract() -> None:
