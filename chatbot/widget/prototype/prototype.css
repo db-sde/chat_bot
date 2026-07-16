@@ -393,8 +393,8 @@ svg {
   display: flex;
   flex-direction: column;
   width: min(402px, 100%);
-  height: min(858px, calc(100dvh - 48px));
-  min-height: 660px;
+  height: calc(100dvh - 180px);
+  min-height: 480px;
   overflow: hidden;
   border: 1px solid rgba(14, 31, 61, 0.16);
   border-radius: var(--radius-xl);
@@ -631,17 +631,17 @@ svg {
 
 .guide-panel {
   flex: none;
-  padding: 11px 13px 10px;
-  border-top: 1px solid var(--line);
-  background: #fff;
+  padding: 2px 0 10px;
+  border-top: none;
+  background: transparent;
 }
 
 .guide-panel h3 {
   margin: 0 0 8px;
-  color: #364258;
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.005em;
+  color: #9CA3AF;
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .guide-actions {
@@ -654,28 +654,29 @@ svg {
 .quick-action {
   display: flex;
   min-width: 0;
-  min-height: 38px;
+  min-height: 44px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 7px;
-  padding: 8px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: #fff;
-  color: var(--navy);
-  font-size: 0.65rem;
-  font-weight: 750;
-  line-height: 1.25;
+  padding: 10px 11px;
+  border: 1px solid #E5E7EB;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0E1F3D;
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.2;
   text-align: left;
-  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 140ms ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: background-color 140ms ease, border-color 140ms ease;
 }
 
 .guide-action:hover,
 .quick-action:hover {
-  border-color: rgba(232, 64, 16, 0.42);
-  background: var(--orange-soft);
-  color: var(--orange-dark);
-  transform: translateY(-1px);
+  background: #F3F4F6;
+  border-color: #E5E7EB;
+  color: #0E1F3D;
+  transform: none;
 }
 
 .guide-action svg,
@@ -1837,33 +1838,32 @@ svg {
 .prototype-guide-action {
   display: flex;
   min-width: 0;
-  min-height: 39px;
+  min-height: 44px;
   align-items: center;
-  padding: 8px 9px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: #fff;
-  color: var(--navy);
-  font-size: 0.64rem;
-  font-weight: 800;
-  line-height: 1.28;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 10px 11px;
+  border: 1px solid #E5E7EB;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0E1F3D;
+  font-size: 0.68rem;
+  font-weight: 500;
+  line-height: 1.2;
   text-align: left;
-  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 140ms ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  transition: background-color 140ms ease, border-color 140ms ease;
 }
 
 .prototype-guide-action:hover {
-  border-color: rgba(232, 64, 16, 0.42);
-  background: var(--orange-soft);
-  color: var(--orange-dark);
-  transform: translateY(-1px);
+  background: #F3F4F6;
+  border-color: #E5E7EB;
+  color: #0E1F3D;
+  transform: none;
 }
 
 .prototype-guide-action::after {
-  flex: none;
-  margin-left: auto;
-  color: #a3acb9;
-  content: "›";
-  font-size: 0.9rem;
+  display: none;
 }
 
 .prototype-guide-action--secondary {
@@ -1878,16 +1878,16 @@ svg {
 
 .prototype-more__summary {
   display: flex;
-  min-height: 32px;
+  min-height: 36px;
   align-items: center;
   justify-content: center;
   gap: 5px;
-  border: 1px dashed #c5cbd4;
-  border-radius: var(--radius-sm);
-  background: var(--surface-muted);
-  color: #5e6b7f;
-  font-size: 0.62rem;
-  font-weight: 800;
+  border: 1px dashed #cfd3da;
+  border-radius: 9px;
+  background: transparent;
+  color: #4B5563;
+  font-size: 0.7rem;
+  font-weight: 500;
   list-style: none;
   user-select: none;
 }
@@ -1897,13 +1897,13 @@ svg {
 }
 
 .prototype-more__summary::after {
-  content: "+";
-  color: var(--orange);
+  content: "⌄";
+  color: #4B5563;
   font-size: 0.8rem;
 }
 
 .prototype-more[open] .prototype-more__summary::after {
-  content: "−";
+  content: "⌃";
 }
 
 .prototype-more__grid {

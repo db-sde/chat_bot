@@ -47,35 +47,35 @@
 
   const OPENING_ACTIONS = {
     homepage: [
-      { label: "🎓 Browse universities", action: "open_university_picker" },
-      { label: "📚 Browse programs", action: "show_programs" },
-      { label: "🎯 Help me choose", action: "open_finder" },
-      { label: "🛡️ Is an online degree valid?", message: "Is an online degree valid?" },
+      { label: "Browse Universities", action: "open_university_picker" },
+      { label: "Browse Programs", action: "show_programs" },
+      { label: "Help Me Choose", action: "open_finder" },
+      { label: "Is Online Degree Valid?", message: "Is an online degree valid?" },
     ],
     university: [
-      { label: "📚 Programs offered here", contextual: "programs" },
-      { label: "⭐ Student reviews", contextual: "reviews" },
-      { label: "🏅 Accreditations", contextual: "accreditations" },
-      { label: "⚖️ Compare with others", contextual: "compare" },
+      { label: "Programs Offered Here", contextual: "programs" },
+      { label: "Student Reviews", contextual: "reviews" },
+      { label: "Accreditations", contextual: "accreditations" },
+      { label: "Compare With Others", contextual: "compare" },
     ],
     course: [
-      { label: "💰 Fees & EMI", contextual: "fees and EMI" },
-      { label: "🎯 Specializations", contextual: "specializations" },
-      { label: "✅ Eligibility", contextual: "eligibility" },
-      { label: "⚖️ Compare universities", contextual: "compare universities" },
+      { label: "Fees & EMI", contextual: "fees and EMI" },
+      { label: "Specializations", contextual: "specializations" },
+      { label: "Eligibility", contextual: "eligibility" },
+      { label: "Compare Universities", contextual: "compare universities" },
     ],
     specialization: [
-      { label: "💼 Career & salary", contextual: "career and salary" },
-      { label: "📖 Syllabus", contextual: "syllabus" },
-      { label: "💰 Fees", contextual: "fees" },
-      { label: "🔄 Other specializations", contextual: "other specializations" },
+      { label: "Career & Salary", contextual: "career and salary" },
+      { label: "Syllabus", contextual: "syllabus" },
+      { label: "Fees", contextual: "fees" },
+      { label: "Other Specializations", contextual: "other specializations" },
     ],
   };
   const MORE_ACTIONS = [
-    { label: "⚖️ Compare", message: "Compare universities" },
-    { label: "💰 Fees & EMI", message: "Show me fees and EMI options" },
-    { label: "✅ Eligibility", message: "What are the eligibility requirements?" },
-    { label: "📞 Talk to a counsellor", action: "open_lead" },
+    { label: "Compare", message: "Compare universities" },
+    { label: "Fees & EMI", message: "Show me fees and EMI options" },
+    { label: "Eligibility", message: "What are the eligibility requirements?" },
+    { label: "Talk to a Counsellor", action: "open_lead" },
   ];
   const PROGRAM_OPTIONS = ["Online MBA", "Online MCA", "Online Executive MBA", "Online MSc"];
 
@@ -1355,7 +1355,7 @@
     if (config.showAvatar) identity.appendChild(createAvatar("db-widget__avatar--header"));
     const labels = element("div", "db-widget__identity-copy");
     labels.appendChild(element("strong", "db-widget__bot-name", config.botName));
-    labels.appendChild(element("span", "db-widget__bot-role", "AI Admission Advisor"));
+    labels.appendChild(element("span", "db-widget__bot-role", "Admissions guide"));
     labels.appendChild(element("span", "db-widget__status", "Online"));
     identity.appendChild(labels);
     const close = createButton("×", "db-widget__icon-button", () => setOpen(false));
@@ -1402,11 +1402,12 @@
     state.typing = typing;
 
     const composer = element("form", "db-widget__composer");
+    const composerInner = element("div", "db-widget__composer-inner");
     const input = document.createElement("textarea");
     input.className = "db-widget__input";
     input.rows = 1;
     input.maxLength = 4000;
-    input.placeholder = "Ask about universities, fees, careers…";
+    input.placeholder = "Ask about courses, fees, eligibility…";
     input.setAttribute("aria-label", "Message the admission advisor");
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -1414,11 +1415,12 @@
         composer.requestSubmit();
       }
     });
+    composerInner.appendChild(input);
     const send = element("button", "db-widget__send", "");
     send.type = "submit";
     send.setAttribute("aria-label", "Send message");
-    send.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 4 16 8-16 8 3-8-3-8Zm3.8 7h7.4L6.5 6.7 7.8 11Zm-1.3 6.3 8.7-4.3H7.8l-1.3 4.3Z"/></svg>';
-    composer.append(input, send);
+    send.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
+    composer.append(composerInner, send);
     composer.addEventListener("submit", (event) => {
       event.preventDefault();
       sendMessage(input.value);

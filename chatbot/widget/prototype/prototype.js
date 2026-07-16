@@ -479,7 +479,11 @@
   }
 
   function appendFeed(dom, node) {
-    dom.feed.appendChild(node);
+    if (dom.guidePanel && dom.guidePanel.parentNode === dom.feed) {
+      dom.feed.insertBefore(node, dom.guidePanel);
+    } else {
+      dom.feed.appendChild(node);
+    }
     revealFeedNode(dom, node);
     return node;
   }
@@ -1089,6 +1093,9 @@
         ? "Choose a guided action above to begin."
         : "Use the guided actions above for catalog-backed details and the next step.";
       this.dom.feed.appendChild(feedMessage("guide", contextualHint));
+      if (this.dom.guidePanel) {
+        this.dom.feed.appendChild(this.dom.guidePanel);
+      }
       this.dom.feed.scrollTop = 0;
     }
 
@@ -1627,6 +1634,7 @@
       contextBar: byId("context-bar"),
       clearContext: byId("clear-context"),
       feed: byId("feed"),
+      guidePanel: byId("guide-panel"),
       guideHeading: byId("guide-heading"),
       guideActions: byId("guide-actions"),
       moreActions: byId("more-actions"),

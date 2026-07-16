@@ -1161,10 +1161,10 @@ widget_config_store = WidgetConfigStore(_runtime_settings.widget_config_path)
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
-    path = WIDGET_DIR / "demo.html"
+    path = WIDGET_DIR / "prototype" / "index.html"
     if path.exists():
         return FileResponse(path, media_type="text/html")
-    return HTMLResponse(content="<h1>demo.html not found</h1>", status_code=404)
+    return HTMLResponse(content="<h1>prototype/index.html not found</h1>", status_code=404)
 
 
 @app.get("/widget.js", include_in_schema=False)
@@ -1175,7 +1175,7 @@ async def widget_script() -> FileResponse:
     return FileResponse(
         WIDGET_DIR / "widget.js",
         media_type="application/javascript",
-        headers={"Cache-Control": "public, max-age=300"},
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -1185,7 +1185,7 @@ async def widget_stylesheet() -> FileResponse:
     return FileResponse(
         WIDGET_DIR / "widget.css",
         media_type="text/css",
-        headers={"Cache-Control": "public, max-age=3600"},
+        headers={"Cache-Control": "no-store"},
     )
 
 
@@ -1212,6 +1212,7 @@ async def guided_prototype() -> FileResponse:
     return FileResponse(WIDGET_DIR / "prototype" / "index.html", media_type="text/html")
 
 
+@app.get("/prototype.css", include_in_schema=False)
 @app.get("/widget/prototype/prototype.css", include_in_schema=False)
 async def guided_prototype_stylesheet() -> FileResponse:
     return FileResponse(
@@ -1221,6 +1222,7 @@ async def guided_prototype_stylesheet() -> FileResponse:
     )
 
 
+@app.get("/prototype.js", include_in_schema=False)
 @app.get("/widget/prototype/prototype.js", include_in_schema=False)
 async def guided_prototype_script() -> FileResponse:
     return FileResponse(
