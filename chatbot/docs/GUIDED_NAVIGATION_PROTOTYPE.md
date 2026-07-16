@@ -1,118 +1,8 @@
-# Guided Navigation Prototype
+# Guided Navigation — Production Widget 2.0
 
-## Purpose and boundary
+## Status
 
-The prototype is an additive, catalog-driven admissions explorer. It does not replace or
-rewrite the production widget. The existing embedded loader, conversational response payload,
-NLU, resolver, router, session focus, and catalog models remain unchanged.
-
-Two transports are deliberately kept separate:
-
-```text
-Guided click -> GuidedNavigator -> /api/widget/guide/* -> CatalogStore
-Typed message -> ChatTransport -> /chat -> existing chatbot pipeline
-```
-
-Changing the simulated page creates a new chat session. That prevents focus from a previous
-scenario from influencing a typed turn in the new scenario.
-
-## What the prototype adds
-
-- A standalone simulator at `/widget/prototype` with Homepage, University, Course, and
-  Specialization scenarios.
-- An in-memory page-context controller and a visible JSON context inspector.
-- Catalog-backed university, program, and specialization pickers.
-- Catalog-backed entity, fee, eligibility, career, syllabus, review, accreditation, and
-  comparison views.
-- A direct phone lead form that reuses the existing `/api/widget/lead` endpoint.
-- Read-only presentation endpoints under `/api/widget/guide/*`.
-
-The rich information views intentionally render an explicit unavailable state when the
-publisher has not supplied a field. The bundled sample catalog, for example, does not contain
-semester-wise syllabus data, rating breakdowns, testimonials, or recruiter lists. The
-prototype does not invent those facts.
-
-## Conversation sequencing
-
-The interaction layer treats navigation and answers differently without introducing another
-router or state machine:
-
-- **Exploration:** bot prompt -> chips or picker -> next bot prompt. University and program
-  choices update context but do not render entity cards.
-- **Information:** an explicit fees, eligibility, career, reviews, syllabus, accreditation,
-  comparison, or details request renders the existing answer card.
-- **Resolved recommendation:** choosing a specialization produces a short bot introduction and
-  then the existing specialization card.
-
-The UX audit found five places where navigation previously looked like a catalog dashboard:
-
-| Previous behavior | Current behavior |
-| --- | --- |
-| University page immediately rendered a university card | Bot acknowledges the university and asks what the visitor wants to know |
-| Course page immediately rendered a course card | Bot acknowledges the course and presents its information actions |
-| University picker selection rendered a university card | Bot states the catalog program count and presents program chips |
-| Program/category selection rendered selectable course cards | Bot asks for a university through the existing searchable picker, then presents specialization chips |
-| Help/choose-first prompts used card containers | Bot bubbles and chips handle those exploration steps |
-
-Specialization, information, comparison, lead-confirmation, explicit details, and typed-chat
-cards remain answer states. Counts and labels come from the existing guide payload; the bundled
-NMIMS sample currently resolves to two programs and two MBA specializations.
-
-The prototype also applies four deliberately small pacing rules:
-
-- Guided responses show an accessible three-dot thinking indicator for a fixed 650 ms. Catalog
-  requests begin immediately, so the delay is a pacing floor rather than added network latency.
-- Exploration prompts show three choices and progressively disclose extras with `More`. Opening
-  context shows four homepage actions or three page actions, with secondary actions behind
-  `More`.
-- Completed actions are tracked for the current simulated-page journey and removed from later
-  follow-ups.
-- Rendering a new primary answer collapses the previous primary card into a quiet disclosure.
-
-These behaviors live only in the simulator controller. They do not add a workflow engine or
-change the guide API, catalog projections, card data, or typed-chat transport.
-
-## Local review
-
-From the `chatbot` directory:
-
-```bash
-uv run uvicorn main:app --reload
-```
-
-Then open:
-
-```text
-http://127.0.0.1:8000/widget/prototype
-```
-
-Use the scenario panel to simulate these future page contexts:
-
-| Scenario | Logical context | Resolved sample catalog page |
-| --- | --- | --- |
-| Homepage | `{"page_type":"homepage"}` | None |
-| University | `{"page_type":"university","university":"nmims"}` | `nmims-online` |
-| Course | `{"page_type":"course","university":"nmims","course":"mba"}` | `nmims-online-mba` |
-| Specialization | `{"page_type":"specialization","university":"nmims","course":"mba","specialization":"business-analytics"}` | `nmims-mba-analytics` |
-
-## Guide API
-
-The guide endpoints are presentation-only projections over the current immutable
-`CatalogStore`:
-
-- `GET /api/widget/guide/context` resolves a simulated context or exact entity and returns its
-  existing card projection, related catalog records, and grounded information sections.
-- `GET /api/widget/guide/catalog/{kind}` supplies searchable university, program-category,
-  concrete course-provider, and specialization picker data (`universities`, `programs`,
-  `courses`, and `specializations`).
-- `POST /api/widget/guide/compare` builds the existing catalog-grounded comparison component
-  from two or three exact entity IDs.
-
-None of these routes imports or invokes the chatbot's NLU, resolver, routing, or LLM layers.
-
-## Production integration path
-
-The production embed remains:
+The validated guided-navigation experience now lives in the production embed:
 
 ```html
 <script
@@ -121,24 +11,142 @@ The production embed remains:
 ></script>
 ```
 
-When the prototype is approved, the production loader can adopt the guided controller behind
-the existing Shadow DOM boundary. At bootstrap it should derive a small context object from a
-server-provided page descriptor or an exact URL-to-catalog mapping, rather than guessing from
-free-form path text. For example:
+`widget/prototype/*` remains available only as a historical UX reference. It is not loaded by
+the production widget, the real-widget demo, or the application root, and future UX work should
+target `widget/widget.js` and `widget/widget.css`.
 
-```js
-const pageContext = {
-  page_type: "course",
-  university: "nmims",
-  course: "mba",
-};
+## Migration plan and result
+
+The production widget adopts the proven UX decisions without copying the simulator controller:
+
+- page-aware opening actions for homepage, university, course, and specialization pages;
+- a sticky university/course/specialization context chip with a non-destructive clear action;
+- catalog-driven university → program → specialization navigation using questions and chips;
+- searchable catalog pickers presented as bottom sheets;
+- information cards for fees, eligibility, careers, syllabus, reviews, accreditations, and
+  comparisons;
+- a specialization card only when a specialization is resolved;
+- a 650 ms guided-response pacing floor using the existing typing indicator;
+- three visible follow-up actions with paged `More` overflow;
+- per-journey viewed-action filtering;
+- semantic accordion behavior that keeps only one guided information card expanded;
+- the existing phone-only human counsellor flow.
+
+The simulator scenario selector was migrated to `widget/demo.html`, which reloads the real
+production widget with exact runtime page data.
+
+## Widget 2.0 architecture
+
+The widget keeps two explicit transports:
+
+```text
+Guided click
+  -> production widget navigation helpers
+  -> /api/widget/guide/context | catalog | compare
+  -> existing CatalogStore projections
+
+Typed message
+  -> production composer
+  -> /chat
+  -> existing NLU -> resolver -> router -> response pipeline
 ```
 
-The loader can pass that object to `GuidedNavigator` while continuing to pass typed composer
-submissions to the current `/chat` transport. The additive guide endpoints and response
-projections can be reused unchanged. The simulator-only scenario panel and JSON inspector are
-not included in that production embed.
+Inside the existing Shadow DOM widget, `widget.js` now owns:
 
-Before rollout, map real canonical page URLs to exact catalog IDs or slugs on the server, add
-cache headers appropriate to the catalog publication cadence, and gate the guided layer with a
-tenant feature flag so the current widget can remain the rollback path.
+```text
+Widget 2.0
+├── Runtime page context
+├── Guided navigation state
+├── Sticky context chip
+├── Catalog pickers
+├── Guided questions and follow-up chips
+├── Information and comparison cards
+├── Existing finder and lead panels
+├── Typed composer
+└── Existing SSE chat transport
+```
+
+There is no second router, workflow engine, NLU path, or client-side catalog schema.
+
+## Reused unchanged
+
+- `/chat`, its SSE response handling, and session IDs;
+- NLU, resolver, routing, and response payload contracts;
+- immutable catalog entities and the existing guide projections;
+- `/api/widget/lead` and its phone-only contract;
+- `/api/widget/context/clear`;
+- production Shadow DOM lifecycle, configuration, card primitives, finder, and overlays.
+
+Guided entity changes also become the active page context for the next typed message. Clearing
+the context removes that navigation focus without deleting rendered typed-chat history.
+
+## Navigation and answer rules
+
+Exploration and answers remain distinct:
+
+- Selecting a university asks which program interests the visitor; it does not render a
+  university card.
+- Selecting a program asks which specialization interests the visitor; it does not render a
+  course card.
+- Selecting a specialization renders the grounded specialization card.
+- Fees, eligibility, career, syllabus, reviews, accreditations, and comparison render cards only
+  when explicitly requested.
+- Missing publisher data uses admissions-friendly unavailable copy and is never invented.
+- Each guided response offers at most three substantive follow-ups; `More` pages overflow without
+  exposing a dense action wall.
+
+## Real-widget scenario demo
+
+Run from the `chatbot` directory:
+
+```bash
+uv run uvicorn main:app --reload
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/
+```
+
+or:
+
+```text
+http://127.0.0.1:8000/widget/demo.html
+```
+
+The visible scenario selector reloads `widget.js` with these exact embed contexts:
+
+| Scenario | Runtime dataset |
+| --- | --- |
+| Homepage | `pageType=homepage` |
+| University | `pageType=university`, `pageUniversitySlug=nmims`, `pageEntitySlug=nmims-online` |
+| Course | `pageType=course`, `pageUniversitySlug=nmims`, `pageEntitySlug=nmims-online-mba` |
+| Specialization | `pageType=specialization`, `pageUniversitySlug=nmims`, `pageEntitySlug=nmims-mba-analytics` |
+
+Every scenario uses the real guide APIs, lead API, session handling, and `/chat`; no prototype
+asset is involved.
+
+## Production URL integration
+
+Real pages should continue supplying exact catalog-backed descriptors on the embed script or
+document dataset:
+
+```html
+<script
+  src="https://ai.degreebaba.com/widget.js"
+  data-site-key="degreebaba"
+  data-page-type="course"
+  data-page-university-slug="nmims"
+  data-page-entity-slug="nmims-online-mba"
+></script>
+```
+
+The server-side page or canonical URL mapping should provide the exact entity slug. The widget
+does not guess academic entities from arbitrary URL text.
+
+## Reference prototype
+
+The isolated reference remains available at `/widget/prototype/` for historical comparison.
+It should not receive further product work and can be removed later once the production rollout
+no longer needs a visual reference.

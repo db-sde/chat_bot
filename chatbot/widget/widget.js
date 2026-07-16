@@ -45,37 +45,39 @@
   if (widgetNamespace.instances[siteKey] || widgetNamespace.loading[siteKey]) return;
   widgetNamespace.loading[siteKey] = true;
 
+  const GUIDED_THINKING_MS = 650;
+  const GUIDED_VISIBLE_ACTIONS = 3;
   const OPENING_ACTIONS = {
     homepage: [
-      { label: "Browse Universities", action: "open_university_picker" },
-      { label: "Browse Programs", action: "show_programs" },
-      { label: "Help Me Choose", action: "open_finder" },
-      { label: "Is Online Degree Valid?", message: "Is an online degree valid?" },
+      { label: "Browse Universities", guide: "browse_universities" },
+      { label: "Browse Programs", guide: "browse_programs" },
+      { label: "Help Me Choose", guide: "finder" },
+      { label: "Is Online Degree Valid?", guide: "online_validity" },
     ],
     university: [
-      { label: "Programs Offered Here", contextual: "programs" },
-      { label: "Student Reviews", contextual: "reviews" },
-      { label: "Accreditations", contextual: "accreditations" },
-      { label: "Compare With Others", contextual: "compare" },
+      { label: "Programs Offered Here", guide: "programs_here" },
+      { label: "Student Reviews", guide: "reviews" },
+      { label: "Accreditations", guide: "accreditations" },
+      { label: "Compare With Others", guide: "compare" },
     ],
     course: [
-      { label: "Fees & EMI", contextual: "fees and EMI" },
-      { label: "Specializations", contextual: "specializations" },
-      { label: "Eligibility", contextual: "eligibility" },
-      { label: "Compare Universities", contextual: "compare universities" },
+      { label: "Fees & EMI", guide: "fees" },
+      { label: "Specializations", guide: "specializations" },
+      { label: "Eligibility", guide: "eligibility" },
+      { label: "Compare Universities", guide: "compare" },
     ],
     specialization: [
-      { label: "Career & Salary", contextual: "career and salary" },
-      { label: "Syllabus", contextual: "syllabus" },
-      { label: "Fees", contextual: "fees" },
-      { label: "Other Specializations", contextual: "other specializations" },
+      { label: "Career & Salary", guide: "career" },
+      { label: "Syllabus", guide: "syllabus" },
+      { label: "Fees", guide: "fees" },
+      { label: "Other Specializations", guide: "other_specializations" },
     ],
   };
   const MORE_ACTIONS = [
-    { label: "Compare", message: "Compare universities" },
-    { label: "Fees & EMI", message: "Show me fees and EMI options" },
-    { label: "Eligibility", message: "What are the eligibility requirements?" },
-    { label: "Talk to a Counsellor", action: "open_lead" },
+    { label: "Compare", guide: "compare" },
+    { label: "Fees & EMI", guide: "fees" },
+    { label: "Eligibility", guide: "eligibility" },
+    { label: "Talk to a Counsellor", guide: "lead" },
   ];
   const PROGRAM_OPTIONS = ["Online MBA", "Online MCA", "Online Executive MBA", "Online MSc"];
 
@@ -133,11 +135,18 @@
     context: null,
     pageContext: null,
     pageContextDismissed: false,
+    guideBundle: null,
+    guideBusy: false,
+    guideGeneration: 0,
+    guideReady: null,
+    viewedActions: new Set(),
+    welcomeView: null,
     overlay: null,
     overlayBody: null,
     overlayTitle: null,
     overlayClose: null,
     pickerCache: new Map(),
+    guidePickerCache: new Map(),
     finder: null,
     finderView: null,
     compareSelections: [],
@@ -208,7 +217,7 @@
       avatar.appendChild(image);
     } else {
       avatar.innerHTML =
-        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a7 7 0 0 0-7 7v1.2A3 3 0 0 0 3 14v2a3 3 0 0 0 3 3h1.2l1.1 1.3a1 1 0 0 0 .8.4h5.8a1 1 0 0 0 .8-.4l1.1-1.3H18a3 3 0 0 0 3-3v-2a3 3 0 0 0-2-2.8V10a7 7 0 0 0-7-7Zm-3 8.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm6 0a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5ZM8.7 16h6.6a3.7 3.7 0 0 1-6.6 0Z"/></svg>';
+        '<svg viewBox="0 0 24 24" aria-hidden="true" width="24" height="24"><path d="M12 3a7 7 0 0 0-7 7v1.2A3 3 0 0 0 3 14v2a3 3 0 0 0 3 3h1.2l1.1 1.3a1 1 0 0 0 .8.4h5.8a1 1 0 0 0 .8-.4l1.1-1.3H18a3 3 0 0 0 3-3v-2a3 3 0 0 0-2-2.8V10a7 7 0 0 0-7-7Zm-3 8.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm6 0a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5ZM8.7 16h6.6a3.7 3.7 0 0 1-6.6 0Z"/></svg>';
     }
     return avatar;
   }
@@ -258,30 +267,6 @@
     };
   }
 
-  function contextualSubject() {
-    const contextName = state.pageContext && (state.pageContext.name || state.pageContext.label);
-    return contextName || pageEntitySlug || pageUniversitySlug || "this page";
-  }
-
-  function contextualMessage(topic) {
-    const subject = contextualSubject();
-    const messages = {
-      programs: `Show programs offered at ${subject}`,
-      reviews: `Show student reviews for ${subject}`,
-      accreditations: `Show accreditations for ${subject}`,
-      compare: `Compare ${subject} with other universities`,
-      "fees and EMI": `Show fees and EMI for ${subject}`,
-      specializations: `Show specializations for ${subject}`,
-      eligibility: `Am I eligible for ${subject}?`,
-      "compare universities": `Compare universities offering ${subject}`,
-      "career and salary": `Show career and salary outcomes for ${subject}`,
-      syllabus: `Show the syllabus for ${subject}`,
-      fees: `Show fees for ${subject}`,
-      "other specializations": `Show other specializations related to ${subject}`,
-    };
-    return messages[topic] || `${topic} for ${subject}`;
-  }
-
   function actionButton(action, className = "db-widget__action") {
     const normalized = normalizedAction(action);
     if (!normalized || !normalized.label) return null;
@@ -294,20 +279,24 @@
     const kind = String(action.action || "").toLowerCase();
     const label = action.label.toLowerCase();
     const payload = action.payload || {};
+    if (action.guide) {
+      executeGuidedAction(String(action.guide), action.label);
+      return;
+    }
     if (kind === "open_university_picker" || kind === "open_picker" && payload.kind === "university") {
-      openPicker("university");
+      executeGuidedAction("browse_universities", action.label);
       return;
     }
     if (kind === "open_specialization_picker" || kind === "open_picker" && payload.kind === "specialization") {
-      openPicker("specialization");
+      executeGuidedAction("specializations", action.label);
       return;
     }
     if (kind === "show_programs") {
-      showProgramOptions();
+      executeGuidedAction("browse_programs", action.label);
       return;
     }
     if (kind === "open_finder") {
-      startFinder();
+      executeGuidedAction("finder", action.label);
       return;
     }
     if (
@@ -316,27 +305,41 @@
       label.includes("talk to a counsellor") ||
       label.includes("talk to a counselor")
     ) {
-      openLeadPanel({ source: payload.source || "quick_action", label: action.label });
+      executeGuidedAction("lead", action.label, { source: payload.source || "quick_action" });
       return;
     }
     if (label.includes("browse universit")) {
-      openPicker("university");
+      executeGuidedAction("browse_universities", action.label);
       return;
     }
     if (label.includes("browse by specialization")) {
-      openPicker("specialization");
+      executeGuidedAction("specializations", action.label);
       return;
     }
     if (label.includes("browse programs")) {
-      showProgramOptions();
+      executeGuidedAction("browse_programs", action.label);
       return;
     }
     if (label.includes("help me choose")) {
-      startFinder();
+      executeGuidedAction("finder", action.label);
       return;
     }
     if (action.contextual) {
-      sendMessage(contextualMessage(action.contextual));
+      const guideActions = {
+        programs: "programs_here",
+        reviews: "reviews",
+        accreditations: "accreditations",
+        compare: "compare",
+        "fees and EMI": "fees",
+        specializations: "specializations",
+        eligibility: "eligibility",
+        "compare universities": "compare",
+        "career and salary": "career",
+        syllabus: "syllabus",
+        fees: "fees",
+        "other specializations": "other_specializations",
+      };
+      executeGuidedAction(guideActions[action.contextual] || action.contextual, action.label);
       return;
     }
     sendMessage(action.message || action.label);
@@ -400,10 +403,11 @@
     const actions = element("div", "db-widget__card-actions");
     const details = createButton(detailsLabel, "db-widget__card-button db-widget__card-action--primary", () => {
       if (hasDetails(component)) openDetails(component);
+      else if (component.guided === true) executeGuidedAction("fees", "View fees");
       else sendMessage(`Tell me about ${cardReference(component).label}`);
     });
     const compare = createButton("+ Compare", "db-widget__card-button db-widget__card-action", () => {
-      addToComparison(component);
+      beginGuidedComparison(component);
     });
     actions.append(details, compare);
     return actions;
@@ -554,10 +558,27 @@
 
   function renderQuickActions(actions) {
     const row = element("div", "db-widget__quick-actions db-widget__follow-up-actions");
-    (actions || []).map(normalizedAction).filter(Boolean).slice(0, 3).forEach((action) => {
-      const button = actionButton(action);
-      if (button) row.appendChild(button);
-    });
+    const available = (actions || []).map(normalizedAction).filter((action) => action && action.label);
+    const renderPage = (offset = 0) => {
+      row.replaceChildren();
+      const visible = offset === 0
+        ? available.slice(0, 3)
+        : available.slice(offset, offset + 2);
+      if (offset > 0) {
+        row.appendChild(createButton("Back", "db-widget__more-toggle", () => {
+          renderPage(offset <= GUIDED_VISIBLE_ACTIONS ? 0 : offset - 2);
+        }));
+      }
+      visible.forEach((action) => {
+        const button = actionButton(action);
+        if (button) row.appendChild(button);
+      });
+      const nextOffset = offset === 0 ? GUIDED_VISIBLE_ACTIONS : offset + 2;
+      if (nextOffset < available.length) {
+        row.appendChild(createButton("More", "db-widget__more-toggle", () => renderPage(nextOffset)));
+      }
+    };
+    renderPage();
     return row;
   }
 
@@ -609,11 +630,11 @@
 
   function payloadActions(payload, components) {
     if (Array.isArray(payload.quick_actions) && payload.quick_actions.length) {
-      return payload.quick_actions.slice(0, 3);
+      return payload.quick_actions;
     }
     const component = components.find((item) => item && item.type === "quick_actions");
-    if (component && Array.isArray(component.actions)) return component.actions.slice(0, 3);
-    return Array.isArray(payload.suggested_chips) ? payload.suggested_chips.slice(0, 3) : [];
+    if (component && Array.isArray(component.actions)) return component.actions;
+    return Array.isArray(payload.suggested_chips) ? payload.suggested_chips : [];
   }
 
   function renderBotPayload(payload, existingMessage) {
@@ -643,16 +664,469 @@
     return view;
   }
 
-  function showTyping(show) {
+  function guidedWait(milliseconds) {
+    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+  }
+
+  function currentGuideContext() {
+    return state.guideBundle && state.guideBundle.context || null;
+  }
+
+  function currentGuideEntity() {
+    return state.guideBundle && state.guideBundle.entity || null;
+  }
+
+  function currentGuidePageType() {
+    const context = currentGuideContext();
+    return cleanPageType(context && context.page_type || state.starterType || pageType);
+  }
+
+  function currentGuideLabel() {
+    const context = currentGuideContext();
+    const values = contextValues(context);
+    return context && context.label || values.join(" ") || "this option";
+  }
+
+  function openingMessage(type, bundle = null) {
+    const context = bundle && bundle.context;
+    const label = context && (context.label || contextValues(context).join(" • "));
+    const messages = {
+      homepage: "Explore universities and online programs. Where would you like to start?",
+      university: label
+        ? `You're viewing ${label}. What would you like to explore?`
+        : "Explore programs, reviews, accreditations, or comparisons for this university.",
+      course: label
+        ? `You're viewing ${label}. What would you like to know?`
+        : "Check fees, specializations, eligibility, or compare this program.",
+      specialization: label
+        ? `You're viewing ${label}. What would you like to know?`
+        : "Explore careers, syllabus, fees, or related specializations.",
+    };
+    return messages[type] || messages.homepage;
+  }
+
+  function updateWelcome(bundle = state.guideBundle) {
+    if (!state.welcomeView) return;
+    state.welcomeView.bubble.replaceChildren();
+    addRichText(state.welcomeView.bubble, openingMessage(currentGuidePageType(), bundle));
+  }
+
+  function deactivateGuidedActions() {
+    if (!state.messages) return;
+    state.messages.querySelectorAll('[data-guide-actions="true"]').forEach((row) => row.remove());
+  }
+
+  function renderGuidedActions(actions) {
+    const row = element("div", "db-widget__quick-actions db-widget__follow-up-actions");
+    row.dataset.guideActions = "true";
+    const available = (actions || []).filter((action) => (
+      action && action.label && (
+        action.repeat === true || !action.action || !state.viewedActions.has(action.action)
+      )
+    ));
+    if (!available.length && actions && actions.length) {
+      available.push({ label: "Browse Programs", action: "browse_programs", repeat: true });
+    }
+    const renderPage = (offset = 0) => {
+      row.replaceChildren();
+      const pageSize = offset === 0 ? GUIDED_VISIBLE_ACTIONS : 2;
+      if (offset > 0) {
+        row.appendChild(createButton("Back", "db-widget__more-toggle", () => {
+          renderPage(offset <= GUIDED_VISIBLE_ACTIONS ? 0 : offset - 2);
+        }));
+      }
+      available.slice(offset, offset + pageSize).forEach((action) => {
+        const className = action.action === "lead"
+          ? "db-widget__action db-widget__action--lead"
+          : "db-widget__action";
+        row.appendChild(createButton(action.label, className, () => {
+          row.remove();
+          if (typeof action.onSelect === "function") action.onSelect();
+          else executeGuidedAction(action.action, action.label, action.options || {});
+        }));
+      });
+      if (offset + pageSize < available.length) {
+        row.appendChild(createButton("More", "db-widget__more-toggle", () => {
+          renderPage(offset + pageSize);
+        }));
+      }
+    };
+    renderPage();
+    return row;
+  }
+
+  function renderGuidePrompt(message, actions = []) {
+    deactivateGuidedActions();
+    const view = createMessage("bot", message);
+    const actionRow = renderGuidedActions(actions);
+    if (actionRow.childElementCount) {
+      const stack = element("div", "db-widget__component-stack");
+      stack.appendChild(actionRow);
+      view.content.appendChild(stack);
+    }
+    anchorBotMessage(view.row);
+    return view;
+  }
+
+  function collapseGuidedCards() {
+    if (!state.messages) return;
+    state.messages.querySelectorAll("details.db-widget__collapsed-answer[open]").forEach((disclosure) => {
+      disclosure.open = false;
+    });
+  }
+
+  function presentGuidedCard(message, card, title, actions = []) {
+    deactivateGuidedActions();
+    collapseGuidedCards();
+    const view = createMessage("bot", message);
+    const stack = element("div", "db-widget__component-stack");
+    const disclosure = element("details", "db-widget__collapsed-answer");
+    disclosure.dataset.guidePrimary = "true";
+    disclosure.open = true;
+    disclosure.appendChild(element(
+      "summary",
+      "db-widget__collapsed-answer-summary",
+      title || card.querySelector("h3") && card.querySelector("h3").textContent || "Information",
+    ));
+    disclosure.appendChild(card);
+    disclosure.addEventListener("toggle", () => {
+      if (!disclosure.open) return;
+      state.messages.querySelectorAll("details.db-widget__collapsed-answer[open]").forEach((candidate) => {
+        if (candidate !== disclosure) candidate.open = false;
+      });
+    });
+    stack.appendChild(disclosure);
+    const actionRow = renderGuidedActions(actions);
+    if (actionRow.childElementCount) stack.appendChild(actionRow);
+    view.content.appendChild(stack);
+    anchorBotMessage(view.row);
+    return view;
+  }
+
+  function guideSection(card, title, values, emptyCopy) {
+    const section = element("section", "db-widget__detail-section");
+    section.appendChild(element("h4", "", title));
+    const items = Array.isArray(values) ? values.filter(Boolean) : values ? [values] : [];
+    if (!items.length) {
+      section.appendChild(element("p", "db-widget__state-copy", emptyCopy));
+      card.appendChild(section);
+      return;
+    }
+    const list = element("ul", "db-widget__message-list");
+    items.forEach((item) => {
+      if (item && typeof item === "object") {
+        const label = item.name || item.label || item.title || item.reviewer_name || "";
+        const value = item.amount || item.value || item.text || item.score || item.description || "";
+        const total = item.total ? ` · Total ${item.total}` : "";
+        list.appendChild(element("li", "", [label, value].filter(Boolean).join(": ") + total));
+      } else {
+        list.appendChild(element("li", "", item));
+      }
+    });
+    section.appendChild(list);
+    card.appendChild(section);
+  }
+
+  function guidedInfoCard(kind) {
+    const bundle = state.guideBundle || {};
+    const info = bundle.info || {};
+    const entity = bundle.entity || {};
+    const data = info[kind] || {};
+    const card = element("article", `db-widget__card db-widget__info-card db-widget__info-card--${kind}`);
+    const titles = {
+      fees: ["Fees", "Fees & EMI"],
+      eligibility: ["Admissions", "Eligibility"],
+      career: ["Outcomes", "Career & Salary"],
+      syllabus: ["Curriculum", "Syllabus"],
+      reviews: ["Student voice", "Student Reviews"],
+      accreditations: ["Recognition", "Accreditations"],
+    };
+    const [eyebrow, title] = titles[kind] || ["Details", "Published information"];
+    card.append(element("span", "db-widget__eyebrow", eyebrow), element("h3", "", title));
+
+    if (kind === "fees") {
+      const facts = statPills([
+        { label: "Total Fee", value: data.total_fee || entity.fee },
+        { label: "Semester Fee", value: data.semester_fee },
+        { label: "EMI", value: data.emi || entity.emi },
+      ]);
+      if (facts.childElementCount) card.appendChild(facts);
+      else card.appendChild(element("p", "db-widget__state-copy", "Confirmed fee details haven't been published yet."));
+      guideSection(card, "EMI plans", data.plans, "EMI plans haven't been published yet.");
+    } else if (kind === "eligibility") {
+      const summary = data.summary || entity.eligibility;
+      card.appendChild(element(
+        "p",
+        summary ? "db-widget__card-summary" : "db-widget__state-copy",
+        summary || "Confirmed eligibility requirements haven't been published yet.",
+      ));
+      guideSection(card, "Qualification checklist", data.requirements, "A qualification checklist hasn't been published yet.");
+    } else if (kind === "career") {
+      const facts = statPills([{ label: "Average Salary", value: data.average_salary || entity.average_salary }]);
+      if (facts.childElementCount) card.appendChild(facts);
+      else card.appendChild(element("p", "db-widget__state-copy", "Average salary information hasn't been published yet."));
+      guideSection(card, "Job roles", data.job_roles, "Job roles haven't been published yet.");
+      guideSection(card, "Recruiters", data.recruiters, "Recruiter information hasn't been published yet.");
+    } else if (kind === "syllabus") {
+      const semesters = Array.isArray(data.semesters) ? data.semesters : [];
+      if (!semesters.length) {
+        card.appendChild(element("p", "db-widget__state-copy", "A semester-wise syllabus hasn't been published yet."));
+      } else {
+        semesters.forEach((semester, index) => {
+          const details = element("details", "db-widget__detail-section");
+          if (index === 0) details.open = true;
+          details.appendChild(element("summary", "", semester.title || `Semester ${index + 1}`));
+          const list = element("ul", "db-widget__message-list");
+          (semester.items || []).forEach((item) => list.appendChild(element("li", "", item)));
+          details.appendChild(list);
+          card.appendChild(details);
+        });
+      }
+    } else if (kind === "reviews") {
+      const rating = statPills([{ label: "Rating", value: data.rating ? `${data.rating} / 5` : "" }]);
+      if (rating.childElementCount) card.appendChild(rating);
+      guideSection(card, "Rating breakdown", data.breakdown, "A rating breakdown hasn't been published yet.");
+      guideSection(card, "Testimonials", data.testimonials, "Student testimonials haven't been published yet.");
+    } else if (kind === "accreditations") {
+      guideSection(card, "Published recognition", data.items, "Accreditation details haven't been published yet.");
+      card.appendChild(element(
+        "p",
+        "db-widget__card-summary",
+        "Always confirm the current recognition status for the exact university and program before enrolling.",
+      ));
+    }
+    return { card, title };
+  }
+
+  function guidedFollowUps(kind) {
+    const banks = {
+      fees: [["Check Eligibility", "eligibility"], ["Compare Options", "compare"], ["Talk to a Counsellor", "lead"]],
+      eligibility: [["View Fees", "fees"], ["Compare Options", "compare"], ["Talk to a Counsellor", "lead"]],
+      career: [["View Syllabus", "syllabus"], ["View Fees", "fees"], ["Talk to a Counsellor", "lead"]],
+      syllabus: [["Career & Salary", "career"], ["Other Specializations", "other_specializations"], ["Talk to a Counsellor", "lead"]],
+      reviews: [["Programs Offered Here", "programs_here"], ["Compare With Others", "compare"], ["Talk to a Counsellor", "lead"]],
+      accreditations: [["Programs Offered Here", "programs_here"], ["Compare With Others", "compare"], ["Talk to a Counsellor", "lead"]],
+      comparison: [["Check Eligibility", "eligibility"], ["View Fees", "fees"], ["Talk to a Counsellor", "lead"]],
+      specialization: [["Career & Salary", "career"], ["Syllabus", "syllabus"], ["Talk to a Counsellor", "lead"]],
+    };
+    return (banks[kind] || []).map(([label, action]) => ({ label, action }));
+  }
+
+  async function ensureGuideBundle() {
+    if (state.guideReady) await state.guideReady;
+    if (!state.guideBundle) throw new Error("Guided context is unavailable");
+    return state.guideBundle;
+  }
+
+  async function showGuidedInfo(kind) {
+    const bundle = await ensureGuideBundle();
+    if (!bundle.entity) {
+      renderGuidePrompt(
+        `First, choose a program so I can show the right ${kind === "fees" ? "fees and EMI" : kind}.`,
+        [{ label: "Browse Programs", action: "browse_programs", repeat: true }],
+      );
+      return;
+    }
+    const result = guidedInfoCard(kind);
+    presentGuidedCard(
+      `Here's the confirmed ${result.title.toLowerCase()} information for ${currentGuideLabel()}.`,
+      result.card,
+      result.title,
+      guidedFollowUps(kind),
+    );
+  }
+
+  function validityCard() {
+    const card = element("article", "db-widget__card db-widget__info-card");
+    card.append(
+      element("span", "db-widget__eyebrow", "Before you enrol"),
+      element("h3", "", "Is an online degree valid?"),
+      element(
+        "p",
+        "db-widget__card-summary",
+        "Validity depends on the recognition status of the university and the exact program.",
+      ),
+    );
+    guideSection(card, "What to verify", [
+      "Check the university's current UGC entitlement.",
+      "Review its published NAAC grade and accreditations.",
+      "Confirm recognition for the exact program and intake before paying.",
+    ], "");
+    return card;
+  }
+
+  async function showUniversityPrograms() {
+    const bundle = await ensureGuideBundle();
+    const entity = bundle.entity || {};
+    const programs = Array.isArray(bundle.related && bundle.related.courses)
+      ? bundle.related.courses
+      : [];
+    const name = bundle.context && bundle.context.university || entity.name || "This university";
+    const count = entity.program_count === 0 || entity.program_count
+      ? entity.program_count
+      : programs.length;
+    const actions = programs.map((program) => ({
+      label: program.category ? String(program.category).toUpperCase() : program.name,
+      onSelect: () => selectGuidedEntity(program, program.category ? String(program.category).toUpperCase() : program.name),
+    }));
+    if (!actions.length) {
+      actions.push(
+        { label: "Browse Programs", action: "browse_programs", repeat: true },
+        { label: "Talk to a Counsellor", action: "lead" },
+      );
+    }
+    renderGuidePrompt(
+      programs.length
+        ? `${name} offers ${count} online program${Number(count) === 1 ? "" : "s"}. Which one interests you?`
+        : `Programs haven't been published for ${name} yet. Would you like to browse other programs?`,
+      actions,
+    );
+  }
+
+  async function showCourseSpecializations() {
+    const bundle = await ensureGuideBundle();
+    const entity = bundle.entity || {};
+    const specializations = Array.isArray(bundle.related && bundle.related.specializations)
+      ? bundle.related.specializations
+      : [];
+    const pageTypeValue = currentGuidePageType();
+    const count = pageTypeValue === "specialization"
+      ? specializations.length
+      : entity.specialization_count === 0 || entity.specialization_count
+        ? entity.specialization_count
+        : specializations.length;
+    const actions = specializations.map((specialization) => ({
+      label: specialization.name,
+      onSelect: () => selectGuidedEntity(specialization, specialization.name),
+    }));
+    if (!actions.length) {
+      actions.push(
+        { label: "Fees & EMI", action: "fees" },
+        { label: "Eligibility", action: "eligibility" },
+        { label: "Talk to a Counsellor", action: "lead" },
+        { label: "Browse Programs", action: "browse_programs", repeat: true },
+      );
+    }
+    renderGuidePrompt(
+      specializations.length
+        ? pageTypeValue === "specialization"
+          ? `${currentGuideLabel()} has ${count} other specialization${Number(count) === 1 ? "" : "s"}. Which one interests you?`
+          : `${currentGuideLabel()} offers ${count} specialization${Number(count) === 1 ? "" : "s"}. Which area interests you?`
+        : "Specializations haven't been published for this course yet. Would you like to see fees or eligibility instead?",
+      actions,
+    );
+  }
+
+  async function selectGuidedEntity(entity, selectionLabel) {
+    if (!entity || state.guideBusy || state.busy) return;
+    closeOverlay();
+    deactivateGuidedActions();
+    if (state.starter) state.starter.hidden = true;
+    createMessage("user", selectionLabel || entity.name || "View option");
+    await runGuidedResponse(async () => {
+      const bundle = await loadGuideContext(entity.id || entity.slug);
+      if (!bundle) return;
+      if (!bundle.entity) throw new Error("Selected option is unavailable");
+      const resolvedType = cleanPageType(bundle.context && bundle.context.page_type);
+      state.starterType = resolvedType;
+      state.pageContextDismissed = false;
+      if (resolvedType === "university") {
+        await showUniversityPrograms();
+        return;
+      }
+      if (resolvedType === "course") {
+        await showCourseSpecializations();
+        return;
+      }
+      const specialization = { ...bundle.entity, guided: true };
+      const card = renderProgramCard(specialization);
+      presentGuidedCard(
+        `Here's the strongest match for ${bundle.context.specialization || bundle.entity.name}.`,
+        card,
+        bundle.context.specialization || bundle.entity.name,
+        guidedFollowUps("specialization"),
+      );
+    });
+  }
+
+  async function runGuidedResponse(callback) {
+    if (state.guideBusy || state.busy) return undefined;
+    state.guideBusy = true;
+    const generation = state.guideGeneration;
+    showTyping(true, 0);
+    try {
+      await guidedWait(GUIDED_THINKING_MS);
+      if (generation !== state.guideGeneration && state.pageContextDismissed) return undefined;
+      return await callback();
+    } catch (error) {
+      console.warn("DegreeBaba guided navigation unavailable", error);
+      renderGuidePrompt(
+        "I couldn't load that right now. You can try another option or ask a counsellor for help.",
+        [{ label: "Talk to a Counsellor", action: "lead", repeat: true }],
+      );
+      return undefined;
+    } finally {
+      showTyping(false);
+      state.guideBusy = false;
+    }
+  }
+
+  function executeGuidedAction(action, label, options = {}) {
+    if (!action || state.guideBusy || state.busy) return;
+    state.viewedActions.add(action);
+    deactivateGuidedActions();
+    if (state.starter) state.starter.hidden = true;
+    createMessage("user", label || action);
+    if (action === "lead") {
+      openLeadPanel({ source: options.source || "guided_widget", label });
+      return;
+    }
+    runGuidedResponse(async () => {
+      if (action === "browse_universities") {
+        await openPicker("university", { onSelect: selectGuidedEntity });
+      } else if (action === "browse_programs") {
+        await showProgramOptions();
+      } else if (action === "finder") {
+        startFinder();
+      } else if (action === "programs_here") {
+        if (currentGuideEntity()) await showUniversityPrograms();
+        else await showProgramOptions();
+      } else if (action === "specializations" || action === "other_specializations") {
+        if (currentGuideEntity()) await showCourseSpecializations();
+        else await openPicker("specialization", { onSelect: selectGuidedEntity });
+      } else if (["fees", "eligibility", "career", "syllabus", "reviews", "accreditations"].includes(action)) {
+        await showGuidedInfo(action);
+      } else if (action === "compare") {
+        await beginGuidedComparison();
+      } else if (action === "online_validity") {
+        presentGuidedCard(
+          "An online degree can be valid when the university and exact program have the right recognition.",
+          validityCard(),
+          "Online degree validity",
+          [
+            { label: "Browse Universities", action: "browse_universities", repeat: true },
+            { label: "Compare", action: "compare" },
+            { label: "Talk to a Counsellor", action: "lead" },
+          ],
+        );
+      }
+    });
+  }
+
+  function showTyping(show, autoHideMs = 800) {
     if (!state.config.showTypingIndicator || !state.typing) return;
     if (state.typingTimer) window.clearTimeout(state.typingTimer);
     state.typingTimer = null;
+    if (show && state.messages) {
+      state.messages.appendChild(state.typing);
+      state.messages.scrollTop = state.messages.scrollHeight;
+    }
     state.typing.hidden = !show;
-    if (show) {
+    if (show && autoHideMs > 0) {
       state.typingTimer = window.setTimeout(() => {
         state.typing.hidden = true;
         state.typingTimer = null;
-      }, 800);
+      }, autoHideMs);
     }
   }
 
@@ -703,7 +1177,7 @@
 
   async function sendMessage(rawMessage, options = {}) {
     const message = String(rawMessage || "").trim();
-    if (!message || state.busy) return;
+    if (!message || state.busy || state.guideBusy) return;
     state.busy = true;
     state.lastMessage = message;
     state.input.value = "";
@@ -719,9 +1193,19 @@
       const body = { message, site_key: siteKey };
       if (state.sessionId) body.session_id = state.sessionId;
       if (!state.pageContextDismissed) {
-        if (pageUniversitySlug) body.page_university_slug = pageUniversitySlug;
-        if (pageType !== "homepage") body.page_type = pageType;
-        if (pageEntitySlug) body.page_entity_slug = pageEntitySlug;
+        const guideContext = currentGuideContext();
+        const guideEntity = currentGuideEntity();
+        const guidedType = guideContext && cleanPageType(guideContext.page_type);
+        if (guidedType && guidedType !== "homepage") {
+          body.page_type = guidedType;
+          body.page_entity_slug = guideEntity && (guideEntity.slug || guideEntity.id) || guideContext.entity_id;
+          const guidedUniversitySlug = guideEntity && guideEntity.university_slug || pageUniversitySlug;
+          if (guidedUniversitySlug) body.page_university_slug = guidedUniversitySlug;
+        } else {
+          if (pageUniversitySlug) body.page_university_slug = pageUniversitySlug;
+          if (pageType !== "homepage") body.page_type = pageType;
+          if (pageEntitySlug) body.page_entity_slug = pageEntitySlug;
+        }
       }
       const response = await fetch(`${apiBase}/chat`, {
         method: "POST",
@@ -772,16 +1256,55 @@
     const values = contextValues(context);
     state.context = values.length ? context : null;
     state.contextBar.hidden = !values.length;
-    state.contextLabel.textContent = values.join(" · ");
+    state.contextLabel.textContent = values.join(" • ");
+  }
+
+  async function loadGuideContext(entityReference = "", logicalType = "homepage") {
+    const generation = ++state.guideGeneration;
+    const query = new URLSearchParams();
+    if (entityReference) query.set("entity_id", entityReference);
+    else query.set("page_type", cleanPageType(logicalType));
+    const payload = await fetchJson(`/api/widget/guide/context?${query.toString()}`);
+    if (generation !== state.guideGeneration) return null;
+    state.guideBundle = {
+      context: payload.context || null,
+      entity: payload.entity || null,
+      related: payload.related || {},
+      info: payload.info || {},
+    };
+    state.pageContext = payload.context || null;
+    state.starterType = cleanPageType(payload.context && payload.context.page_type || logicalType);
+    updateContext(payload.context);
+    updateWelcome(state.guideBundle);
+    return state.guideBundle;
   }
 
   async function clearContext() {
+    state.guideGeneration += 1;
+    const clearGeneration = state.guideGeneration;
     state.pageContextDismissed = true;
+    state.guideBundle = {
+      context: {
+        page_type: "homepage",
+        university: null,
+        course: null,
+        specialization: null,
+        entity_id: null,
+        label: null,
+      },
+      entity: null,
+      related: {},
+      info: {},
+    };
+    state.guideReady = Promise.resolve(state.guideBundle);
+    state.pageContext = null;
+    state.viewedActions.clear();
     updateContext(null);
+    updateWelcome(state.guideBundle);
     renderStarterBank("homepage");
-    state.starter.hidden = false;
+    state.starter.hidden = true;
     state.starterType = "homepage";
-    anchorBotMessage(state.starter);
+    renderGuidePrompt("Context cleared. What would you like to explore next?", OPENING_ACTIONS.homepage);
     if (!state.sessionId) return;
     try {
       const payload = await fetchJson("/api/widget/context/clear", {
@@ -789,7 +1312,12 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: state.sessionId }),
       });
-      if (payload && Object.prototype.hasOwnProperty.call(payload, "context")) updateContext(payload.context);
+      if (
+        clearGeneration === state.guideGeneration &&
+        state.pageContextDismissed &&
+        payload &&
+        Object.prototype.hasOwnProperty.call(payload, "context")
+      ) updateContext(payload.context);
     } catch (error) {
       // A fresh backend session guarantees the dismissed focus cannot leak into
       // the next answer when the optional clear endpoint is unavailable.
@@ -799,44 +1327,80 @@
   }
 
   function renderStarterBank(type) {
-    const selected = OPENING_ACTIONS[type] || OPENING_ACTIONS.homepage;
-    state.starterGrid.replaceChildren();
-    selected.forEach((action) => {
-      const button = actionButton(action, "db-widget__starter-action");
-      if (button) state.starterGrid.appendChild(button);
-    });
-    const more = createButton("More ⌄", "db-widget__more-action db-widget__more-toggle", () => {
-      const expanded = more.getAttribute("aria-expanded") === "true";
-      more.setAttribute("aria-expanded", String(!expanded));
-      extra.hidden = expanded;
-      more.textContent = expanded ? "More ⌄" : "Less ⌃";
-    });
-    more.setAttribute("aria-expanded", "false");
-    const extra = element("div", "db-widget__opening-more db-widget__starter-more");
-    extra.hidden = true;
-    MORE_ACTIONS.forEach((action) => {
-      const button = actionButton(action, "db-widget__starter-action");
-      if (button) extra.appendChild(button);
-    });
-    state.starterGrid.append(more, extra);
+    const selected = (OPENING_ACTIONS[type] || OPENING_ACTIONS.homepage).filter(
+      (action) => !action.guide || !state.viewedActions.has(action.guide),
+    );
+    const primaryLimit = 3;
+    const primary = selected.slice(0, primaryLimit);
+    const overflow = type === "homepage"
+      ? [...selected.slice(primaryLimit), ...MORE_ACTIONS]
+      : selected.slice(primaryLimit);
+    const secondary = overflow.filter(
+      (action) => !action.guide || !state.viewedActions.has(action.guide),
+    );
+    const renderPrimary = () => {
+      state.starterGrid.replaceChildren();
+      primary.forEach((action) => {
+        const button = actionButton(action, "db-widget__starter-action");
+        if (button) state.starterGrid.appendChild(button);
+      });
+      if (secondary.length) {
+        state.starterGrid.appendChild(createButton(
+          "More",
+          "db-widget__more-action db-widget__more-toggle",
+          () => renderSecondary(0),
+        ));
+      }
+    };
+    const renderSecondary = (offset) => {
+      state.starterGrid.replaceChildren();
+      state.starterGrid.appendChild(createButton(
+        "Back",
+        "db-widget__more-action db-widget__more-toggle",
+        renderPrimary,
+      ));
+      secondary.slice(offset, offset + 2).forEach((action) => {
+        const button = actionButton(action, "db-widget__starter-action");
+        if (button) state.starterGrid.appendChild(button);
+      });
+      if (offset + 2 < secondary.length) {
+        state.starterGrid.appendChild(createButton(
+          "More",
+          "db-widget__more-action db-widget__more-toggle",
+          () => renderSecondary(offset + 2),
+        ));
+      }
+    };
+    renderPrimary();
   }
 
-  function showProgramOptions() {
-    if (state.starter) state.starter.hidden = true;
-    const view = createMessage("bot", "Programs are quick to browse. Which one interests you?");
-    const panel = element("section", "db-widget__cascade db-widget__cascade-panel");
-    panel.appendChild(element("p", "db-widget__cascade-copy", "Choose a program to see real university options."));
-    const options = element("div", "db-widget__cascade-options");
-    PROGRAM_OPTIONS.forEach((name) => {
-      options.appendChild(createButton(name, "db-widget__cascade-option", () => {
-        sendMessage(`Show universities offering ${name}`);
-      }));
+  async function showProgramOptions() {
+    const data = await loadGuideCatalog("programs");
+    const items = data.items.length
+      ? data.items
+      : PROGRAM_OPTIONS.map((name) => ({ id: name.replace(/^Online\s+/i, "").toLowerCase(), name }));
+    renderGuidePrompt(
+      "Which program are you considering?",
+      items.map((program) => ({
+        label: program.name,
+        onSelect: () => selectProgramCategory(program),
+      })),
+    );
+  }
+
+  function selectProgramCategory(program) {
+    if (!program || state.guideBusy || state.busy) return;
+    deactivateGuidedActions();
+    createMessage("user", program.name);
+    runGuidedResponse(async () => {
+      renderGuidePrompt(`Which university would you like to explore for ${program.name}?`);
+      await openPicker("course", {
+        title: `Choose a University for ${program.name}`,
+        display: "university",
+        filters: { course: program.id || program.slug || program.name },
+        onSelect: selectGuidedEntity,
+      });
     });
-    panel.appendChild(options);
-    const stack = element("div", "db-widget__component-stack");
-    stack.appendChild(panel);
-    view.content.appendChild(stack);
-    anchorBotMessage(view.row);
   }
 
   function normalizeCatalogItem(item, kind) {
@@ -848,6 +1412,10 @@
       item.naac_grade && `NAAC ${item.naac_grade}`,
       item.ugc_status || item.ugc_approved,
       (item.program_count || item.num_programs) && `${item.program_count || item.num_programs} programs`,
+      item.provider_count && `${item.provider_count} providers`,
+      item.university_name,
+      item.fee,
+      item.duration,
     ].filter(Boolean);
     return {
       ...item,
@@ -875,6 +1443,35 @@
     return result;
   }
 
+  async function loadGuideCatalog(kind, filters = {}) {
+    const aliases = {
+      university: "universities",
+      universities: "universities",
+      program: "programs",
+      programs: "programs",
+      course: "courses",
+      courses: "courses",
+      specialization: "specializations",
+      specializations: "specializations",
+    };
+    const requestKind = aliases[kind] || kind;
+    const query = new URLSearchParams();
+    ["q", "university", "course"].forEach((key) => {
+      if (filters[key]) query.set(key, filters[key]);
+    });
+    const cacheKey = `${requestKind}?${query.toString()}`;
+    if (!filters.q && state.guidePickerCache.has(cacheKey)) {
+      return state.guidePickerCache.get(cacheKey);
+    }
+    const suffix = query.toString() ? `?${query.toString()}` : "";
+    const payload = await fetchJson(`/api/widget/guide/catalog/${encodeURIComponent(requestKind)}${suffix}`);
+    const rawItems = Array.isArray(payload) ? payload : payload.items || [];
+    const items = rawItems.map((item) => normalizeCatalogItem(item, requestKind)).filter((item) => item.name);
+    const result = { items, popular: items.filter((item) => item.popular).slice(0, 8) };
+    if (!filters.q) state.guidePickerCache.set(cacheKey, result);
+    return result;
+  }
+
   function openOverlay(title, className) {
     state.input.blur();
     state.overlay.className = `db-widget__overlay ${className || ""}`.trim();
@@ -893,55 +1490,78 @@
     state.overlay.className = "db-widget__overlay";
   }
 
-  function pickerRow(item, kind, popular = false, onSelect = null) {
-    const row = createButton("", popular ? "db-widget__popular-item" : "db-widget__picker-row", () => {
+  function pickerRow(item, kind, popular = false, options = {}) {
+    const displayName = options.display === "university"
+      ? item.university_name || item.name
+      : item.name;
+    const rowClass = popular
+      ? "db-widget__popular-item db-widget__popular-item--rich"
+      : "db-widget__picker-row db-widget__picker-row--rich";
+    const row = createButton("", rowClass, () => {
       closeOverlay();
-      if (onSelect) {
-        onSelect(item);
+      if (typeof options.onSelect === "function") {
+        options.onSelect(item, displayName);
         return;
       }
-      const message = item.message || (kind === "university"
-        ? `Show programs offered at ${item.name}`
-        : `Show universities offering ${item.name}`);
-      sendMessage(message);
+      selectGuidedEntity(item, displayName);
     });
-    row.appendChild(element("span", "db-widget__picker-name", item.name));
-    if (item.meta) row.appendChild(element("span", "db-widget__picker-meta", item.meta));
+    row.appendChild(element("span", "db-widget__picker-monogram", initials(displayName)));
+    const copy = element("span", "db-widget__picker-copy");
+    copy.appendChild(element("span", "db-widget__picker-name", displayName));
+    const displayMeta = options.display === "university"
+      ? [item.name, item.fee, item.duration].filter(Boolean).join(" · ")
+      : item.meta;
+    if (displayMeta) copy.appendChild(element("span", "db-widget__picker-meta", displayMeta));
+    row.append(copy, element("span", "db-widget__picker-arrow", "›"));
     return row;
   }
 
-  function renderPickerResults(container, data, kind, query = "", onSelect = null) {
+  function renderPickerResults(container, data, kind, query = "", options = {}) {
     container.replaceChildren();
     const normalizedQuery = query.trim().toLowerCase();
-    const filtered = data.items.filter((item) =>
-      `${item.name} ${item.meta}`.toLowerCase().includes(normalizedQuery),
-    );
+    const filtered = data.items.filter((item) => {
+      const displayName = options.display === "university" ? item.university_name || item.name : item.name;
+      return `${displayName} ${item.meta}`.toLowerCase().includes(normalizedQuery);
+    });
     if (!normalizedQuery && data.popular.length) {
       const section = element("section", "db-widget__picker-section");
       section.appendChild(element("h3", "db-widget__picker-section-title", "⭐ Popular"));
       const grid = element("div", "db-widget__picker-popular");
-      data.popular.slice(0, 8).forEach((item) => grid.appendChild(pickerRow(item, kind, true, onSelect)));
+      data.popular.slice(0, 8).forEach((item) => grid.appendChild(pickerRow(item, kind, true, options)));
       section.appendChild(grid);
       container.appendChild(section);
     }
     if (!filtered.length) {
-      container.appendChild(element("p", "db-widget__picker-empty", "No matching catalog option."));
+      container.appendChild(element("p", "db-widget__picker-empty", "No matching option."));
       return;
     }
     const groups = new Map();
     filtered.sort((a, b) => a.name.localeCompare(b.name)).forEach((item) => {
-      const letter = (item.name[0] || "#").toUpperCase();
+      const displayName = options.display === "university" ? item.university_name || item.name : item.name;
+      const letter = (displayName[0] || "#").toUpperCase();
       if (!groups.has(letter)) groups.set(letter, []);
       groups.get(letter).push(item);
     });
     groups.forEach((items, letter) => {
       container.appendChild(element("h3", "db-widget__picker-letter", letter));
-      items.forEach((item) => container.appendChild(pickerRow(item, kind, false, onSelect)));
+      items.forEach((item) => container.appendChild(pickerRow(item, kind, false, options)));
     });
   }
 
-  async function openPicker(kind, onSelect = null) {
-    const title = kind === "university" ? "Browse universities" : "Browse specializations";
+  async function openPicker(kind, onSelectOrOptions = null) {
+    const options = typeof onSelectOrOptions === "function"
+      ? { onSelect: onSelectOrOptions }
+      : onSelectOrOptions && typeof onSelectOrOptions === "object" ? onSelectOrOptions : {};
+    const labels = {
+      university: "universities",
+      universities: "universities",
+      course: "programs",
+      courses: "programs",
+      specialization: "specializations",
+      specializations: "specializations",
+    };
+    const label = labels[kind] || kind;
+    const title = options.title || `Browse ${label}`;
     const body = openOverlay(title, "db-widget__picker-overlay");
     const sheet = element("section", "db-widget__picker db-widget__picker-sheet");
     sheet.style.gridTemplateRows = "auto minmax(0, 1fr)";
@@ -949,7 +1569,7 @@
     const search = document.createElement("input");
     search.className = "db-widget__picker-search";
     search.type = "search";
-    search.placeholder = `Search ${kind === "university" ? "universities" : "specializations"}`;
+    search.placeholder = options.display === "university" ? "Search universities" : `Search ${label}`;
     search.setAttribute("aria-label", search.placeholder);
     searchWrap.appendChild(search);
     const content = element("div", "db-widget__picker-content db-widget__picker-list");
@@ -958,21 +1578,21 @@
     body.appendChild(sheet);
     window.setTimeout(() => search.focus(), 0);
     try {
-      const data = await loadCatalog(kind);
-      renderPickerResults(content, data, kind, "", onSelect);
-      search.addEventListener("input", () => renderPickerResults(content, data, kind, search.value, onSelect));
+      const data = await loadGuideCatalog(kind, options.filters || {});
+      renderPickerResults(content, data, kind, "", options);
+      search.addEventListener("input", () => renderPickerResults(content, data, kind, search.value, options));
     } catch (error) {
       content.replaceChildren();
       const empty = element("section", "db-widget__error-state");
       empty.appendChild(element("span", "db-widget__state-icon", "↻"));
-      empty.appendChild(element("h3", "db-widget__state-title", "The catalog list didn’t load"));
-      empty.appendChild(element("p", "db-widget__state-copy", "You can retry or continue through chat."));
+      empty.appendChild(element("h3", "db-widget__state-title", "The options didn’t load"));
+      empty.appendChild(element("p", "db-widget__state-copy", "You can retry or ask a counsellor for help."));
       const actions = element("div", "db-widget__state-actions");
       actions.append(
-        createButton("Try again", "db-widget__action", () => openPicker(kind)),
-        createButton("Browse in chat", "db-widget__action", () => {
+        createButton("Try again", "db-widget__action", () => openPicker(kind, options)),
+        createButton("Talk to a counsellor", "db-widget__action db-widget__action--lead", () => {
           closeOverlay();
-          sendMessage(kind === "university" ? "Browse universities" : "Browse specializations");
+          openLeadPanel({ source: "guided_picker_error" });
         }),
       );
       empty.appendChild(actions);
@@ -1059,24 +1679,44 @@
     track.appendChild(fill);
     progress.appendChild(track);
     const options = element("div", "db-widget__finder-options");
-    current.options.forEach((choice) => {
-      const button = createButton(choice, "db-widget__finder-option", () => {
-        if (choice === "Show all") {
-          openPicker("specialization", (item) => {
-            if (!state.finder) return;
-            state.finder.answers.area = item.name;
-            state.finder.step += 1;
-            renderFinderStep();
-          });
-          return;
-        }
-        state.finder.answers[current.key] = choice;
-        state.finder.step += 1;
-        renderFinderStep();
+    const selectChoice = (choice) => {
+      if (choice === "Show all") {
+        openPicker("specialization", (item) => {
+          if (!state.finder) return;
+          state.finder.answers.area = item.name;
+          state.finder.step += 1;
+          renderFinderStep();
+        });
+        return;
+      }
+      state.finder.answers[current.key] = choice;
+      state.finder.step += 1;
+      renderFinderStep();
+    };
+    const renderOptionPage = (offset = 0, previousOffsets = []) => {
+      options.replaceChildren();
+      const remaining = current.options.length - offset;
+      const pageSize = offset === 0 || remaining <= 2 ? 2 : 1;
+      if (offset > 0) {
+        const previous = previousOffsets[previousOffsets.length - 1] || 0;
+        options.appendChild(createButton("Back", "db-widget__finder-option", () => {
+          renderOptionPage(previous, previousOffsets.slice(0, -1));
+        }));
+      }
+      current.options.slice(offset, offset + pageSize).forEach((choice) => {
+        const button = createButton(choice, "db-widget__finder-option", () => {
+          selectChoice(choice);
+        });
+        button.setAttribute("aria-pressed", "false");
+        options.appendChild(button);
       });
-      button.setAttribute("aria-pressed", "false");
-      options.appendChild(button);
-    });
+      if (offset + pageSize < current.options.length) {
+        options.appendChild(createButton("More", "db-widget__finder-option", () => {
+          renderOptionPage(offset + pageSize, [...previousOffsets, offset]);
+        }));
+      }
+    };
+    renderOptionPage();
     const skip = createButton("Skip → show results now", "db-widget__finder-skip", submitFinder);
     panel.append(header, progress, options, skip);
     const stack = element("div", "db-widget__component-stack");
@@ -1205,11 +1845,62 @@
 
   function addToComparison(component) {
     const reference = cardReference(component);
-    if (state.compareSelections.some((item) => item.id === reference.id)) return;
+    if (!reference.id || state.compareSelections.some((item) => item.id === reference.id)) return 0;
     state.compareSelections.push(reference);
     if (state.compareSelections.length > 2) state.compareSelections.shift();
+    const selectionCount = state.compareSelections.length;
     renderCompareTray();
-    if (state.compareSelections.length === 2) submitComparison();
+    if (selectionCount === 2) submitComparison();
+    return selectionCount;
+  }
+
+  function comparisonPickerKind() {
+    const selected = state.compareSelections[0] && state.compareSelections[0].component;
+    if (selected) {
+      if (selected.type === "university_card") return "university";
+      if (selected.kind === "specialization" || selected.type === "specialization_card") return "specialization";
+      if (["program_card", "course_card"].includes(selected.type) || selected.kind === "course") return "course";
+    }
+    const type = currentGuidePageType();
+    if (type === "course") return "course";
+    if (type === "specialization") return "specialization";
+    return "university";
+  }
+
+  function openComparisonPicker() {
+    const kind = comparisonPickerKind();
+    const entity = state.compareSelections[0] && state.compareSelections[0].component || currentGuideEntity() || {};
+    const filters = {};
+    if (kind === "course" && entity.category) filters.course = entity.category;
+    if (kind === "specialization" && entity.name) filters.q = entity.name;
+    return openPicker(kind, {
+      title: state.compareSelections.length ? "Choose one more option" : "Choose an option to compare",
+      display: kind === "course" ? "university" : undefined,
+      filters,
+      onSelect: (item) => {
+        const selectionCount = addToComparison(item);
+        if (selectionCount <= 1) {
+          window.setTimeout(() => openComparisonPicker(), 0);
+        }
+      },
+    });
+  }
+
+  function beginGuidedComparison(startingComponent = null) {
+    const launch = () => {
+      state.compareSelections = [];
+      const starting = startingComponent || currentGuideEntity();
+      if (starting && starting.id) state.compareSelections.push(cardReference(starting));
+      renderCompareTray();
+      return openComparisonPicker();
+    };
+    if (state.guideBusy) return launch();
+    if (state.busy) return undefined;
+    state.viewedActions.add("compare");
+    deactivateGuidedActions();
+    if (state.starter) state.starter.hidden = true;
+    createMessage("user", "Compare options");
+    return runGuidedResponse(launch);
   }
 
   function renderCompareTray() {
@@ -1242,10 +1933,26 @@
 
   function submitComparison() {
     if (state.compareSelections.length !== 2) return;
+    const selections = state.compareSelections.slice();
+    const ids = selections.map((item) => item.id).filter(Boolean);
+    if (ids.length !== 2) return;
     const labels = state.compareSelections.map((item) => item.label);
     state.compareSelections = [];
     renderCompareTray();
-    sendMessage(`Compare ${labels[0]} and ${labels[1]}`);
+    createMessage("user", `Compare ${labels[0]} and ${labels[1]}`);
+    runGuidedResponse(async () => {
+      const component = await fetchJson("/api/widget/guide/compare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity_ids: ids }),
+      });
+      presentGuidedCard(
+        "Here's a side-by-side comparison using the published details.",
+        renderComparisonCard(component),
+        component.title || "Comparison",
+        guidedFollowUps("comparison"),
+      );
+    });
   }
 
   function openLeadPanel(options = {}) {
@@ -1255,8 +1962,12 @@
     panel.style.gridTemplateRows = "minmax(0, 1fr)";
     const content = element("div", "db-widget__detail-body");
     const intro = element("section", "db-widget__detail-section");
-    intro.appendChild(element("h3", "", "Check today’s fee offer and seat availability"));
-    intro.appendChild(element("p", "", "Just your number — no spam."));
+    intro.appendChild(element("h3", "", "Talk to a real admissions counsellor"));
+    intro.appendChild(element(
+      "p",
+      "",
+      "Share your phone number and a DegreeBaba counsellor can help with fees, eligibility, and next steps.",
+    ));
     const form = element("form", "db-widget__lead-form");
     const phone = document.createElement("input");
     phone.className = "db-widget__picker-search db-widget__lead-input";
@@ -1266,7 +1977,7 @@
     phone.placeholder = "10-digit phone number";
     phone.setAttribute("aria-label", phone.placeholder);
     const status = element("p", "db-widget__state-copy");
-    const submit = element("button", "db-widget__lead-button", "Check now");
+    const submit = element("button", "db-widget__lead-button", "Request a callback");
     submit.type = "submit";
     form.append(phone, submit, status);
     form.addEventListener("submit", async (event) => {
@@ -1308,15 +2019,30 @@
   }
 
   async function hydratePageContext() {
-    if (pageType === "homepage" || !pageEntitySlug) return;
-    const query = new URLSearchParams({ page_type: pageType, page_entity_slug: pageEntitySlug });
-    if (pageUniversitySlug) query.set("page_university_slug", pageUniversitySlug);
     try {
+      if (pageType === "homepage") {
+        return await loadGuideContext("", "homepage");
+      }
+      if (!pageEntitySlug) {
+        if (pageType === "university" && pageUniversitySlug) {
+          return await loadGuideContext(pageUniversitySlug, pageType);
+        }
+        throw new Error("Page entity slug is required for guided context");
+      }
+      const query = new URLSearchParams({ page_type: pageType, page_entity_slug: pageEntitySlug });
+      if (pageUniversitySlug) query.set("page_university_slug", pageUniversitySlug);
       const payload = await fetchJson(`/api/widget/page-context?${query.toString()}`);
       state.pageContext = payload.page_context || payload.context || payload;
       if (payload.context) updateContext(payload.context);
-    } catch (_error) {
-      // Optional endpoint: script data still drives the correct opening bank.
+      return await loadGuideContext(payload.entity_id || payload.slug || pageEntitySlug, pageType);
+    } catch (error) {
+      try {
+        return await loadGuideContext(pageEntitySlug || pageUniversitySlug, pageType);
+      } catch (fallbackError) {
+        updateWelcome();
+        console.warn("DegreeBaba page guidance unavailable", error, fallbackError);
+        return null;
+      }
     }
   }
 
@@ -1379,8 +2105,9 @@
     state.contextBar = contextBar;
     state.contextLabel = contextLabel;
 
-    const welcome = createMessage("bot", config.welcomeMessage);
+    const welcome = createMessage("bot", openingMessage(pageType));
     welcome.row.classList.add("db-widget__message-row--welcome");
+    state.welcomeView = welcome;
 
     const starter = element("section", "db-widget__starter db-widget__opening");
     starter.appendChild(element("p", "db-widget__starter-label db-widget__opening-label", "What would you like to explore?"));
@@ -1427,7 +2154,7 @@
     });
     state.input = input;
 
-    const privacy = element("p", "db-widget__privacy", "Catalog-backed guidance · Your choices stay in this chat");
+    const privacy = element("p", "db-widget__privacy", "Admissions guidance · Your choices stay in this chat");
 
     const compareTray = element("aside", "db-widget__compare-tray");
     compareTray.hidden = true;
@@ -1474,7 +2201,7 @@
     const autoOpenOverride = script.dataset.autoOpen;
     const shouldOpen = autoOpenOverride === "true" || (autoOpenOverride !== "false" && config.autoOpen);
     setOpen(shouldOpen);
-    hydratePageContext();
+    state.guideReady = hydratePageContext();
 
     delete widgetNamespace.loading[siteKey];
     widgetNamespace.instances[siteKey] = {
