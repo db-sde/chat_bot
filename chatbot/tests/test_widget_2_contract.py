@@ -167,3 +167,19 @@ def test_demo_switches_all_scenarios_and_loads_only_the_real_widget() -> None:
     assert 'pageEntitySlug: "nmims-online-mba"' in source
     assert 'pageEntitySlug: "nmims-mba-analytics"' in source
     assert re.search(r"location\.(?:assign|replace|href|search)", source)
+
+
+def test_premium_admissions_ui_contracts_are_present() -> None:
+    source = _source("widget.js")
+    styles = _source("widget.css")
+    create_message = _function_source(source, "createMessage")
+    update_context = _function_source(source, "updateContext")
+
+    assert "db-widget__message-row--grouped" in create_message
+    assert "contextCourse" in update_context
+    assert "contextMeta" in update_context
+    assert '"Apply Now", "lead"' in source
+    assert "width: max-content" in styles
+    assert "db-widget__context-meta-item" in styles
+    assert "db-widget__ai-accent" in styles
+    assert "@media (max-width: 560px)" in styles

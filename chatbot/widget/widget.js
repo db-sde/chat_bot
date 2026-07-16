@@ -131,7 +131,10 @@
     panel: null,
     launcher: null,
     contextBar: null,
+    contextChip: null,
     contextLabel: null,
+    contextCourse: null,
+    contextMeta: null,
     context: null,
     pageContext: null,
     pageContextDismissed: false,
@@ -220,6 +223,14 @@
         '<svg viewBox="0 0 24 24" aria-hidden="true" width="24" height="24"><path d="M12 3a7 7 0 0 0-7 7v1.2A3 3 0 0 0 3 14v2a3 3 0 0 0 3 3h1.2l1.1 1.3a1 1 0 0 0 .8.4h5.8a1 1 0 0 0 .8-.4l1.1-1.3H18a3 3 0 0 0 3-3v-2a3 3 0 0 0-2-2.8V10a7 7 0 0 0-7-7Zm-3 8.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm6 0a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5ZM8.7 16h6.6a3.7 3.7 0 0 1-6.6 0Z"/></svg>';
     }
     return avatar;
+  }
+
+  function createAiAccent() {
+    const accent = element("span", "db-widget__ai-accent");
+    accent.setAttribute("aria-hidden", "true");
+    accent.innerHTML =
+      '<svg viewBox="0 0 24 24"><path d="M12 2l1.4 5.1L18 9l-4.6 1.9L12 16l-1.4-5.1L6 9l4.6-1.9L12 2Zm6 12 .8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg>';
+    return accent;
   }
 
   function addRichText(container, value) {
@@ -616,7 +627,15 @@
 
   function createMessage(role, text) {
     const row = element("div", `db-widget__message-row db-widget__message-row--${role}`);
-    if (role === "bot" && state.config.showAvatar) row.appendChild(createAvatar("db-widget__avatar--message"));
+    const previousRows = state.messages
+      ? state.messages.querySelectorAll(".db-widget__message-row")
+      : [];
+    const previousRow = previousRows.length ? previousRows[previousRows.length - 1] : null;
+    const groupedBot = role === "bot" && previousRow && previousRow.classList.contains("db-widget__message-row--bot");
+    if (groupedBot) row.classList.add("db-widget__message-row--grouped");
+    if (role === "bot" && state.config.showAvatar && !groupedBot) {
+      row.appendChild(createAvatar("db-widget__avatar--message"));
+    }
     const content = element("div", "db-widget__message-content");
     const bubble = element("div", `db-widget__bubble db-widget__bubble--${role}`);
     addRichText(bubble, text);
@@ -709,6 +728,7 @@
     if (!state.welcomeView) return;
     state.welcomeView.bubble.replaceChildren();
     addRichText(state.welcomeView.bubble, openingMessage(currentGuidePageType(), bundle));
+    state.welcomeView.bubble.prepend(createAiAccent());
   }
 
   function deactivateGuidedActions() {
@@ -900,14 +920,14 @@
 
   function guidedFollowUps(kind) {
     const banks = {
-      fees: [["Check Eligibility", "eligibility"], ["Compare Options", "compare"], ["Talk to a Counsellor", "lead"]],
-      eligibility: [["View Fees", "fees"], ["Compare Options", "compare"], ["Talk to a Counsellor", "lead"]],
-      career: [["View Syllabus", "syllabus"], ["View Fees", "fees"], ["Talk to a Counsellor", "lead"]],
-      syllabus: [["Career & Salary", "career"], ["Other Specializations", "other_specializations"], ["Talk to a Counsellor", "lead"]],
+      fees: [["Check Eligibility", "eligibility"], ["Compare Options", "compare"], ["Apply Now", "lead"]],
+      eligibility: [["View Fees", "fees"], ["Compare Options", "compare"], ["Apply Now", "lead"]],
+      career: [["View Curriculum", "syllabus"], ["View Fees", "fees"], ["Talk to a Counsellor", "lead"]],
+      syllabus: [["Career & Salary", "career"], ["View Fees", "fees"], ["Apply Now", "lead"]],
       reviews: [["Programs Offered Here", "programs_here"], ["Compare With Others", "compare"], ["Talk to a Counsellor", "lead"]],
-      accreditations: [["Programs Offered Here", "programs_here"], ["Compare With Others", "compare"], ["Talk to a Counsellor", "lead"]],
-      comparison: [["Check Eligibility", "eligibility"], ["View Fees", "fees"], ["Talk to a Counsellor", "lead"]],
-      specialization: [["Career & Salary", "career"], ["Syllabus", "syllabus"], ["Talk to a Counsellor", "lead"]],
+      accreditations: [["Programs Offered Here", "programs_here"], ["Compare With Others", "compare"], ["Apply Now", "lead"]],
+      comparison: [["Check Eligibility", "eligibility"], ["View Fees", "fees"], ["Apply Now", "lead"]],
+      specialization: [["View Fees", "fees"], ["Check Eligibility", "eligibility"], ["Apply Now", "lead"]],
     };
     return (banks[kind] || []).map(([label, action]) => ({ label, action }));
   }
@@ -1256,7 +1276,24 @@
     const values = contextValues(context);
     state.context = values.length ? context : null;
     state.contextBar.hidden = !values.length;
-    state.contextLabel.textContent = values.join(" • ");
+    if (!values.length) return;
+    const university = values[0] || "Current university";
+    const academicPath = values.slice(1).join(" • ");
+    const entity = state.guideBundle && state.guideBundle.entity || {};
+    const metadata = [
+      entity.ugc_status,
+      entity.duration,
+      entity.learning_mode || entity.mode,
+    ].map((value) => String(value || "").trim()).filter(Boolean);
+    state.contextLabel.textContent = university;
+    state.contextCourse.textContent = academicPath;
+    state.contextCourse.hidden = !academicPath;
+    state.contextMeta.replaceChildren();
+    metadata.slice(0, 3).forEach((value) => {
+      state.contextMeta.appendChild(element("span", "db-widget__context-meta-item", value));
+    });
+    state.contextMeta.hidden = !metadata.length;
+    state.contextChip.setAttribute("aria-label", `Current context: ${values.join(", ")}`);
   }
 
   async function loadGuideContext(entityReference = "", logicalType = "homepage") {
@@ -1338,40 +1375,43 @@
     const secondary = overflow.filter(
       (action) => !action.guide || !state.viewedActions.has(action.guide),
     );
-    const renderPrimary = () => {
-      state.starterGrid.replaceChildren();
-      primary.forEach((action) => {
+
+    state.starterGrid.replaceChildren();
+
+    // Scroll wrapper to contain all options if they exceed max-height
+    const scrollContainer = element("div", "db-widget__starter-scroll");
+    const primaryGrid = element("div", "db-widget__starter-grid");
+
+    primary.forEach((action) => {
+      const button = actionButton(action, "db-widget__starter-action");
+      if (button) primaryGrid.appendChild(button);
+    });
+    scrollContainer.appendChild(primaryGrid);
+    state.starterGrid.appendChild(scrollContainer);
+
+    if (secondary.length) {
+      const secondaryGrid = element("div", "db-widget__starter-grid");
+      secondaryGrid.style.display = "none";
+      secondaryGrid.style.marginTop = "8px";
+
+      secondary.forEach((action) => {
         const button = actionButton(action, "db-widget__starter-action");
-        if (button) state.starterGrid.appendChild(button);
+        if (button) secondaryGrid.appendChild(button);
       });
-      if (secondary.length) {
-        state.starterGrid.appendChild(createButton(
-          "More",
-          "db-widget__more-action db-widget__more-toggle",
-          () => renderSecondary(0),
-        ));
-      }
-    };
-    const renderSecondary = (offset) => {
-      state.starterGrid.replaceChildren();
-      state.starterGrid.appendChild(createButton(
-        "Back",
+      scrollContainer.appendChild(secondaryGrid);
+
+      const toggle = createButton(
+        "More",
         "db-widget__more-action db-widget__more-toggle",
-        renderPrimary,
-      ));
-      secondary.slice(offset, offset + 2).forEach((action) => {
-        const button = actionButton(action, "db-widget__starter-action");
-        if (button) state.starterGrid.appendChild(button);
-      });
-      if (offset + 2 < secondary.length) {
-        state.starterGrid.appendChild(createButton(
-          "More",
-          "db-widget__more-action db-widget__more-toggle",
-          () => renderSecondary(offset + 2),
-        ));
-      }
-    };
-    renderPrimary();
+        () => {
+          const isHidden = secondaryGrid.style.display === "none";
+          secondaryGrid.style.display = isHidden ? "grid" : "none";
+          toggle.textContent = isHidden ? "Less" : "More";
+          toggle.classList.toggle("db-widget__more-toggle--less", !isHidden);
+        }
+      );
+      state.starterGrid.appendChild(toggle);
+    }
   }
 
   async function showProgramOptions() {
@@ -1956,13 +1996,21 @@
   }
 
   function openLeadPanel(options = {}) {
-    const body = openOverlay("Talk to a counsellor", "db-widget__detail-overlay db-widget__lead-overlay");
+    const isApplication = /apply/i.test(String(options.label || ""));
+    const body = openOverlay(
+      isApplication ? "Start your application" : "Talk to a counsellor",
+      "db-widget__detail-overlay db-widget__lead-overlay",
+    );
     const panel = element("section", "db-widget__detail-panel db-widget__lead-panel");
     panel.style.height = "100%";
     panel.style.gridTemplateRows = "minmax(0, 1fr)";
     const content = element("div", "db-widget__detail-body");
     const intro = element("section", "db-widget__detail-section");
-    intro.appendChild(element("h3", "", "Talk to a real admissions counsellor"));
+    intro.appendChild(element(
+      "h3",
+      "",
+      isApplication ? "Take the next step with an admissions counsellor" : "Talk to a real admissions counsellor",
+    ));
     intro.appendChild(element(
       "p",
       "",
@@ -1977,7 +2025,11 @@
     phone.placeholder = "10-digit phone number";
     phone.setAttribute("aria-label", phone.placeholder);
     const status = element("p", "db-widget__state-copy");
-    const submit = element("button", "db-widget__lead-button", "Request a callback");
+    const submit = element(
+      "button",
+      "db-widget__lead-button",
+      isApplication ? "Continue with a counsellor" : "Request a callback",
+    );
     submit.type = "submit";
     form.append(phone, submit, status);
     form.addEventListener("submit", async (event) => {
@@ -2096,17 +2148,35 @@
     const contextBar = element("div", "db-widget__context-bar db-widget__sticky-context");
     contextBar.hidden = true;
     const contextChip = element("div", "db-widget__context-chip");
-    const contextLabel = element("span", "db-widget__context-label");
+    const contextCopy = element("div", "db-widget__context-copy");
+    const universityLine = element("div", "db-widget__context-line db-widget__context-line--university");
+    const universityIcon = element("span", "db-widget__context-icon");
+    universityIcon.setAttribute("aria-hidden", "true");
+    universityIcon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 21h18M5 21V9l7-4 7 4v12M9 21v-6h6v6M8 11h.01M12 11h.01M16 11h.01"/></svg>';
+    const contextLabel = element("strong", "db-widget__context-label");
+    universityLine.append(universityIcon, contextLabel);
+    const courseLine = element("div", "db-widget__context-line db-widget__context-line--course");
+    const courseIcon = element("span", "db-widget__context-icon");
+    courseIcon.setAttribute("aria-hidden", "true");
+    courseIcon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21.5v-16ZM4 18.5A2.5 2.5 0 0 1 6.5 16H20"/></svg>';
+    const contextCourse = element("span", "db-widget__context-course");
+    courseLine.append(courseIcon, contextCourse);
+    const contextMeta = element("div", "db-widget__context-meta");
+    contextCopy.append(universityLine, courseLine, contextMeta);
     const contextClear = createButton("×", "db-widget__context-clear db-widget__context-dismiss", clearContext);
     contextClear.setAttribute("aria-label", "Clear current university and program context");
-    contextChip.append(contextLabel, contextClear);
+    contextChip.append(contextCopy, contextClear);
     contextBar.appendChild(contextChip);
     messages.appendChild(contextBar);
     state.contextBar = contextBar;
+    state.contextChip = contextChip;
     state.contextLabel = contextLabel;
+    state.contextCourse = contextCourse;
+    state.contextMeta = contextMeta;
 
     const welcome = createMessage("bot", openingMessage(pageType));
     welcome.row.classList.add("db-widget__message-row--welcome");
+    welcome.bubble.prepend(createAiAccent());
     state.welcomeView = welcome;
 
     const starter = element("section", "db-widget__starter db-widget__opening");
