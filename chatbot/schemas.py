@@ -32,6 +32,10 @@ class ChatRequest(TransportModel):
     page_type: PageType | None = None
     page_entity_slug: str | None = Field(default=None)
     page_university_slug: str | None = Field(default=None)
+    chip_id: str | None = Field(default=None, max_length=100)
+    chip_surface: str | None = Field(default=None, max_length=100)
+    chip_config_version: str | None = Field(default=None, max_length=80)
+    chip_correlation_id: str | None = Field(default=None, max_length=200)
 
     @field_validator("message")
     @classmethod
@@ -154,6 +158,16 @@ class QuickAction(TransportModel):
     label: str = Field(min_length=1)
     message: str = Field(min_length=1)
     action: Literal["send_message"] = "send_message"
+    chip_id: str | None = None
+    chip_handler: str | None = None
+    tool: Literal["roi", "career_quiz", "scholarship"] | None = None
+    surface: str | None = None
+    funnel_stage: Literal["top", "mid", "bottom"] | None = None
+    config_version: str | None = None
+    content_version: str | None = None
+    interaction_count: int | None = Field(default=None, ge=0)
+    correlation_id: str | None = None
+    lead_tags: dict[str, Any] | None = None
 
 
 class QuickActionsComponent(TransportModel):
@@ -212,14 +226,55 @@ class ContextClearResponse(TransportModel):
 
 class WidgetLeadRequest(TransportModel):
     session_id: str | None = Field(default=None, min_length=1, max_length=200)
+    name: str | None = Field(default=None, min_length=2, max_length=50)
     phone: str = Field(min_length=10, max_length=24)
     source: str | None = Field(default=None, max_length=100)
+    chip_id: str | None = Field(default=None, max_length=100)
+    chip_surface: str | None = Field(default=None, max_length=100)
+    chip_config_version: str | None = Field(default=None, max_length=80)
+    chip_correlation_id: str | None = Field(default=None, max_length=200)
 
 
 class WidgetLeadResponse(TransportModel):
     success: Literal[True] = True
     session_id: str
     message: str
+    response: dict[str, Any] | None = None
+
+
+class GuidedChipRequest(TransportModel):
+    session_id: str | None = Field(default=None, min_length=1, max_length=200)
+    page_type: str = Field(default="homepage", min_length=1, max_length=40)
+    surface: str | None = Field(default=None, max_length=100)
+    entity_id: str | None = Field(default=None, max_length=200)
+    completed_chip_id: str | None = Field(default=None, max_length=100)
+    config_version: str | None = Field(default=None, max_length=80)
+    correlation_id: str | None = Field(default=None, max_length=200)
+    card_type: Literal["university", "course", "specialization"] | None = None
+    answer_state: str | None = Field(default=None, max_length=100)
+
+
+class WidgetAnalyticsRequest(TransportModel):
+    session_id: str | None = Field(default=None, min_length=1, max_length=200)
+    event: Literal[
+        "chip_shown",
+        "chip_tapped",
+        "card_shown",
+        "cascade_step",
+        "apply_clicked",
+        "counsellor_clicked",
+    ]
+    surface: str = Field(min_length=1, max_length=100)
+    funnel_stage: Literal["top", "mid", "bottom"]
+    interaction_count: int = Field(default=0, ge=0)
+    entity: dict[str, str | None] = Field(default_factory=dict)
+    config_version: str = Field(min_length=1, max_length=80)
+    content_version: str = Field(default="not_applicable", min_length=1, max_length=80)
+    chip_id: str | None = Field(default=None, max_length=100)
+    chip_handler: str | None = Field(default=None, max_length=100)
+    chips: list[dict[str, Any]] = Field(default_factory=list, max_length=12)
+    correlation_id: str | None = Field(default=None, max_length=200)
+    lead_tags: dict[str, Any] | None = None
 
 
 class PageContextResponse(TransportModel):

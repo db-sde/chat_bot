@@ -4,15 +4,18 @@ import pytest
 from pydantic import ValidationError
 
 from config import Settings
+from funnel import ChipEngine, ChipMapStore
 from main import ChatbotService, TurnResult
 from presentation import enrich_response
 from presentation.cards import build_program_card, build_university_card
 from response.builder import build_response
 from schemas import (
+    CardListComponent,
     ChatRequest,
     ComparisonCard,
     LeadCTAComponent,
     ProgramCard,
+    QuickAction,
     QuickActionsComponent,
     ResponsePayload,
     UniversityCard,
@@ -193,6 +196,57 @@ def test_specialization_uses_distinct_program_shape_and_advisor_copy() -> None:
     assert "Raw fields" not in (enriched.message or "")
 
 
+def test_tool_reveal_materializes_catalog_program_cards_and_action_trace() -> None:
+    first = _course("course-first")
+    second = _course("course-second")
+    university = _university("university-only", "University Only", "INR 1,00,000")
+    catalog = {
+        "course-first": first,
+        "course-second": second,
+        "university-only": university,
+    }
+    state = ConversationState(session_id="tool-render", turn_count=2)
+    state.navigation.page_type = "course"
+    state.navigation.interaction_count = 4
+    payload = ResponsePayload(
+        text="Your complete career result is ready.",
+        quick_actions=[QuickAction(label="Apply now", message="Apply now")],
+        metadata={
+            "tool_flow": {
+                "tool": "career_quiz",
+                "step": "reveal",
+                "version": "tool-content-v7",
+                "cta_program_ids": [
+                    "course-second",
+                    "missing",
+                    "university-only",
+                    "course-first",
+                    "course-second",
+                ],
+            }
+        },
+    )
+
+    enriched = enrich_response(
+        payload,
+        state=state,
+        catalog=catalog,
+        chip_engine=ChipEngine(ChipMapStore(auto_reload=False)),
+    )
+
+    card_list = next(
+        component for component in enriched.components if isinstance(component, CardListComponent)
+    )
+    assert card_list.title == "Recommended programs"
+    assert [card.id for card in card_list.items] == ["course-second", "course-first"]
+    assert all(isinstance(card, ProgramCard) for card in card_list.items)
+    assert enriched.message == "Your complete career result is ready."
+    assert enriched.quick_actions
+    assert all(action.interaction_count == 4 for action in enriched.quick_actions)
+    assert all(action.correlation_id == "sess_render:turn_4" for action in enriched.quick_actions)
+    assert all(action.content_version == "tool-content-v7" for action in enriched.quick_actions)
+
+
 def test_structured_comparison_operands_win_over_parseable_text() -> None:
     alpha = _university("alpha", "Alpha University", "INR 1,50,000")
     beta = _university("beta", "Beta University", "INR 1,70,000")
@@ -212,9 +266,7 @@ def test_structured_comparison_operands_win_over_parseable_text() -> None:
     )
 
     card = next(
-        component
-        for component in enriched.components
-        if isinstance(component, ComparisonCard)
+        component for component in enriched.components if isinstance(component, ComparisonCard)
     )
     assert [item.name for item in card.items] == ["Alpha University", "Beta University"]
     assert all("Ghost" not in item.name and "Phantom" not in item.name for item in card.items)

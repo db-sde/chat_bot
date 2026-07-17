@@ -76,7 +76,7 @@ def test_guided_actions_do_not_enter_typed_chat_transport() -> None:
     assert "sendMessage(input.value)" in source
 
 
-def test_intermediate_guided_navigation_uses_questions_before_cards() -> None:
+def test_course_selection_renders_course_card_before_optional_specializations() -> None:
     source = _source("widget.js")
     select_entity = _function_source(source, "selectGuidedEntity")
 
@@ -87,7 +87,10 @@ def test_intermediate_guided_navigation_uses_questions_before_cards() -> None:
         assert "renderProgramCard(" not in function_source
 
     assert "showUniversityPrograms(" in select_entity
-    assert "showCourseSpecializations(" in select_entity
+    assert "showCourseSpecializations(" not in select_entity
+    assert 'transitionNavigation("course_card")' in select_entity
+    assert 'loadFollowupChips({ cardType: "course" })' in select_entity
+    assert "renderProgramCard(course)" in select_entity
     assert "presentGuidedCard(" in select_entity
     assert "specialization" in select_entity.casefold()
 
@@ -116,7 +119,10 @@ def test_typing_and_all_guided_choice_surfaces_respect_the_visible_cap() -> None
     finder_step = _function_source(source, "renderFinderStep")
 
     assert "state.messages.appendChild(state.typing)" in show_typing
-    assert "const primaryLimit = 3" in starter_bank
+    assert "state.openingChips" in starter_bank
+    assert "opening.top" in starter_bank
+    assert "opening.more" in starter_bank
+    assert "emitStarterImpressions()" in starter_bank
     assert '"More"' in starter_bank
     assert "renderOptionPage" in finder_step
     assert "const pageSize" in finder_step
@@ -178,7 +184,8 @@ def test_premium_admissions_ui_contracts_are_present() -> None:
     assert "db-widget__message-row--grouped" in create_message
     assert "contextCourse" in update_context
     assert "contextMeta" in update_context
-    assert '"Apply Now", "lead"' in source
+    assert 'chip_id: "apply_now"' in source
+    assert 'chip_handler: "cta_apply"' in source
     assert "width: max-content" in styles
     assert "db-widget__context-meta-item" in styles
     assert "db-widget__ai-accent" in styles
@@ -251,3 +258,185 @@ def test_widget_uses_degreebaba_tokens_and_exposes_accessible_ui_state() -> None
     assert 'setAttribute("aria-busy"' in show_typing
     assert 'setAttribute("aria-expanded"' in starter_bank
     assert 'setAttribute("aria-labelledby"' in build_widget
+
+
+def test_funnel_chips_and_navigation_are_server_driven() -> None:
+    source = _source("widget.js")
+    load_context = _function_source(source, "loadGuideContext")
+    load_followups = _function_source(source, "loadFollowupChips")
+
+    assert "const NavigationStep = Object.freeze" in source
+    assert "function transitionNavigation" in source
+    assert "OPENING_ACTIONS" not in source
+    assert "MORE_ACTIONS" not in source
+    assert "guidedFollowUps" not in source
+    assert 'query.set("session_id", state.sessionId)' in load_context
+    assert "payload.opening" in source
+    assert 'fetchJson("/api/widget/guide/chips"' in load_followups
+    assert "payload.followup" in load_followups
+    assert "safeFallbackActions()" in load_followups
+
+
+def test_no_specialization_uses_down_funnel_server_actions_only() -> None:
+    source = _source("widget.js")
+    show_specializations = _function_source(source, "showCourseSpecializations")
+
+    assert 'answerState: "no_specializations"' in show_specializations
+    assert "loadFollowupChips(" in show_specializations
+    assert 'action: "browse_programs"' not in show_specializations
+    assert 'openPicker("course"' not in show_specializations
+
+
+def test_widget_emits_non_blocking_funnel_analytics_and_renders_tool_reveal() -> None:
+    source = _source("widget.js")
+    analytics = _function_source(source, "emitAnalytics")
+    chip_impressions = _function_source(source, "emitChipShown")
+    lead_panel = _function_source(source, "openLeadPanel")
+
+    assert "/api/widget/analytics" in analytics
+    assert "keepalive: true" in analytics
+    assert "void fetch" in analytics
+    for event_name in (
+        "chip_shown",
+        "chip_tapped",
+        "card_shown",
+        "cascade_step",
+        "apply_clicked",
+        "counsellor_clicked",
+    ):
+        assert f'"{event_name}"' in source
+    assert "response.response" in lead_panel
+    assert "renderBotPayload(response.response)" in lead_panel
+    assert 'emitAnalytics("lead_captured"' not in source
+    assert "chip_id: String(action.chip_id)" in chip_impressions
+
+
+def test_funnel_widget_keeps_server_state_and_internal_tokens_out_of_user_bubbles() -> None:
+    source = _source("widget.js")
+    transition = _function_source(source, "transitionNavigation")
+    action_handler = _function_source(source, "handleAction")
+    sender = _function_source(source, "sendMessage")
+    followups = _function_source(source, "renderGuidedActions")
+
+    for step in ("APPROVALS", "REVIEWS", "SYLLABUS", "ADMISSIONS", "VALIDITY"):
+        assert f'{step}: "{step}"' in source
+    assert "navigation.completed_actions" in transition
+    assert "state.viewedActions.clear()" in transition
+    assert "displayText: action.label" in action_handler
+    assert 'String(options.displayText || message)' in sender
+    assert "safeFallbackActions()" not in followups
+
+
+def test_generic_info_flow_uses_neutral_eligibility_and_a_down_funnel_picker() -> None:
+    source = _source("widget.js")
+    guided_info = _function_source(source, "showGuidedInfo")
+    select_entity = _function_source(source, "selectGuidedEntity")
+
+    assert 'eligibility: "eligibility_borderline"' in guided_info
+    assert "state.pendingGuidedInfo" in guided_info
+    assert "await showProgramOptions()" in guided_info
+    assert "safeFallbackActions()" not in guided_info
+    assert "state.pendingGuidedInfo" in select_entity
+
+
+def test_first_send_waits_for_context_and_starter_impressions_require_visibility() -> None:
+    source = _source("widget.js")
+    sender = _function_source(source, "sendMessage")
+    builder = _function_source(source, "buildWidget")
+    loader = _function_source(source, "loadGuideContext")
+    impressions = _function_source(source, "emitStarterImpressions")
+    set_open = _function_source(source, "setOpen")
+
+    assert "if (state.guideReady) await state.guideReady" in sender
+    assert "state.conversationStarted = true" in sender
+    assert "renderStarterBank(pageType)" not in builder
+    assert "starter.hidden = true" in builder
+    assert "state.starter.hidden = state.conversationStarted" in loader
+    assert "renderStarterBank(state.starterType)" in loader
+    assert "!state.open" in impressions
+    assert "state.starter.hidden" in impressions
+    assert "state.starterImpressionKey" in impressions
+    assert "emitStarterImpressions()" in set_open
+
+
+def test_response_action_metadata_is_applied_before_cards_and_propagated() -> None:
+    source = _source("widget.js")
+    renderer = _function_source(source, "renderBotPayload")
+    chip_metadata = _function_source(source, "applyChipMetadata")
+    analytics_payload = _function_source(source, "analyticsPayload")
+    sender = _function_source(source, "sendMessage")
+    followups = _function_source(source, "loadFollowupChips")
+    lead_panel = _function_source(source, "openLeadPanel")
+
+    assert renderer.index("applyActionMetadata(actions)") < renderer.index("components.forEach")
+    assert "chipPayload.correlation_id" in chip_metadata
+    assert "correlation_id" in analytics_payload
+    assert "body.chip_config_version" in sender
+    assert "body.chip_correlation_id" in sender
+    assert "config_version: state.configVersion" in followups
+    assert "correlation_id: state.correlationId" in followups
+    assert "leadBody.chip_config_version" in lead_panel
+    assert "leadBody.chip_correlation_id" in lead_panel
+
+
+def test_guided_card_impressions_use_the_loaded_followup_surface() -> None:
+    source = _source("widget.js")
+    info_card = _function_source(source, "guidedInfoCard")
+    guided_info = _function_source(source, "showGuidedInfo")
+    validity_card = _function_source(source, "validityCard")
+    execute = _function_source(source, "executeGuidedAction")
+
+    assert 'emitAnalytics("card_shown"' not in info_card
+    assert guided_info.index("await loadFollowupChips") < guided_info.index(
+        'emitAnalytics("card_shown"'
+    )
+    assert 'emitAnalytics("card_shown"' not in validity_card
+    validity_branch = execute.index('action === "online_validity"')
+    assert execute.index("await loadFollowupChips", validity_branch) < execute.index(
+        'emitAnalytics("card_shown"', validity_branch
+    )
+
+
+def test_active_tool_resume_and_lead_gate_name_are_supported() -> None:
+    source = _source("widget.js")
+    loader = _function_source(source, "loadGuideContext")
+    renderer = _function_source(source, "renderBotPayload")
+    active_flow = _function_source(source, "applyActiveFlow")
+    lead_panel = _function_source(source, "openLeadPanel")
+
+    assert "payload.active_flow" in loader
+    assert "state.activeFlowResumeKey" in loader
+    assert "renderBotPayload(resumeResponse)" in loader
+    assert "activeFlowMetadata(safePayload)" in renderer
+    assert "emptyToolContext" in renderer
+    assert 'step === "await_lead"' in active_flow
+    assert "flow.requires_lead === true" in active_flow
+    assert 'state.currentChipSurface = `tool:${tool}`' in active_flow
+    assert 'state.currentFunnelStage = "bottom"' in active_flow
+    assert "requiresName" in lead_panel
+    assert "leadBody.name = normalizedName" in lead_panel
+
+
+def test_action_lead_tags_are_preserved_in_analytics() -> None:
+    source = _source("widget.js")
+    payload = _function_source(source, "analyticsPayload")
+
+    assert "item.lead_tags" in payload
+    assert "{ lead_tags: item.lead_tags }" in payload
+
+
+def test_conversion_chip_is_persisted_before_lead_submission_without_rendering_followups() -> None:
+    source = _source("widget.js")
+    persist = _function_source(source, "persistCompletedChip")
+    execute = _function_source(source, "executeGuidedAction")
+    lead_panel = _function_source(source, "openLeadPanel")
+
+    assert 'fetchJson("/api/widget/guide/chips"' in persist
+    assert "completed_chip_id: chip.chip_id" in persist
+    assert "config_version: chip.config_version" in persist
+    assert "correlation_id: chip.correlation_id" in persist
+    assert "applyServerNavigation(payload)" in persist
+    assert "renderBotPayload" not in persist
+    assert "persistCompletedChip(chip)" in execute
+    assert "await persistence" in lead_panel
+    assert "!chipPersisted" in lead_panel

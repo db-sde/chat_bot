@@ -19,6 +19,7 @@ class Action(StrEnum):
     CLARIFY = "clarify"
     CALLBACK = "callback"
     OPEN_LEAD_FORM = "open_lead_form"
+    TOOL_ENTRY = "tool_entry"
     UNSUPPORTED_ENTITY = "unsupported_entity"
     CHITCHAT = "chitchat"
     UNRELATED = "unrelated"
@@ -50,6 +51,44 @@ _RECOMMEND_MARKER = re.compile(
     r"which\s+university\b[^?]{0,80}\b(?:highest|reasonable\s+fees?))\b",
     re.IGNORECASE,
 )
+_TOOL_TOKEN = re.compile(
+    r"^\s*tool:(roi|career_quiz|scholarship)\s*$",
+    re.IGNORECASE,
+)
+_TOOL_ALIASES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    (
+        "roi",
+        re.compile(
+            r"^\s*(?:calculate|check|show)?\s*(?:my\s+)?(?:program\s+)?roi(?:\s+calculator)?\s*[.!]?\s*$",
+            re.I,
+        ),
+    ),
+    (
+        "career_quiz",
+        re.compile(
+            r"^\s*(?:start|take|open)?\s*(?:the\s+)?career(?:[-\s]+path)?\s+quiz\s*[.!]?\s*$", re.I
+        ),
+    ),
+    (
+        "scholarship",
+        re.compile(
+            r"^\s*(?:check|start|open)?\s*(?:my\s+)?scholarship(?:\s+(?:checker|eligibility))?\s*[.!]?\s*$",
+            re.I,
+        ),
+    ),
+)
+
+
+def tool_id_from_message(message: str) -> str | None:
+    """Return a bounded tool id for fixed widget tokens or unambiguous aliases."""
+
+    token = _TOOL_TOKEN.fullmatch(message)
+    if token:
+        return token.group(1).casefold()
+    for tool_id, pattern in _TOOL_ALIASES:
+        if pattern.fullmatch(message):
+            return tool_id
+    return None
 
 
 def _candidates(mentions: Any, field: str, *, confidence: str = "HIGH") -> list[Any]:
@@ -116,15 +155,16 @@ def has_deferred_clarification(mentions: Any) -> bool:
     """
 
     for field in ("universities", "courses", "specializations"):
-        if _candidates(mentions, field, confidence="MEDIUM") and not _candidates(
-            mentions, field
-        ):
+        if _candidates(mentions, field, confidence="MEDIUM") and not _candidates(mentions, field):
             return True
     return False
 
 
 def classify(mentions: Any, message: str) -> Action | None:
     """Return a confident deterministic action, or ``None`` for the next layer."""
+
+    if tool_id_from_message(message) is not None:
+        return Action.TOOL_ENTRY
 
     high_categories = _candidates(mentions, "courses")
     high_specializations = _candidates(mentions, "specializations")
@@ -144,11 +184,7 @@ def classify(mentions: Any, message: str) -> Action | None:
 
     if high_specializations and (
         _PROVIDER_REQUEST.search(message)
-        or (
-            _OPTIONS_REQUEST.search(message)
-            and high_categories
-            and not high_universities
-        )
+        or (_OPTIONS_REQUEST.search(message) and high_categories and not high_universities)
     ):
         return Action.LIST_PROVIDERS
 
@@ -173,8 +209,7 @@ def classify(mentions: Any, message: str) -> Action | None:
         return Action.LIST_SPECIALIZATIONS
 
     if _COMPARE_MARKER.search(message) and (
-        len(groups) >= 2
-        or (groups and bool(getattr(mentions, "unresolved_terms", ())))
+        len(groups) >= 2 or (groups and bool(getattr(mentions, "unresolved_terms", ())))
     ):
         return Action.COMPARE
 
@@ -187,11 +222,7 @@ def classify(mentions: Any, message: str) -> Action | None:
     if groups and _RECOMMEND_MARKER.search(message):
         return Action.RECOMMEND
 
-    if (
-        groups
-        and not _COMPARE_MARKER.search(message)
-        and not _RECOMMEND_MARKER.search(message)
-    ):
+    if groups and not _COMPARE_MARKER.search(message) and not _RECOMMEND_MARKER.search(message):
         # Ambiguous HIGH families still remain deterministic here: focus_updater
         # and clarify() already know how to present every candidate without
         # selecting one. Provider-list markers above are the shape override.
@@ -234,4 +265,10 @@ def mention_summary(mentions: Any) -> str:
     return ", ".join(rendered)
 
 
-__all__ = ["Action", "classify", "has_deferred_clarification", "mention_summary"]
+__all__ = [
+    "Action",
+    "classify",
+    "has_deferred_clarification",
+    "mention_summary",
+    "tool_id_from_message",
+]

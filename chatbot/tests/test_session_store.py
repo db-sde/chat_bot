@@ -54,6 +54,25 @@ class MissingThenFailureRedis:
         return True
 
 
+class ClaimRedis:
+    def __init__(self) -> None:
+        self.keys: set[str] = set()
+
+    async def set(
+        self,
+        key: str,
+        raw: str,
+        *,
+        nx: bool = False,
+        ex: int | None = None,
+    ) -> bool:
+        del raw, ex
+        if nx and key in self.keys:
+            return False
+        self.keys.add(key)
+        return True
+
+
 @pytest.mark.asyncio
 async def test_ttl_refresh_failure_preserves_read_state_in_memory_fallback() -> None:
     expected = ConversationState(session_id="ttl-failure")
@@ -109,3 +128,15 @@ async def test_authoritative_redis_miss_evicts_mirror_before_later_outage() -> N
     assert missing is None
     assert after_outage is None
     assert store.using_memory
+
+
+@pytest.mark.asyncio
+async def test_one_time_claim_is_hashed_and_shared_across_store_instances() -> None:
+    redis = ClaimRedis()
+    first = SessionStore(redis_client=redis, settings=Settings(redis_url=None))
+    second = SessionStore(redis_client=redis, settings=Settings(redis_url=None))
+
+    assert await first.claim_once("scholarship", "9876543210")
+    assert not await first.claim_once("scholarship", "9876543210")
+    assert not await second.claim_once("scholarship", "9876543210")
+    assert all("9876543210" not in key for key in redis.keys)

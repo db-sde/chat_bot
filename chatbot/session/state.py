@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -144,6 +145,7 @@ class LeadState(StateModel):
     phone: str | None = None
     email: str | None = None
     last_asked_field: Literal["name", "phone", "email"] | None = None
+    conversion_recorded: bool = False
 
     @model_validator(mode="after")
     def hydrate_legacy_activity(self) -> LeadState:
@@ -197,12 +199,74 @@ class AdvisorState(StateModel):
         self.last_asked_field = None
 
 
+class NavigationStep(StrEnum):
+    """Authoritative guided-widget position.
+
+    The values are transport-safe strings so the same state can be persisted in
+    Redis and mirrored by the dependency-free widget without another mapping.
+    """
+
+    HOMEPAGE = "homepage"
+    UNIVERSITY_PICKER = "university_picker"
+    UNIVERSITY_CARD = "university_card"
+    COURSE_PICKER = "course_picker"
+    COURSE_CARD = "course_card"
+    SPECIALIZATION_PICKER = "specialization_picker"
+    SPECIALIZATION_CARD = "specialization_card"
+    FEES = "fees"
+    ELIGIBILITY = "eligibility"
+    CAREERS = "careers"
+    APPROVALS = "approvals"
+    REVIEWS = "reviews"
+    SYLLABUS = "syllabus"
+    ADMISSIONS = "admissions"
+    VALIDITY = "validity"
+    COMPARISON = "comparison"
+    TOOL = "tool"
+    LEAD_CAPTURE = "lead_capture"
+
+
+class NavigationState(StateModel):
+    """Single source of truth for funnel depth, context, and completed chips."""
+
+    step: NavigationStep = NavigationStep.HOMEPAGE
+    page_type: str = "homepage"
+    surface: str = "page:home"
+    entity_id: str | None = None
+    university_id: str | None = None
+    course_id: str | None = None
+    specialization_id: str | None = None
+    interaction_count: int = Field(default=0, ge=0)
+    completed_actions: list[str] = Field(default_factory=list)
+    config_version: str = ""
+
+    def mark_completed(self, chip_id: str | None) -> bool:
+        value = " ".join(str(chip_id or "").split())
+        if not value or value in self.completed_actions:
+            return False
+        self.completed_actions.append(value)
+        return True
+
+
+class ActiveFlow(StateModel):
+    """Persisted multi-turn tool state; absent means the ordinary chat pipeline."""
+
+    tool: Literal["roi", "career_quiz", "scholarship"]
+    step: str
+    answers: dict[str, str] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)
+    version: str = ""
+
+
 class ConversationState(StateModel):
     session_id: str
     focus: Focus = Field(default_factory=Focus)
     pending_clarification: PendingClarification | None = None
     lead: LeadState = Field(default_factory=LeadState)
     advisor: AdvisorState = Field(default_factory=AdvisorState)
+    navigation: NavigationState = Field(default_factory=NavigationState)
+    active_flow: ActiveFlow | None = None
+    tool_attempts: dict[str, int] = Field(default_factory=dict)
     turn_count: int = Field(default=0, ge=0)
     history: list[dict[str, Any]] = Field(default_factory=list)
     # Full catalog envelopes already used by this session. This keeps persistence
@@ -227,6 +291,7 @@ SessionState = ConversationState
 
 
 __all__ = [
+    "ActiveFlow",
     "AdvisorField",
     "AdvisorState",
     "ConversationState",
@@ -234,6 +299,8 @@ __all__ = [
     "FocusSlot",
     "FocusSource",
     "LeadState",
+    "NavigationState",
+    "NavigationStep",
     "PendingClarification",
     "SessionState",
     "hydrate_focus_concepts",

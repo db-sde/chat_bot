@@ -153,6 +153,28 @@ async def test_each_new_field_schedules_a_crm_snapshot(funnel) -> None:
 
 
 @pytest.mark.asyncio
+async def test_widget_phone_capture_includes_tool_tags_in_crm_context(funnel) -> None:
+    lead_funnel, webhook = funnel
+    state = ConversationState(session_id="tool-lead")
+
+    normalized = lead_funnel.capture_phone_only(
+        state,
+        "9876543210",
+        source="roi_gate",
+        extra_context={"tool": "roi", "payback_months": 18},
+    )
+    await asyncio.sleep(0)
+
+    assert normalized == "9876543210"
+    assert len(webhook.events) == 1
+    assert webhook.events[0].context == {
+        "tool": "roi",
+        "payback_months": 18,
+        "widget_source": "roi_gate",
+    }
+
+
+@pytest.mark.asyncio
 async def test_completion_deactivates_flow_and_preserves_crm_snapshot(funnel) -> None:
     lead_funnel, webhook = funnel
     state = ConversationState(session_id="complete")

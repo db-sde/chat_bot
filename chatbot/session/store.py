@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
+import re
 import time
 from typing import Any
 
@@ -40,6 +42,8 @@ class SessionStore:
         self.timeout_seconds = timeout_seconds or config.redis_timeout_seconds
         self._memory: dict[str, tuple[float, str]] = {}
         self._memory_lock = asyncio.Lock()
+        self._one_time_claims: set[str] = set()
+        self._claim_lock = asyncio.Lock()
         self._redis_failed = False
         self._owns_redis = redis_client is None
 
@@ -62,6 +66,37 @@ class SessionStore:
 
     def _key(self, session_id: str) -> str:
         return f"{self.key_prefix}{session_id}"
+
+    def _claim_key(self, scope: str, identity: str) -> str:
+        normalized_scope = re.sub(r"[^a-z0-9_-]+", "-", scope.casefold()).strip("-")
+        digest = hashlib.sha256(identity.strip().casefold().encode("utf-8")).hexdigest()
+        return f"{self.key_prefix}once:{normalized_scope or 'default'}:{digest}"
+
+    async def claim_once(self, scope: str, identity: str) -> bool:
+        """Atomically claim a privacy-safe one-time identity key.
+
+        Redis provides cross-process enforcement. The same hashed key is kept in
+        memory for local development and for the store's sticky degraded mode.
+        """
+
+        rendered = " ".join(str(identity or "").split())
+        if not rendered:
+            raise ValueError("one-time claim identity must not be blank")
+        key = self._claim_key(scope, rendered)
+        async with self._claim_lock:
+            if key in self._one_time_claims:
+                return False
+            if not self.using_memory:
+                try:
+                    claimed = bool(await self._redis.set(key, "1", nx=True))
+                except Exception as error:
+                    self._fall_back("one-time claim", error)
+                else:
+                    if claimed:
+                        self._one_time_claims.add(key)
+                    return claimed
+            self._one_time_claims.add(key)
+            return True
 
     @staticmethod
     def _serialize(state: ConversationState) -> str:

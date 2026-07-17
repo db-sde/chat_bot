@@ -163,6 +163,8 @@ def _next_step(actions: Iterable[Any], fallback: str) -> str:
     lowered = action.casefold()
     if lowered.startswith("compare "):
         return f"Would you like me to compare {action[8:]}?"
+    if "fees" in lowered:
+        return "Would you like to review the published fees next?"
     for suffix, prompt in (
         (" fees and emi", "review the published fees for"),
         (" fees", "review the published fees for"),

@@ -1,0 +1,29 @@
+{
+  "version": "unconfigured-2026-07-17",
+  "tools": {
+    "roi": {
+      "enabled": false,
+      "entry_copy": "",
+      "unavailable_reason": "ROI is unavailable until normalized fee_numeric and salary_numeric catalog fields are supplied.",
+      "steps": [],
+      "question_bank": {},
+      "reward_bands": []
+    },
+    "career_quiz": {
+      "enabled": false,
+      "entry_copy": "",
+      "unavailable_reason": "The career quiz is unavailable until the complete question and discipline-weight mapping is supplied.",
+      "steps": [],
+      "question_bank": {},
+      "reward_bands": []
+    },
+    "scholarship": {
+      "enabled": false,
+      "entry_copy": "",
+      "unavailable_reason": "The scholarship checker is unavailable until program question banks and approved reward bands are supplied.",
+      "steps": [],
+      "question_bank": {},
+      "reward_bands": []
+    }
+  }
+}

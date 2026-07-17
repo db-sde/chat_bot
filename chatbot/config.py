@@ -35,9 +35,11 @@ class Settings(BaseSettings):
     catalog_path: Path | None = None
     catalog_timeout_seconds: float = Field(default=5.0, gt=0)
     widget_config_path: Path | None = None
+    chip_map_path: Path | None = None
+    tools_content_path: Path | None = None
     widget_allowed_origins: str = "*"
 
-    @field_validator("catalog_url", mode="before")
+    @field_validator("catalog_url", "analytics_webhook_url", mode="before")
     @classmethod
     def _blank_url_is_none(cls, value: object) -> object:
         """Treat ``CATALOG_URL=`` (blank) as unset rather than an empty string."""
@@ -45,7 +47,13 @@ class Settings(BaseSettings):
             return None
         return value
 
-    @field_validator("catalog_path", "widget_config_path", mode="before")
+    @field_validator(
+        "catalog_path",
+        "widget_config_path",
+        "chip_map_path",
+        "tools_content_path",
+        mode="before",
+    )
     @classmethod
     def _blank_path_is_none(cls, value: object) -> object:
         """Treat blank optional filesystem paths as unset.
@@ -90,6 +98,11 @@ class Settings(BaseSettings):
     webhook_timeout_seconds: float = Field(default=5.0, gt=0)
     lead_nudge_after_turns: int = Field(default=3, ge=0)
     dead_letter_path: Path = Path("var/lead_dead_letters.jsonl")
+    analytics_webhook_url: str | None = None
+    analytics_webhook_secret: str | None = None
+    analytics_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
+    analytics_dead_letter_path: Path = Path("var/analytics_dead_letters.jsonl")
+    analytics_queue_size: int = Field(default=2_048, ge=16, le=100_000)
     # Retained for environment/session compatibility. The isolated lead flow is
     # now explicit and does not auto-prompt from ordinary catalog turns.
     lead_prompt_after_turn: int = Field(default=3, ge=0)

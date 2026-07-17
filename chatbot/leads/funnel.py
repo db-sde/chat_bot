@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -385,21 +386,43 @@ class LeadFunnel:
         state: Any,
         phone: str,
         *,
+        name: str | None = None,
+        require_name: bool = False,
         source: str | None = None,
+        extra_context: Mapping[str, Any] | None = None,
     ) -> str:
-        """Capture the widget's single-field lead form through the existing CRM path."""
+        """Capture the widget lead form through the existing CRM path."""
 
         compact = re.sub(r"[()\s-]", "", str(phone or ""))
         match = PHONE_RE.fullmatch(compact)
         if match is None:
             raise ValueError("phone must be a valid 10-digit Indian mobile number")
         normalized = match.group(1)
+        normalized_name: str | None = None
+        if name is not None:
+            compact_name = " ".join(str(name).split())
+            if (
+                NAME_RE.fullmatch(compact_name) is None
+                or not 1 <= len(compact_name.split()) <= 5
+                or compact_name.casefold() in QUESTION_WORDS
+            ):
+                raise ValueError("name must contain 2-50 letters")
+            normalized_name = " ".join(part.capitalize() for part in compact_name.split())
+        if require_name and not (normalized_name or state.lead.name):
+            raise ValueError("name is required to reveal the tool result")
+        changed = ["phone"]
+        if normalized_name and normalized_name != state.lead.name:
+            state.lead.name = normalized_name
+            changed.insert(0, "name")
         state.lead.phone = normalized
         self.complete(state)
+        crm_context = dict(extra_context or {})
+        if source:
+            crm_context["widget_source"] = source
         self._schedule_push(
             state,
-            ["phone"],
-            extra_context={"widget_source": source} if source else None,
+            changed,
+            extra_context=crm_context or None,
         )
         return normalized
 

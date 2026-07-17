@@ -7,6 +7,7 @@ from collections.abc import Iterable, Mapping
 from enum import Enum
 from typing import Any
 
+import logging_setup
 from response.builder import build_transport_components
 from response.cards import (
     catalog_get_entity,
@@ -38,6 +39,7 @@ from .cards import (
     build_comparison_card_from_text,
     build_entity_card,
 )
+from .chips import chip_actions
 from .experience import context_from_state, quick_actions_for_response
 from .formatter import advisor_message
 
@@ -218,9 +220,7 @@ def _list_card_entities(route_name: str, state: Any, catalog: Any) -> list[Any]:
             entity
             for entity in iter_catalog_entities(catalog)
             if entity_page_type(entity) == "course"
-            and normalize_category(
-                first_value(entity, "category", "program_name", default=None)
-            )
+            and normalize_category(first_value(entity, "category", "program_name", default=None))
             == normalized
         ]
         return _representative_entities(matches)
@@ -236,9 +236,7 @@ def _list_card_entities(route_name: str, state: Any, catalog: Any) -> list[Any]:
     for entity in iter_catalog_entities(catalog):
         if entity_page_type(entity) != "specialization":
             continue
-        label = clean_text(
-            first_value(entity, "specialization_name", "spec_name", default=None)
-        )
+        label = clean_text(first_value(entity, "specialization_name", "spec_name", default=None))
         if label.casefold() != specialization.casefold():
             continue
         linked = first_value(entity, "linked_university.id", "linked_university", default=None)
@@ -305,6 +303,50 @@ def _university_program_card_list(
     )
 
 
+def _tool_program_card_list(
+    tool_flow: Mapping[str, Any] | None,
+    catalog: Any,
+) -> CardListComponent | None:
+    if tool_flow is None or tool_flow.get("step") != "reveal":
+        return None
+    identifiers = tool_flow.get("cta_program_ids")
+    if not isinstance(identifiers, Iterable) or isinstance(identifiers, (str, bytes, Mapping)):
+        return None
+
+    cards: list[ProgramCard] = []
+    seen: set[str] = set()
+    for identifier in identifiers:
+        key = clean_text(identifier)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        resolved = catalog_get_entity(catalog, key)
+        if resolved is None:
+            continue
+        candidate = build_entity_card(resolved, catalog)
+        if isinstance(candidate, ProgramCard):
+            cards.append(candidate)
+        if len(cards) == 3:
+            break
+    if not cards:
+        return None
+    return CardListComponent(title="Recommended programs", items=cards)
+
+
+def _chip_delivery_context(state: Any) -> tuple[int, str | None]:
+    navigation = _value(state, "navigation")
+    interaction_count = max(0, int(_value(navigation, "interaction_count", 0) or 0))
+    session_id = clean_text(_value(state, "session_id"))
+    if not session_id:
+        return interaction_count, None
+    turn_count = max(0, int(_value(state, "turn_count", 0) or 0))
+    correlation_id = logging_setup.correlation_id(
+        session_id,
+        max(turn_count, interaction_count, 1),
+    )
+    return interaction_count, correlation_id
+
+
 def _positive_eligibility(text: str) -> bool:
     normalized = clean_text(text).casefold()
     return bool(
@@ -342,6 +384,7 @@ def enrich_response(
     entity: Any = None,
     operands: Iterable[Any] | None = None,
     message: str = "",
+    chip_engine: Any = None,
 ) -> ResponsePayload:
     """Return an additive rich response without mutating routing or focus state.
 
@@ -350,14 +393,14 @@ def enrich_response(
     """
 
     current = (
-        payload
-        if isinstance(payload, ResponsePayload)
-        else ResponsePayload.model_validate(payload)
+        payload if isinstance(payload, ResponsePayload) else ResponsePayload.model_validate(payload)
     )
     route_name = _route_name(route)
     resolved_entity = _resolve_entity(entity, state, route, catalog)
     existing: list[ResponseComponent | dict[str, Any]] = list(current.components)
     component_types = {_component_type(component) for component in existing}
+    raw_tool_flow = current.metadata.get("tool_flow")
+    tool_flow = raw_tool_flow if isinstance(raw_tool_flow, Mapping) else None
 
     card: ResponseComponent | None = None
     if route_name == "comparison" and "comparison_card" not in component_types:
@@ -390,6 +433,8 @@ def enrich_response(
             card = build_entity_card(resolved_entity, catalog)
 
     if card is None and "card_list" not in component_types:
+        card = _tool_program_card_list(tool_flow, catalog)
+    if card is None and "card_list" not in component_types:
         card = _card_list(route_name, state, catalog, current.text)
 
     if card is not None:
@@ -418,22 +463,95 @@ def enrich_response(
         None,
     )
     presentation_list = next(
-        (
-            component
-            for component in components
-            if isinstance(component, CardListComponent)
-        ),
+        (component for component in components if isinstance(component, CardListComponent)),
         None,
     )
-    if route_name == "clarification" and current.suggested_chips:
+    interaction_count, correlation_id = _chip_delivery_context(state)
+    if tool_flow is not None and current.quick_actions:
+        if chip_engine is not None and tool_flow.get("step") == "reveal":
+            navigation = _value(state, "navigation")
+            followup = chip_engine.lookup(
+                page_type=str(_value(navigation, "page_type", "homepage") or "homepage"),
+                answer_state="tool_reveal",
+                interaction_count=interaction_count,
+                state=state,
+            )
+            quick_actions = chip_actions(
+                followup.chips,
+                surface=followup.surface,
+                config_version=followup.config_version,
+                content_version=str(tool_flow.get("version") or "not_applicable"),
+                interaction_count=interaction_count,
+                correlation_id=correlation_id,
+                lead_tags=(
+                    dict(tool_flow.get("lead_tags", {}))
+                    if isinstance(tool_flow.get("lead_tags"), Mapping)
+                    else None
+                ),
+            )
+        else:
+            quick_actions = list(current.quick_actions)
+    elif route_name == "clarification" and current.suggested_chips:
         quick_actions = _clarification_actions(current.suggested_chips)
+    elif chip_engine is not None:
+        topic = topic_from_message(message)
+        answer_state = {
+            "fee": "fees",
+            "emi": "fees",
+            "jobs": "careers",
+            "placements": "careers",
+            "syllabus": "syllabus",
+            "certificate": "validity",
+            "accreditation": "approvals",
+            "reviews": "reviews",
+        }.get(topic)
+        if route_name == "comparison":
+            answer_state = "comparison"
+        elif topic == "eligibility":
+            answer_state = (
+                "eligibility_yes"
+                if _positive_eligibility(current.text)
+                else "eligibility_borderline"
+            )
+        elif topic == "specializations" and any(
+            marker in current.text.casefold()
+            for marker in ("not been published", "no specialization", "no specialisation")
+        ):
+            answer_state = "no_specializations"
+
+        card_type: str | None = None
+        if answer_state is None:
+            if isinstance(presentation_card, UniversityCard):
+                card_type = "university"
+            elif isinstance(presentation_card, ProgramCard):
+                card_type = presentation_card.kind
+            elif resolved_entity is not None:
+                card_type = entity_page_type(resolved_entity) or None
+
+        navigation = _value(state, "navigation")
+        page_type = str(_value(navigation, "page_type", "homepage") or "homepage")
+        followup = chip_engine.lookup(
+            page_type=page_type,
+            card_type=card_type,
+            answer_state=answer_state,
+            interaction_count=interaction_count,
+            state=state,
+        )
+        quick_actions = chip_actions(
+            followup.chips,
+            surface=followup.surface,
+            config_version=followup.config_version,
+            interaction_count=interaction_count,
+            correlation_id=correlation_id,
+        )
     else:
         quick_actions = quick_actions_for_response(
             entity=resolved_entity,
             message=message,
             route=route_name,
         )
-    components.append(QuickActionsComponent(actions=quick_actions))
+    if quick_actions:
+        components.append(QuickActionsComponent(actions=quick_actions))
 
     topic = topic_from_message(message)
     lead_trigger: str | None = None
@@ -470,7 +588,9 @@ def enrich_response(
         card=presentation_card,
         next_actions=(action.message for action in quick_actions),
     )
-    if presentation_list is not None:
+    if presentation_list is not None and not (
+        tool_flow is not None and tool_flow.get("step") == "reveal"
+    ):
         presentation_message = _card_list_message(presentation_list)
     phone_only_lead = bool(
         route_name == "lead"
@@ -479,8 +599,7 @@ def enrich_response(
     )
     if phone_only_lead:
         presentation_message = (
-            "Want me to check today's fee offer and seat availability? "
-            "Share your number — no spam."
+            "Want me to check today's fee offer and seat availability? Share your number — no spam."
         )
     context = context_from_state(state, catalog, entity=resolved_entity)
     metadata = dict(current.metadata)

@@ -47,38 +47,93 @@
 
   const GUIDED_THINKING_MS = 650;
   const GUIDED_VISIBLE_ACTIONS = 3;
-  const OPENING_ACTIONS = {
-    homepage: [
-      { label: "Browse Universities", guide: "browse_universities" },
-      { label: "Browse Programs", guide: "browse_programs" },
-      { label: "Help Me Choose", guide: "finder" },
-      { label: "Is Online Degree Valid?", guide: "online_validity" },
-    ],
-    university: [
-      { label: "Programs Offered Here", guide: "programs_here" },
-      { label: "Student Reviews", guide: "reviews" },
-      { label: "Accreditations", guide: "accreditations" },
-      { label: "Compare With Others", guide: "compare" },
-    ],
-    course: [
-      { label: "Fees & EMI", guide: "fees" },
-      { label: "Specializations", guide: "specializations" },
-      { label: "Eligibility", guide: "eligibility" },
-      { label: "Compare Universities", guide: "compare" },
-    ],
-    specialization: [
-      { label: "Career & Salary", guide: "career" },
-      { label: "Syllabus", guide: "syllabus" },
-      { label: "Fees", guide: "fees" },
-      { label: "Other Specializations", guide: "other_specializations" },
-    ],
-  };
-  const MORE_ACTIONS = [
-    { label: "Compare", guide: "compare" },
-    { label: "Fees & EMI", guide: "fees" },
-    { label: "Eligibility", guide: "eligibility" },
-    { label: "Talk to a Counsellor", guide: "lead" },
-  ];
+  const NavigationStep = Object.freeze({
+    HOMEPAGE: "HOMEPAGE",
+    UNIVERSITY_PICKER: "UNIVERSITY_PICKER",
+    UNIVERSITY_CARD: "UNIVERSITY_CARD",
+    COURSE_PICKER: "COURSE_PICKER",
+    COURSE_CARD: "COURSE_CARD",
+    SPECIALIZATION_PICKER: "SPECIALIZATION_PICKER",
+    SPECIALIZATION_CARD: "SPECIALIZATION_CARD",
+    FEES: "FEES",
+    ELIGIBILITY: "ELIGIBILITY",
+    CAREERS: "CAREERS",
+    APPROVALS: "APPROVALS",
+    REVIEWS: "REVIEWS",
+    SYLLABUS: "SYLLABUS",
+    ADMISSIONS: "ADMISSIONS",
+    VALIDITY: "VALIDITY",
+    COMPARISON: "COMPARISON",
+    TOOL: "TOOL",
+    LEAD_CAPTURE: "LEAD_CAPTURE",
+  });
+  const NAVIGATION_TRANSITIONS = Object.freeze({
+    reset: NavigationStep.HOMEPAGE,
+    university_picker: NavigationStep.UNIVERSITY_PICKER,
+    university_card: NavigationStep.UNIVERSITY_CARD,
+    course_picker: NavigationStep.COURSE_PICKER,
+    course_card: NavigationStep.COURSE_CARD,
+    specialization_picker: NavigationStep.SPECIALIZATION_PICKER,
+    specialization_card: NavigationStep.SPECIALIZATION_CARD,
+    fees: NavigationStep.FEES,
+    eligibility: NavigationStep.ELIGIBILITY,
+    career: NavigationStep.CAREERS,
+    careers: NavigationStep.CAREERS,
+    approval: NavigationStep.APPROVALS,
+    approvals: NavigationStep.APPROVALS,
+    accreditation: NavigationStep.APPROVALS,
+    accreditations: NavigationStep.APPROVALS,
+    reviews: NavigationStep.REVIEWS,
+    syllabus: NavigationStep.SYLLABUS,
+    admission_process: NavigationStep.ADMISSIONS,
+    admission_steps: NavigationStep.ADMISSIONS,
+    admissions: NavigationStep.ADMISSIONS,
+    online_validity: NavigationStep.VALIDITY,
+    validity: NavigationStep.VALIDITY,
+    comparison: NavigationStep.COMPARISON,
+    tool: NavigationStep.TOOL,
+    lead: NavigationStep.LEAD_CAPTURE,
+  });
+  const CHIP_GUIDE_ACTIONS = Object.freeze({
+    browse_universities: "browse_universities",
+    browse_programs: "browse_programs",
+    programs_here: "programs_here",
+    approvals: "accreditations",
+    reviews: "reviews",
+    fees_emi: "fees",
+    fees_across: "fees",
+    starting_fees: "fees",
+    see_fees: "fees",
+    eligibility: "eligibility",
+    check_eligibility: "eligibility",
+    specializations: "specializations",
+    other_specs: "other_specializations",
+    careers: "career",
+    careers_from_syllabus: "career",
+    syllabus: "syllabus",
+    validity: "online_validity",
+    validity_course: "online_validity",
+    compare: "compare",
+    compare_top: "compare",
+    compare_others: "compare",
+    compare_universities: "compare",
+    apply_now: "lead",
+    counsellor: "lead",
+  });
+  const HANDLER_GUIDE_ACTIONS = Object.freeze({
+    list_universities: "browse_universities",
+    get_fees: "fees",
+    get_eligibility: "eligibility",
+    get_specializations: "specializations",
+    get_validity: "online_validity",
+    get_careers: "career",
+    get_syllabus: "syllabus",
+    get_reviews: "reviews",
+    get_approvals: "accreditations",
+    compare: "compare",
+    cta_apply: "lead",
+    cta_callback: "lead",
+  });
   const PROGRAM_OPTIONS = ["Online MBA", "Online MCA", "Online Executive MBA", "Online MSc"];
 
   function storedSessionId() {
@@ -142,6 +197,22 @@
     guideBusy: false,
     guideGeneration: 0,
     guideReady: null,
+    openingChips: null,
+    navigation: null,
+    navigationStep: NavigationStep.HOMEPAGE,
+    currentChipSurface: "page:home",
+    currentFunnelStage: "top",
+    interactionCount: 0,
+    configVersion: "",
+    contentVersion: "",
+    correlationId: "",
+    conversationStarted: false,
+    starterVisibleActions: [],
+    starterImpressionKey: "",
+    activeFlow: null,
+    activeFlowResumeKey: "",
+    toolLeadRequiresName: false,
+    pendingLeadPersistence: null,
     viewedActions: new Set(),
     welcomeView: null,
     overlay: null,
@@ -154,8 +225,204 @@
     finderView: null,
     compareSelections: [],
     compareTray: null,
+    pendingCompletedChipId: null,
+    pendingGuidedInfo: null,
     lastMessage: "",
   };
+
+  function transitionNavigation(event, navigation = null) {
+    if (navigation && typeof navigation === "object") {
+      state.navigation = navigation;
+      const completedActions = Array.isArray(navigation.completed_actions)
+        ? navigation.completed_actions
+        : [];
+      state.viewedActions.clear();
+      completedActions.forEach((action) => state.viewedActions.add(String(action)));
+      const serverStep = String(navigation.step || "").trim().toUpperCase();
+      if (Object.prototype.hasOwnProperty.call(NavigationStep, serverStep)) {
+        state.navigationStep = NavigationStep[serverStep];
+      }
+      const interactionCount = Number(navigation.interaction_count);
+      if (Number.isFinite(interactionCount) && interactionCount >= 0) {
+        state.interactionCount = interactionCount;
+      }
+      if (navigation.surface) state.currentChipSurface = String(navigation.surface);
+      if (navigation.funnel_stage) state.currentFunnelStage = String(navigation.funnel_stage);
+      return state.navigationStep;
+    }
+    const key = String(event || "").trim().toLowerCase();
+    if (NAVIGATION_TRANSITIONS[key]) state.navigationStep = NAVIGATION_TRANSITIONS[key];
+    return state.navigationStep;
+  }
+
+  function safeFallbackActions() {
+    const shared = {
+      surface: state.currentChipSurface || "safe:fallback",
+      funnel_stage: "bottom",
+      interaction_count: state.interactionCount,
+      config_version: state.configVersion,
+      content_version: state.contentVersion,
+      correlation_id: state.correlationId,
+    };
+    return [
+      {
+        ...shared,
+        label: "Apply now",
+        message: "Apply now",
+        chip_id: "apply_now",
+        chip_handler: "cta_apply",
+        guide: "lead",
+      },
+      {
+        ...shared,
+        label: "Talk to a counsellor",
+        message: "Talk to a counsellor",
+        chip_id: "counsellor",
+        chip_handler: "cta_callback",
+        guide: "lead",
+      },
+    ];
+  }
+
+  function analyticsEntity() {
+    const context = currentGuideContext() || state.context || {};
+    const entity = currentGuideEntity() || {};
+    const type = cleanPageType(context.page_type || state.starterType || pageType);
+    return {
+      type,
+      id: String(entity.id || context.entity_id || (type === "homepage" ? "homepage" : "unknown")),
+    };
+  }
+
+  function analyticsPayload(event, action = null, extra = {}) {
+    const item = action && typeof action === "object" ? action : {};
+    return {
+      session_id: state.sessionId || null,
+      event,
+      surface: String(item.surface || extra.surface || state.currentChipSurface || "page:home"),
+      funnel_stage: String(
+        item.funnel_stage || extra.funnel_stage || state.currentFunnelStage || "top"
+      ),
+      interaction_count: Number.isFinite(Number(item.interaction_count))
+        ? Number(item.interaction_count)
+        : state.interactionCount,
+      entity: extra.entity || item.entity || analyticsEntity(),
+      config_version: String(item.config_version || state.configVersion || "unknown"),
+      content_version: String(item.content_version || state.contentVersion || "unknown"),
+      ...(item.correlation_id || extra.correlation_id || state.correlationId
+        ? {
+            correlation_id: String(
+              item.correlation_id || extra.correlation_id || state.correlationId,
+            ),
+          }
+        : {}),
+      ...(item.chip_id ? { chip_id: String(item.chip_id) } : {}),
+      ...(item.chip_handler || item.handler
+        ? { chip_handler: String(item.chip_handler || item.handler) }
+        : {}),
+      ...(item.lead_tags && typeof item.lead_tags === "object"
+        ? { lead_tags: item.lead_tags }
+        : {}),
+      ...(Array.isArray(extra.chips) ? { chips: extra.chips } : {}),
+    };
+  }
+
+  function emitAnalytics(event, action = null, extra = {}) {
+    const payload = analyticsPayload(event, action, extra);
+    void fetch(`${apiBase}/api/widget/analytics`, {
+      method: "POST",
+      mode: "cors",
+      keepalive: true,
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(payload),
+    }).catch((error) => {
+      console.debug("DegreeBaba analytics unavailable", error);
+    });
+  }
+
+  function emitChipShown(actions) {
+    const visible = (actions || []).filter((action) => action && action.chip_id);
+    if (!visible.length) return;
+    emitAnalytics("chip_shown", visible[0], {
+      chips: visible.map((action) => ({
+        chip_id: String(action.chip_id),
+        chip_handler: String(action.chip_handler || action.handler || ""),
+      })),
+    });
+  }
+
+  function applyActionMetadata(actions) {
+    const action = (actions || []).map(normalizedAction).find((item) => (
+      item && (
+        item.surface || item.funnel_stage || item.config_version ||
+        item.content_version || item.interaction_count != null || item.correlation_id
+      )
+    ));
+    if (action) applyChipMetadata(action);
+  }
+
+  function activeFlowMetadata(payload) {
+    const metadata = payload && payload.metadata;
+    const flow = metadata && metadata.tool_flow;
+    return flow && typeof flow === "object" ? flow : null;
+  }
+
+  function applyActiveFlow(flow) {
+    const restorePageStep = () => {
+      const type = currentGuidePageType();
+      transitionNavigation(type === "homepage" ? "reset" : `${type}_card`);
+    };
+    if (!flow || typeof flow !== "object") {
+      state.activeFlow = null;
+      state.toolLeadRequiresName = false;
+      restorePageStep();
+      return;
+    }
+    const tool = String(flow.tool || "");
+    const step = String(flow.step || "");
+    if (!tool || !step || ["reveal", "exit"].includes(step)) {
+      state.activeFlow = null;
+      state.toolLeadRequiresName = false;
+      restorePageStep();
+      return;
+    }
+    state.activeFlow = { tool, step };
+    state.toolLeadRequiresName = step === "await_lead" || flow.requires_lead === true;
+    state.currentChipSurface = `tool:${tool}`;
+    state.currentFunnelStage = "bottom";
+    if (flow.version) state.contentVersion = String(flow.version);
+    transitionNavigation("tool");
+  }
+
+  function recordChipTap(action) {
+    if (!action || !action.chip_id) return;
+    emitAnalytics("chip_tapped", action);
+    const handler = String(action.chip_handler || action.handler || "");
+    if (handler === "cta_apply") emitAnalytics("apply_clicked", action);
+    if (handler === "cta_callback") emitAnalytics("counsellor_clicked", action);
+  }
+
+  function recordCardShown(component, type) {
+    if (!component) return;
+    emitAnalytics("card_shown", null, {
+      entity: {
+        type,
+        id: String(
+          component.id || component.slug ||
+          component.items && component.items[0] && component.items[0].id ||
+          `${type}:unknown`
+        ),
+      },
+    });
+  }
+
+  function guideActionFor(action) {
+    if (!action) return "";
+    if (action.guide) return String(action.guide);
+    const chipId = String(action.chip_id || action.id || "");
+    const handler = String(action.chip_handler || action.handler || "");
+    return CHIP_GUIDE_ACTIONS[chipId] || HANDLER_GUIDE_ACTIONS[handler] || "";
+  }
 
   function normalizeConfig(payload) {
     const branding = payload && payload.branding ? payload.branding : payload || {};
@@ -273,6 +540,8 @@
     if (!value || typeof value !== "object") return null;
     return {
       ...value,
+      chip_id: value.chip_id || value.id || "",
+      chip_handler: value.chip_handler || value.handler || "",
       label: String(value.label || value.title || value.message || "").trim(),
       message: String(value.message || value.label || "").trim(),
     };
@@ -287,27 +556,38 @@
   function handleAction(rawAction) {
     const action = normalizedAction(rawAction);
     if (!action) return;
+    applyChipMetadata(action);
+    recordChipTap(action);
     const kind = String(action.action || "").toLowerCase();
     const label = action.label.toLowerCase();
     const payload = action.payload || {};
-    if (action.guide) {
-      executeGuidedAction(String(action.guide), action.label);
+    if (String(action.chip_handler) === "tool_entry" && action.tool) {
+      transitionNavigation("tool");
+      const toolMessage = action.message && action.message !== action.label
+        ? action.message
+        : `tool:${action.tool}`;
+      sendMessage(toolMessage, { displayText: action.label, chip: action });
+      return;
+    }
+    const guideAction = guideActionFor(action);
+    if (guideAction) {
+      executeGuidedAction(guideAction, action.label, { ...payload, chip: action });
       return;
     }
     if (kind === "open_university_picker" || kind === "open_picker" && payload.kind === "university") {
-      executeGuidedAction("browse_universities", action.label);
+      executeGuidedAction("browse_universities", action.label, { ...payload, chip: action });
       return;
     }
     if (kind === "open_specialization_picker" || kind === "open_picker" && payload.kind === "specialization") {
-      executeGuidedAction("specializations", action.label);
+      executeGuidedAction("specializations", action.label, { ...payload, chip: action });
       return;
     }
     if (kind === "show_programs") {
-      executeGuidedAction("browse_programs", action.label);
+      executeGuidedAction("browse_programs", action.label, { ...payload, chip: action });
       return;
     }
     if (kind === "open_finder") {
-      executeGuidedAction("finder", action.label);
+      executeGuidedAction("finder", action.label, { ...payload, chip: action });
       return;
     }
     if (
@@ -316,7 +596,10 @@
       label.includes("talk to a counsellor") ||
       label.includes("talk to a counselor")
     ) {
-      executeGuidedAction("lead", action.label, { source: payload.source || "quick_action" });
+      executeGuidedAction("lead", action.label, {
+        source: payload.source || "quick_action",
+        chip: action,
+      });
       return;
     }
     if (label.includes("browse universit")) {
@@ -350,10 +633,17 @@
         fees: "fees",
         "other specializations": "other_specializations",
       };
-      executeGuidedAction(guideActions[action.contextual] || action.contextual, action.label);
+      executeGuidedAction(guideActions[action.contextual] || action.contextual, action.label, {
+        ...payload,
+        chip: action,
+      });
       return;
     }
-    sendMessage(action.message || action.label);
+    const message = action.message || action.label;
+    sendMessage(message, {
+      displayText: message !== action.label ? action.label : message,
+      chip: action,
+    });
   }
 
   function findFact(component, needles) {
@@ -493,6 +783,7 @@
     ]);
     if (metadata.childElementCount) card.appendChild(metadata);
     card.appendChild(cardActions(component));
+    recordCardShown(component, "university");
     return card;
   }
 
@@ -541,6 +832,7 @@
     ]);
     if (metadata.childElementCount) card.appendChild(metadata);
     card.appendChild(cardActions(component));
+    recordCardShown(component, isSpecialization ? "specialization" : "course");
     return card;
   }
 
@@ -590,6 +882,7 @@
       verdict.appendChild(document.createTextNode(String(component.verdict)));
       card.appendChild(verdict);
     }
+    recordCardShown(component, "comparison");
     return card;
   }
 
@@ -626,6 +919,7 @@
         const button = actionButton(action);
         if (button) row.appendChild(button);
       });
+      emitChipShown(visible);
       const nextOffset = offset === 0 ? GUIDED_VISIBLE_ACTIONS : offset + 2;
       if (nextOffset < available.length) {
         row.appendChild(createButton("More", "db-widget__more-toggle", () => renderPage(nextOffset)));
@@ -698,6 +992,30 @@
     return Array.isArray(payload.suggested_chips) ? payload.suggested_chips : [];
   }
 
+  function synchronizeGuideContext(payload) {
+    if (!payload || !Object.prototype.hasOwnProperty.call(payload, "context")) return;
+    const responseContext = payload.context && typeof payload.context === "object"
+      ? payload.context
+      : {};
+    const responseEntityId = responseContext.entity_id || "";
+    const guideContext = currentGuideContext() || {};
+    const guideEntityId = guideContext.entity_id || "";
+    if (responseEntityId && responseEntityId !== guideEntityId) {
+      const responseType = payload.metadata && payload.metadata.page_type || state.starterType;
+      state.guideReady = loadGuideContext(responseEntityId, responseType).catch((error) => {
+        console.warn("DegreeBaba could not synchronize guided context", error);
+        return null;
+      });
+    } else if (!responseEntityId && guideEntityId && !contextValues(responseContext).length) {
+      state.guideReady = loadGuideContext("", "homepage").catch((error) => {
+        console.warn("DegreeBaba could not reset guided context", error);
+        return null;
+      });
+    } else if (state.guideBundle) {
+      state.guideBundle.context = responseContext;
+    }
+  }
+
   function renderBotPayload(payload, existingMessage) {
     const safePayload = payload && typeof payload === "object" ? payload : {};
     const message = safePayload.message || safePayload.text || "I’m ready to help with your university search.";
@@ -708,6 +1026,9 @@
     Array.from(view.content.querySelectorAll(".db-widget__component-stack")).forEach((node) => node.remove());
     let components = Array.isArray(safePayload.components) ? safePayload.components.slice() : [];
     const actions = payloadActions(safePayload, components);
+    applyActionMetadata(actions);
+    const toolFlow = activeFlowMetadata(safePayload);
+    if (toolFlow) applyActiveFlow(toolFlow);
     components = components.filter((item) => item && item.type !== "quick_actions");
     if (safePayload.cta && !components.some((item) => item.type === "lead_cta")) {
       components.push({ type: "lead_cta", ...safePayload.cta });
@@ -720,7 +1041,15 @@
       if (rendered) stack.appendChild(rendered);
     });
     if (stack.childElementCount) view.content.appendChild(stack);
-    if (Object.prototype.hasOwnProperty.call(safePayload, "context")) updateContext(safePayload.context);
+    if (Object.prototype.hasOwnProperty.call(safePayload, "context")) {
+      const emptyToolContext = Boolean(
+        toolFlow && !contextValues(safePayload.context).length,
+      );
+      if (!emptyToolContext) {
+        updateContext(safePayload.context);
+        synchronizeGuideContext(safePayload);
+      }
+    }
     anchorBotMessage(view.row);
     return view;
   }
@@ -746,6 +1075,112 @@
     const context = currentGuideContext();
     const values = contextValues(context);
     return context && context.label || values.join(" ") || "this option";
+  }
+
+  function applyServerNavigation(payload) {
+    if (!payload || typeof payload !== "object") return;
+    if (payload.session_id) {
+      state.sessionId = String(payload.session_id);
+      rememberSessionId(state.sessionId);
+    }
+    if (payload.navigation) transitionNavigation("hydrate", payload.navigation);
+  }
+
+  function applyChipMetadata(chipPayload) {
+    if (!chipPayload || typeof chipPayload !== "object") return;
+    if (chipPayload.surface) state.currentChipSurface = String(chipPayload.surface);
+    if (chipPayload.funnel_stage) {
+      state.currentFunnelStage = String(chipPayload.funnel_stage);
+    }
+    if (chipPayload.config_version) state.configVersion = String(chipPayload.config_version);
+    if (chipPayload.content_version) state.contentVersion = String(chipPayload.content_version);
+    if (chipPayload.correlation_id) state.correlationId = String(chipPayload.correlation_id);
+    const count = Number(chipPayload.interaction_count);
+    if (Number.isFinite(count) && count >= 0) state.interactionCount = count;
+  }
+
+  function openingFromPayload(payload) {
+    const opening = payload && payload.opening && typeof payload.opening === "object"
+      ? payload.opening
+      : null;
+    if (!opening) return null;
+    applyChipMetadata(opening);
+    const top = Array.isArray(opening.top) ? opening.top.map(normalizedAction).filter(Boolean) : [];
+    const more = Array.isArray(opening.more) ? opening.more.map(normalizedAction).filter(Boolean) : [];
+    return { ...opening, top, more };
+  }
+
+  async function loadFollowupChips({
+    cardType = null,
+    answerState = null,
+    completedChipId = null,
+    surface = null,
+  } = {}) {
+    const context = currentGuideContext() || {};
+    const entity = currentGuideEntity() || {};
+    const body = {
+      session_id: state.sessionId || null,
+      page_type: currentGuidePageType(),
+      surface: surface || state.currentChipSurface || null,
+      entity_id: entity.id || context.entity_id || null,
+      completed_chip_id: completedChipId || null,
+      config_version: state.configVersion || null,
+      correlation_id: state.correlationId || null,
+      card_type: cardType,
+      answer_state: answerState,
+    };
+    try {
+      const payload = await fetchJson("/api/widget/guide/chips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      applyServerNavigation(payload);
+      const followup = payload && payload.followup && typeof payload.followup === "object"
+        ? payload.followup
+        : {};
+      applyChipMetadata(followup);
+      const actions = Array.isArray(followup.chips)
+        ? followup.chips
+        : Array.isArray(followup.actions) ? followup.actions : [];
+      return actions.map(normalizedAction).filter((action) => action && action.label);
+    } catch (error) {
+      console.warn("DegreeBaba follow-up chips unavailable; using safe actions", error);
+      return safeFallbackActions();
+    }
+  }
+
+  async function persistCompletedChip(action) {
+    const chip = normalizedAction(action);
+    if (!chip || !chip.chip_id) return false;
+    try {
+      if (state.guideReady) await state.guideReady;
+    } catch (_error) {
+      // The lead request remains a second persistence opportunity.
+    }
+    const context = currentGuideContext() || {};
+    const entity = currentGuideEntity() || {};
+    try {
+      const payload = await fetchJson("/api/widget/guide/chips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: state.sessionId || null,
+          page_type: currentGuidePageType(),
+          surface: chip.surface || state.currentChipSurface || null,
+          entity_id: entity.id || context.entity_id || null,
+          completed_chip_id: chip.chip_id,
+          config_version: chip.config_version || state.configVersion || null,
+          correlation_id: chip.correlation_id || state.correlationId || null,
+        }),
+      });
+      applyServerNavigation(payload);
+      const completed = payload && payload.navigation && payload.navigation.completed_actions;
+      return Array.isArray(completed) && completed.includes(chip.chip_id);
+    } catch (error) {
+      console.warn("DegreeBaba could not persist the conversion chip", error);
+      return false;
+    }
   }
 
   function openingMessage(type, bundle = null) {
@@ -781,14 +1216,12 @@
   function renderGuidedActions(actions) {
     const row = element("div", "db-widget__quick-actions db-widget__follow-up-actions");
     row.dataset.guideActions = "true";
-    const available = (actions || []).filter((action) => (
+    const available = (actions || []).map(normalizedAction).filter((action) => (
       action && action.label && (
-        action.repeat === true || !action.action || !state.viewedActions.has(action.action)
+        action.repeat === true ||
+        !state.viewedActions.has(action.chip_id || action.action || action.guide)
       )
     ));
-    if (!available.length && actions && actions.length) {
-      available.push({ label: "Browse Programs", action: "browse_programs", repeat: true });
-    }
     const renderPage = (offset = 0) => {
       row.replaceChildren();
       const pageSize = offset === 0 ? GUIDED_VISIBLE_ACTIONS : 2;
@@ -797,16 +1230,25 @@
           renderPage(offset <= GUIDED_VISIBLE_ACTIONS ? 0 : offset - 2);
         }));
       }
-      available.slice(offset, offset + pageSize).forEach((action) => {
-        const className = action.action === "lead"
+      const visible = available.slice(offset, offset + pageSize);
+      visible.forEach((action) => {
+        const guideAction = guideActionFor(action) || action.action;
+        const className = guideAction === "lead"
           ? "db-widget__action db-widget__action--lead"
           : "db-widget__action";
         row.appendChild(createButton(action.label, className, () => {
           row.remove();
-          if (typeof action.onSelect === "function") action.onSelect();
-          else executeGuidedAction(action.action, action.label, action.options || {});
+          if (typeof action.onSelect === "function") {
+            recordChipTap(action);
+            action.onSelect();
+          } else if (action.chip_id || action.chip_handler || action.guide) {
+            handleAction(action);
+          } else {
+            executeGuidedAction(action.action, action.label, action.options || {});
+          }
         }));
       });
+      emitChipShown(visible);
       if (offset + pageSize < available.length) {
         row.appendChild(createButton("More", "db-widget__more-toggle", () => {
           renderPage(offset + pageSize);
@@ -960,41 +1402,45 @@
     return { card, title };
   }
 
-  function guidedFollowUps(kind) {
-    const banks = {
-      fees: [["Check Eligibility", "eligibility"], ["Compare Options", "compare"], ["Apply Now", "lead"]],
-      eligibility: [["View Fees", "fees"], ["Compare Options", "compare"], ["Apply Now", "lead"]],
-      career: [["View Curriculum", "syllabus"], ["View Fees", "fees"], ["Talk to a Counsellor", "lead"]],
-      syllabus: [["Career & Salary", "career"], ["View Fees", "fees"], ["Apply Now", "lead"]],
-      reviews: [["Programs Offered Here", "programs_here"], ["Compare With Others", "compare"], ["Talk to a Counsellor", "lead"]],
-      accreditations: [["Programs Offered Here", "programs_here"], ["Compare With Others", "compare"], ["Apply Now", "lead"]],
-      comparison: [["Check Eligibility", "eligibility"], ["View Fees", "fees"], ["Apply Now", "lead"]],
-      specialization: [["View Fees", "fees"], ["Check Eligibility", "eligibility"], ["Apply Now", "lead"]],
-    };
-    return (banks[kind] || []).map(([label, action]) => ({ label, action }));
-  }
-
   async function ensureGuideBundle() {
     if (state.guideReady) await state.guideReady;
     if (!state.guideBundle) throw new Error("Guided context is unavailable");
     return state.guideBundle;
   }
 
-  async function showGuidedInfo(kind) {
+  async function showGuidedInfo(kind, chip = null) {
     const bundle = await ensureGuideBundle();
     if (!bundle.entity) {
-      renderGuidePrompt(
-        `First, choose a program so I can show the right ${kind === "fees" ? "fees and EMI" : kind}.`,
-        [{ label: "Browse Programs", action: "browse_programs", repeat: true }],
-      );
+      state.pendingGuidedInfo = { kind, chip };
+      transitionNavigation("course_picker");
+      await showProgramOptions();
       return;
     }
+    transitionNavigation(kind);
     const result = guidedInfoCard(kind);
+    const answerStates = {
+      fees: "fees",
+      eligibility: "eligibility_borderline",
+      career: "careers",
+      syllabus: "syllabus",
+      reviews: "reviews",
+      accreditations: "approvals",
+    };
+    const followups = await loadFollowupChips({
+      answerState: answerStates[kind] || kind,
+      completedChipId: chip && chip.chip_id,
+    });
+    emitAnalytics("card_shown", null, {
+      entity: {
+        type: kind,
+        id: String(bundle.entity.id || bundle.context && bundle.context.entity_id || kind),
+      },
+    });
     presentGuidedCard(
       `Here's the confirmed ${result.title.toLowerCase()} information for ${currentGuideLabel()}.`,
       result.card,
       result.title,
-      guidedFollowUps(kind),
+      followups,
     );
   }
 
@@ -1032,20 +1478,17 @@
       onSelect: () => selectGuidedEntity(program, program.category ? String(program.category).toUpperCase() : program.name),
     }));
     if (!actions.length) {
-      actions.push(
-        { label: "Browse Programs", action: "browse_programs", repeat: true },
-        { label: "Talk to a Counsellor", action: "lead" },
-      );
+      actions.push(...safeFallbackActions());
     }
     renderGuidePrompt(
       programs.length
         ? `${name} offers ${count} online program${Number(count) === 1 ? "" : "s"}. Which one interests you?`
-        : `Programs haven't been published for ${name} yet. Would you like to browse other programs?`,
+        : `Programs haven't been published for ${name} yet. I can help you apply or connect with a counsellor.`,
       actions,
     );
   }
 
-  async function showCourseSpecializations() {
+  async function showCourseSpecializations(chip = null) {
     const bundle = await ensureGuideBundle();
     const entity = bundle.entity || {};
     const specializations = Array.isArray(bundle.related && bundle.related.specializations)
@@ -1061,20 +1504,22 @@
       label: specialization.name,
       onSelect: () => selectGuidedEntity(specialization, specialization.name),
     }));
+    transitionNavigation("specialization_picker");
     if (!actions.length) {
-      actions.push(
-        { label: "Fees & EMI", action: "fees" },
-        { label: "Eligibility", action: "eligibility" },
-        { label: "Talk to a Counsellor", action: "lead" },
-        { label: "Browse Programs", action: "browse_programs", repeat: true },
+      const followups = await loadFollowupChips({
+        answerState: "no_specializations",
+        completedChipId: chip && chip.chip_id,
+      });
+      renderGuidePrompt(
+        "Specializations haven't been published for this course yet. You can continue with fees, eligibility, admissions, or careers.",
+        followups,
       );
+      return;
     }
     renderGuidePrompt(
-      specializations.length
-        ? pageTypeValue === "specialization"
-          ? `${currentGuideLabel()} has ${count} other specialization${Number(count) === 1 ? "" : "s"}. Which one interests you?`
-          : `${currentGuideLabel()} offers ${count} specialization${Number(count) === 1 ? "" : "s"}. Which area interests you?`
-        : "Specializations haven't been published for this course yet. Would you like to see fees or eligibility instead?",
+      pageTypeValue === "specialization"
+        ? `${currentGuideLabel()} has ${count} other specialization${Number(count) === 1 ? "" : "s"}. Which one interests you?`
+        : `${currentGuideLabel()} offers ${count} specialization${Number(count) === 1 ? "" : "s"}. Which area interests you?`,
       actions,
     );
   }
@@ -1085,6 +1530,14 @@
     deactivateGuidedActions();
     if (state.starter) state.starter.hidden = true;
     createMessage("user", selectionLabel || entity.name || "View option");
+    emitAnalytics("cascade_step", null, {
+      entity: {
+        type: entity.kind || entity.page_type || (
+          entity.type === "university_card" ? "university" : "course"
+        ),
+        id: String(entity.id || entity.slug || "unknown"),
+      },
+    });
     await runGuidedResponse(async () => {
       const bundle = await loadGuideContext(entity.id || entity.slug);
       if (!bundle) return;
@@ -1093,20 +1546,37 @@
       state.starterType = resolvedType;
       state.pageContextDismissed = false;
       if (resolvedType === "university") {
+        transitionNavigation("university_card");
         await showUniversityPrograms();
         return;
       }
       if (resolvedType === "course") {
-        await showCourseSpecializations();
+        transitionNavigation("course_card");
+        if (state.pendingGuidedInfo) {
+          const pending = state.pendingGuidedInfo;
+          state.pendingGuidedInfo = null;
+          await showGuidedInfo(pending.kind, pending.chip);
+          return;
+        }
+        const course = { ...bundle.entity, guided: true };
+        const followups = await loadFollowupChips({ cardType: "course" });
+        presentGuidedCard(
+          `Here's the confirmed course information for ${currentGuideLabel()}.`,
+          renderProgramCard(course),
+          bundle.context.course || bundle.entity.name,
+          followups,
+        );
         return;
       }
+      transitionNavigation("specialization_card");
       const specialization = { ...bundle.entity, guided: true };
+      const followups = await loadFollowupChips({ cardType: "specialization" });
       const card = renderProgramCard(specialization);
       presentGuidedCard(
         `Here's the strongest match for ${bundle.context.specialization || bundle.entity.name}.`,
         card,
         bundle.context.specialization || bundle.entity.name,
-        guidedFollowUps("specialization"),
+        followups,
       );
     });
   }
@@ -1124,7 +1594,7 @@
       console.warn("DegreeBaba guided navigation unavailable", error);
       renderGuidePrompt(
         "I couldn't load that right now. You can try another option or ask a counsellor for help.",
-        [{ label: "Talk to a Counsellor", action: "lead", repeat: true }],
+        safeFallbackActions(),
       );
       return undefined;
     } finally {
@@ -1135,41 +1605,63 @@
 
   function executeGuidedAction(action, label, options = {}) {
     if (!action || state.guideBusy || state.busy) return;
-    state.viewedActions.add(action);
+    const chip = options.chip || null;
+    state.conversationStarted = true;
+    state.viewedActions.add(chip && chip.chip_id || action);
     deactivateGuidedActions();
     if (state.starter) state.starter.hidden = true;
     createMessage("user", label || action);
     if (action === "lead") {
-      openLeadPanel({ source: options.source || "guided_widget", label });
+      transitionNavigation("lead");
+      state.pendingLeadPersistence = chip && chip.chip_id
+        ? persistCompletedChip(chip)
+        : null;
+      openLeadPanel({
+        source: options.source || "guided_widget",
+        label,
+        chip,
+        analyticsRecorded: Boolean(chip && chip.chip_id),
+      });
       return;
     }
     runGuidedResponse(async () => {
       if (action === "browse_universities") {
+        transitionNavigation("university_picker");
         await openPicker("university", { onSelect: selectGuidedEntity });
       } else if (action === "browse_programs") {
+        transitionNavigation("course_picker");
         await showProgramOptions();
       } else if (action === "finder") {
         startFinder();
       } else if (action === "programs_here") {
+        transitionNavigation("course_picker");
         if (currentGuideEntity()) await showUniversityPrograms();
         else await showProgramOptions();
       } else if (action === "specializations" || action === "other_specializations") {
-        if (currentGuideEntity()) await showCourseSpecializations();
+        transitionNavigation("specialization_picker");
+        if (currentGuideEntity()) await showCourseSpecializations(chip);
         else await openPicker("specialization", { onSelect: selectGuidedEntity });
       } else if (["fees", "eligibility", "career", "syllabus", "reviews", "accreditations"].includes(action)) {
-        await showGuidedInfo(action);
+        await showGuidedInfo(action, chip);
       } else if (action === "compare") {
-        await beginGuidedComparison();
+        await beginGuidedComparison(null, chip);
       } else if (action === "online_validity") {
+        transitionNavigation("validity");
+        const followups = await loadFollowupChips({
+          answerState: "validity",
+          completedChipId: chip && chip.chip_id,
+        });
+        emitAnalytics("card_shown", null, {
+          entity: {
+            type: "validity",
+            id: String(currentGuideContext() && currentGuideContext().entity_id || "validity"),
+          },
+        });
         presentGuidedCard(
           "An online degree can be valid when the university and exact program have the right recognition.",
           validityCard(),
           "Online degree validity",
-          [
-            { label: "Browse Universities", action: "browse_universities", repeat: true },
-            { label: "Compare", action: "compare" },
-            { label: "Talk to a Counsellor", action: "lead" },
-          ],
+          followups,
         );
       }
     });
@@ -1243,10 +1735,20 @@
     const message = String(rawMessage || "").trim();
     if (!message || state.busy || state.guideBusy) return;
     state.busy = true;
+    state.conversationStarted = true;
+    state.pendingGuidedInfo = null;
+    try {
+      if (state.guideReady) await state.guideReady;
+    } catch (error) {
+      console.warn("DegreeBaba initial guide hydration did not complete", error);
+    }
+    const hadActiveFlow = Boolean(state.activeFlow);
     state.lastMessage = message;
     state.input.value = "";
     if (state.starter && options.keepStarter !== true) state.starter.hidden = true;
-    if (options.displayUser !== false) createMessage("user", message);
+    if (options.displayUser !== false) {
+      createMessage("user", String(options.displayText || message));
+    }
     showTyping(true);
     let finalPayload = null;
     let bufferedText = "";
@@ -1255,6 +1757,18 @@
 
     try {
       const body = { message, site_key: siteKey };
+      if (options.chip && options.chip.chip_id) {
+        body.chip_id = String(options.chip.chip_id);
+        body.chip_surface = String(
+          options.chip.surface || state.currentChipSurface || "",
+        ) || null;
+        body.chip_config_version = String(
+          options.chip.config_version || state.configVersion || "",
+        ) || null;
+        body.chip_correlation_id = String(
+          options.chip.correlation_id || state.correlationId || "",
+        ) || null;
+      }
       if (state.sessionId) body.session_id = state.sessionId;
       if (!state.pageContextDismissed) {
         const guideContext = currentGuideContext();
@@ -1263,7 +1777,13 @@
         if (guidedType && guidedType !== "homepage") {
           body.page_type = guidedType;
           body.page_entity_slug = guideEntity && (guideEntity.slug || guideEntity.id) || guideContext.entity_id;
-          const guidedUniversitySlug = guideEntity && guideEntity.university_slug || pageUniversitySlug;
+          const linkedUniversity = guideEntity && guideEntity.linked_university;
+          const guidedUniversitySlug =
+            guideContext.university_slug ||
+            guideEntity && guideEntity.university_slug ||
+            linkedUniversity && typeof linkedUniversity === "object" && (linkedUniversity.slug || linkedUniversity.id) ||
+            typeof linkedUniversity === "string" && linkedUniversity ||
+            "";
           if (guidedUniversitySlug) body.page_university_slug = guidedUniversitySlug;
         } else {
           if (pageUniversitySlug) body.page_university_slug = pageUniversitySlug;
@@ -1288,7 +1808,9 @@
         if (["response", "final", "replace"].includes(event)) finalPayload = payload;
       });
       showTyping(false);
-      renderBotPayload(finalPayload || { message: bufferedText });
+      const payload = finalPayload || { message: bufferedText };
+      if (hadActiveFlow && !activeFlowMetadata(payload)) applyActiveFlow(null);
+      renderBotPayload(payload);
     } catch (error) {
       showTyping(false);
       const timeoutMessage = error && error.name === "AbortError"
@@ -1345,8 +1867,11 @@
     const query = new URLSearchParams();
     if (entityReference) query.set("entity_id", entityReference);
     else query.set("page_type", cleanPageType(logicalType));
+    if (state.sessionId) query.set("session_id", state.sessionId);
     const payload = await fetchJson(`/api/widget/guide/context?${query.toString()}`);
     if (generation !== state.guideGeneration) return null;
+    applyServerNavigation(payload);
+    state.openingChips = openingFromPayload(payload);
     state.guideBundle = {
       context: payload.context || null,
       entity: payload.entity || null,
@@ -1357,6 +1882,31 @@
     state.starterType = cleanPageType(payload.context && payload.context.page_type || logicalType);
     updateContext(payload.context);
     updateWelcome(state.guideBundle);
+    const activeFlow = payload.active_flow && typeof payload.active_flow === "object"
+      ? payload.active_flow
+      : null;
+    const resumeResponse = activeFlow && activeFlow.response && typeof activeFlow.response === "object"
+      ? activeFlow.response
+      : null;
+    const resumeKey = activeFlow
+      ? `${String(activeFlow.tool || "")}:${String(activeFlow.step || "")}`
+      : "";
+    const shouldResume = Boolean(
+      resumeResponse && resumeKey && resumeKey !== state.activeFlowResumeKey,
+    );
+    if (activeFlow) {
+      state.conversationStarted = true;
+      applyActiveFlow(activeFlow);
+    } else {
+      state.activeFlowResumeKey = "";
+      applyActiveFlow(null);
+    }
+    state.starter.hidden = state.conversationStarted;
+    renderStarterBank(state.starterType);
+    if (shouldResume) {
+      state.activeFlowResumeKey = resumeKey;
+      renderBotPayload(resumeResponse);
+    }
     return state.guideBundle;
   }
 
@@ -1378,47 +1928,68 @@
       info: {},
     };
     state.guideReady = Promise.resolve(state.guideBundle);
+    state.openingChips = null;
+    state.pendingGuidedInfo = null;
+    state.pendingCompletedChipId = null;
+    state.pendingLeadPersistence = null;
     state.pageContext = null;
     state.viewedActions.clear();
+    state.currentChipSurface = "page:home";
+    state.currentFunnelStage = "top";
+    transitionNavigation("reset");
     updateContext(null);
     updateWelcome(state.guideBundle);
-    renderStarterBank("homepage");
     state.starter.hidden = true;
+    state.starterGrid.replaceChildren();
+    state.starterVisibleActions = [];
     state.starterType = "homepage";
-    renderGuidePrompt("Context cleared. What would you like to explore next?", OPENING_ACTIONS.homepage);
-    if (!state.sessionId) return;
+    if (state.sessionId) {
+      try {
+        const payload = await fetchJson("/api/widget/context/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: state.sessionId }),
+        });
+        if (
+          clearGeneration === state.guideGeneration &&
+          state.pageContextDismissed &&
+          payload &&
+          Object.prototype.hasOwnProperty.call(payload, "context")
+        ) updateContext(payload.context);
+      } catch (error) {
+        // A fresh backend session guarantees the dismissed focus cannot leak into
+        // the next answer when the optional clear endpoint is unavailable.
+        forgetSessionId();
+        console.warn("DegreeBaba context endpoint unavailable; starting a neutral session", error);
+      }
+    }
     try {
-      const payload = await fetchJson("/api/widget/context/clear", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: state.sessionId }),
-      });
-      if (
-        clearGeneration === state.guideGeneration &&
-        state.pageContextDismissed &&
-        payload &&
-        Object.prototype.hasOwnProperty.call(payload, "context")
-      ) updateContext(payload.context);
+      state.guideReady = loadGuideContext("", "homepage");
+      await state.guideReady;
+      const opening = state.openingChips;
+      const actions = opening ? [...opening.top, ...opening.more] : safeFallbackActions();
+      renderGuidePrompt("Context cleared. What would you like to explore next?", actions);
     } catch (error) {
-      // A fresh backend session guarantees the dismissed focus cannot leak into
-      // the next answer when the optional clear endpoint is unavailable.
-      forgetSessionId();
-      console.warn("DegreeBaba context endpoint unavailable; starting a neutral session", error);
+      renderGuidePrompt(
+        "Context cleared. I can still help you apply or speak with a counsellor.",
+        safeFallbackActions(),
+      );
     }
   }
 
   function renderStarterBank(type) {
-    const selected = (OPENING_ACTIONS[type] || OPENING_ACTIONS.homepage).filter(
-      (action) => !action.guide || !state.viewedActions.has(action.guide),
+    const opening = state.openingChips;
+    const top = opening && Array.isArray(opening.top) && opening.top.length
+      ? opening.top
+      : safeFallbackActions();
+    const more = opening && Array.isArray(opening.more) ? opening.more : [];
+    const primary = top.filter(
+      (action) => !state.viewedActions.has(action.chip_id || action.guide || action.action),
     );
-    const primaryLimit = 3;
-    const primary = selected.slice(0, primaryLimit);
-    const overflow = type === "homepage"
-      ? [...selected.slice(primaryLimit), ...MORE_ACTIONS]
-      : selected.slice(primaryLimit);
-    const secondary = overflow.filter(
-      (action) => !action.guide || !state.viewedActions.has(action.guide),
+    const secondary = more.filter(
+      (action) => !state.viewedActions.has(action.chip_id || action.guide || action.action),
     );
+    state.starterVisibleActions = primary;
 
     state.starterGrid.replaceChildren();
 
@@ -1432,6 +2003,7 @@
     });
     scrollContainer.appendChild(primaryGrid);
     state.starterGrid.appendChild(scrollContainer);
+    emitStarterImpressions();
 
     if (secondary.length) {
       const secondaryGrid = element("div", "db-widget__starter-grid");
@@ -1453,11 +2025,26 @@
           toggle.textContent = isHidden ? "Less" : "More";
           toggle.setAttribute("aria-expanded", String(isHidden));
           toggle.classList.toggle("db-widget__more-toggle--less", !isHidden);
+          if (isHidden && state.open && !state.starter.hidden) emitChipShown(secondary);
         }
       );
       toggle.setAttribute("aria-expanded", "false");
       state.starterGrid.appendChild(toggle);
     }
+  }
+
+  function emitStarterImpressions() {
+    if (!state.open || !state.starter || state.starter.hidden) return;
+    const actions = state.starterVisibleActions || [];
+    const key = [
+      state.currentChipSurface,
+      state.configVersion,
+      state.correlationId,
+      ...actions.map((action) => action.chip_id || action.label),
+    ].join("|");
+    if (!actions.length || key === state.starterImpressionKey) return;
+    state.starterImpressionKey = key;
+    emitChipShown(actions);
   }
 
   async function showProgramOptions() {
@@ -1478,6 +2065,10 @@
     if (!program || state.guideBusy || state.busy) return;
     deactivateGuidedActions();
     createMessage("user", program.name);
+    transitionNavigation("course_picker");
+    emitAnalytics("cascade_step", null, {
+      entity: { type: "course", id: String(program.id || program.slug || program.name) },
+    });
     runGuidedResponse(async () => {
       renderGuidePrompt(`Which university would you like to explore for ${program.name}?`);
       await openPicker("course", {
@@ -1655,6 +2246,11 @@
       specializations: "specializations",
     };
     const label = labels[kind] || kind;
+    if (["university", "universities"].includes(kind)) transitionNavigation("university_picker");
+    if (["course", "courses"].includes(kind)) transitionNavigation("course_picker");
+    if (["specialization", "specializations"].includes(kind)) {
+      transitionNavigation("specialization_picker");
+    }
     const title = options.title || `Browse ${label}`;
     const body = openOverlay(title, "db-widget__picker-overlay");
     const sheet = element("section", "db-widget__picker db-widget__picker-sheet");
@@ -1729,6 +2325,7 @@
   }
 
   function startFinder() {
+    state.conversationStarted = true;
     if (state.starter) state.starter.hidden = true;
     const prefilled = !state.pageContextDismissed && ["course", "specialization"].includes(pageType)
       ? inferProgramFromPage()
@@ -1984,7 +2581,9 @@
     });
   }
 
-  function beginGuidedComparison(startingComponent = null) {
+  function beginGuidedComparison(startingComponent = null, chip = null) {
+    transitionNavigation("comparison");
+    state.pendingCompletedChipId = chip && chip.chip_id || null;
     const launch = () => {
       state.compareSelections = [];
       const starting = startingComponent || currentGuideEntity();
@@ -2044,17 +2643,28 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entity_ids: ids }),
       });
+      const followups = await loadFollowupChips({
+        answerState: "comparison",
+        completedChipId: state.pendingCompletedChipId,
+      });
+      state.pendingCompletedChipId = null;
       presentGuidedCard(
         "Here's a side-by-side comparison using the published details.",
         renderComparisonCard(component),
         component.title || "Comparison",
-        guidedFollowUps("comparison"),
+        followups,
       );
     });
   }
 
   function openLeadPanel(options = {}) {
     const isApplication = /apply/i.test(String(options.label || ""));
+    const requiresName = options.requireName === true || state.toolLeadRequiresName;
+    const actionMeta = normalizedAction(options.chip || options.component) || {};
+    transitionNavigation("lead");
+    if (!options.analyticsRecorded) {
+      emitAnalytics(isApplication ? "apply_clicked" : "counsellor_clicked", null);
+    }
     const body = openOverlay(
       isApplication ? "Start your application" : "Talk to a counsellor",
       "db-widget__detail-overlay db-widget__lead-overlay",
@@ -2075,6 +2685,13 @@
       "Share your phone number and a DegreeBaba counsellor can help with fees, eligibility, and next steps.",
     ));
     const form = element("form", "db-widget__lead-form");
+    const name = document.createElement("input");
+    name.className = "db-widget__picker-search db-widget__lead-input";
+    name.type = "text";
+    name.autocomplete = "name";
+    name.maxLength = 50;
+    name.placeholder = "Your name";
+    name.setAttribute("aria-label", name.placeholder);
     const phone = document.createElement("input");
     phone.className = "db-widget__picker-search db-widget__lead-input";
     phone.type = "tel";
@@ -2089,9 +2706,17 @@
       isApplication ? "Continue with a counsellor" : "Request a callback",
     );
     submit.type = "submit";
+    if (requiresName) form.appendChild(name);
     form.append(phone, submit, status);
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+      const normalizedName = name.value.trim().replace(/\s+/g, " ");
+      if (requiresName && normalizedName.length < 2) {
+        status.textContent = "Please enter your name to reveal the full result.";
+        name.setAttribute("aria-invalid", "true");
+        return;
+      }
+      name.removeAttribute("aria-invalid");
       const normalized = phone.value.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
       if (!/^[6-9]\d{9}$/.test(normalized)) {
         status.textContent = "Please enter a valid 10-digit mobile number.";
@@ -2102,10 +2727,26 @@
       submit.disabled = true;
       status.textContent = "Saving your request…";
       try {
+        const persistence = state.pendingLeadPersistence;
+        state.pendingLeadPersistence = null;
+        const chipPersisted = persistence ? await persistence : false;
+        const leadBody = {
+          session_id: state.sessionId || null,
+          phone: normalized,
+          source: options.source || "widget",
+        };
+        if (requiresName) leadBody.name = normalizedName;
+        if (actionMeta.chip_id && !chipPersisted) leadBody.chip_id = actionMeta.chip_id;
+        const chipSurface = actionMeta.surface || state.currentChipSurface;
+        const chipConfigVersion = actionMeta.config_version || state.configVersion;
+        const chipCorrelationId = actionMeta.correlation_id || state.correlationId;
+        if (chipSurface) leadBody.chip_surface = chipSurface;
+        if (chipConfigVersion) leadBody.chip_config_version = chipConfigVersion;
+        if (chipCorrelationId) leadBody.chip_correlation_id = chipCorrelationId;
         const response = await fetchJson("/api/widget/lead", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ session_id: state.sessionId || null, phone: normalized, source: options.source || "widget" }),
+          body: JSON.stringify(leadBody),
         });
         if (response.session_id) {
           state.sessionId = response.session_id;
@@ -2116,6 +2757,13 @@
           "db-widget__state-copy",
           response.message || "Thanks — a DegreeBaba counsellor can contact you shortly.",
         ));
+        if (response.response && typeof response.response === "object") {
+          closeOverlay();
+          renderBotPayload({
+            message: response.message || "Thanks — your details are saved.",
+          });
+          renderBotPayload(response.response);
+        }
       } catch (error) {
         console.warn("DegreeBaba phone-only lead endpoint unavailable; using chat funnel", error);
         closeOverlay();
@@ -2125,7 +2773,7 @@
     content.append(intro, form);
     panel.appendChild(content);
     body.appendChild(panel);
-    window.setTimeout(() => phone.focus(), 0);
+    window.setTimeout(() => (requiresName ? name : phone).focus(), 0);
   }
 
   async function hydratePageContext() {
@@ -2162,7 +2810,10 @@
     state.launcher.setAttribute("aria-expanded", String(state.open));
     state.launcher.setAttribute("aria-label", state.open ? "Close admission advisor" : "Open admission advisor");
     state.launcher.classList.toggle("db-widget__launcher--open", state.open);
-    if (state.open) state.input.blur();
+    if (state.open) {
+      state.input.blur();
+      emitStarterImpressions();
+    }
     else closeOverlay();
   }
 
@@ -2247,7 +2898,7 @@
     messages.appendChild(starter);
     state.starter = starter;
     state.starterGrid = starterGrid;
-    renderStarterBank(pageType);
+    starter.hidden = true;
 
     const typing = element("div", "db-widget__typing");
     typing.hidden = true;

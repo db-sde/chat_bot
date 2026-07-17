@@ -19,20 +19,35 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Stre
 
 import logging_setup
 from advisor.flow import advisor_can_consume, handle_advisor_turn
+from analytics import (
+    FLOW_ABANDONED,
+    LEAD_CAPTURED,
+    SESSION_START,
+    TOOL_COMPLETED,
+    TOOL_LEAD_GATE,
+    TOOL_PARTIAL_REVEAL,
+    TOOL_STARTED,
+    TOOL_STEP,
+    AnalyticsEmitter,
+    build_chip_shown,
+    build_event,
+)
 from config import Settings, get_settings
 from data.accessor import safe_get, validate_focus
 from data.loader import SAMPLE_CATALOG_PATH, CatalogStore
+from funnel import ChipEngine, ChipMapStore, JourneyEngine
 from leads.funnel import LeadFunnel
 from leads.webhook import CRMWebhook
 from llm.client import LLMClient, LLMUnavailable
 from llm.prompts import grounded_answer_prompt
-from nlu.action_classifier import Action, has_deferred_clarification
+from nlu.action_classifier import Action, has_deferred_clarification, tool_id_from_message
 from nlu.action_classifier import classify as classify_action
 from nlu.action_classifier import mention_summary as summarize_mentions
 from nlu.callback_detector import is_callback_request
 from nlu.intent import Intent, decide_action, heuristic_intent, should_use_reasoning_llm
 from nlu.mention_extractor import extract_mentions
 from presentation import enrich_response
+from presentation.chips import followup_payload, opening_payload
 from presentation.experience import (
     catalog_options,
     context_from_entity,
@@ -53,6 +68,7 @@ from response.templates import entity_not_found_answer, topic_from_message
 from routing.fallback_handler import handle_fallback
 from routing.knowledge_handler import handle_knowledge, knowledge_topic
 from routing.router import Router, action_from_intent, select_route
+from routing.tools import EscapeSignals, ToolEngine, ToolResult, ToolsContentStore
 from routing.unsupported_handler import handle_unsupported_entity
 from routing.validation_handler import handle_invalid_combination
 from schemas import (
@@ -62,15 +78,24 @@ from schemas import (
     ContextClearResponse,
     FinderRequest,
     FinderResponse,
+    GuidedChipRequest,
     HealthResponse,
     PageContextResponse,
     ReindexResponse,
     ResponseContext,
     ResponsePayload,
+    WidgetAnalyticsRequest,
     WidgetLeadRequest,
     WidgetLeadResponse,
 )
-from session.state import ConversationState, hydrate_focus_concepts
+from session.navigation import (
+    PAGE_STEPS,
+    advance_answer_navigation,
+    advance_navigation,
+    navigation_payload,
+    sync_page_navigation,
+)
+from session.state import ConversationState, NavigationStep, hydrate_focus_concepts
 from session.store import SessionStore
 from taxonomy.entity_matcher import EntityMatcher, configure_matcher
 from taxonomy.index_builder import TaxonomyIndexes, build_indexes
@@ -240,9 +265,7 @@ def _presentation_operand_ids(*groups: Any) -> tuple[str, ...]:
             elif isinstance(item, dict):
                 entity_id = str(item.get("entity_id") or item.get("id") or "")
             else:
-                entity_id = str(
-                    getattr(item, "entity_id", None) or getattr(item, "id", None) or ""
-                )
+                entity_id = str(getattr(item, "entity_id", None) or getattr(item, "id", None) or "")
             if entity_id and entity_id not in values:
                 values.append(entity_id)
         if len(values) >= 2:
@@ -272,6 +295,9 @@ class ChatbotService:
         session_store: SessionStore,
         llm: LLMClient,
         lead_funnel: LeadFunnel,
+        chip_map: ChipMapStore | None = None,
+        analytics: AnalyticsEmitter | None = None,
+        tools: ToolEngine | None = None,
         intent_metrics: IntentMetrics = process_intent_metrics,
     ) -> None:
         self.settings = settings
@@ -281,6 +307,16 @@ class ChatbotService:
         self.session_store = session_store
         self.llm = llm
         self.lead_funnel = lead_funnel
+        self.chip_map = chip_map or ChipMapStore(settings.chip_map_path)
+        self.journey_engine = JourneyEngine(self.chip_map)
+        self.chip_engine = ChipEngine(self.chip_map)
+        self.analytics = analytics or AnalyticsEmitter(settings)
+        self.tools = tools or ToolEngine(
+            ToolsContentStore(settings.tools_content_path),
+            catalog=catalog,
+            entity_resolver=self._resolve_tool_entity,
+            program_lookup=self._lookup_tool_programs,
+        )
         self.intent_metrics = intent_metrics
         # Handler output stays deterministic here. Broad factual overviews are streamed by
         # the transport from the same grounded fields instead of being buffered in a handler.
@@ -305,6 +341,8 @@ class ChatbotService:
         state_store = session_store or SessionStore(settings=config)
         llm_client = llm or LLMClient(config)
         funnel = LeadFunnel(CRMWebhook(config), config)
+        chip_map = ChipMapStore(config.chip_map_path)
+        analytics = AnalyticsEmitter(config)
         return cls(
             settings=config,
             catalog=loaded_catalog,
@@ -312,11 +350,14 @@ class ChatbotService:
             session_store=state_store,
             llm=llm_client,
             lead_funnel=funnel,
+            chip_map=chip_map,
+            analytics=analytics,
             intent_metrics=intent_metrics or process_intent_metrics,
         )
 
     async def close(self) -> None:
         await self.lead_funnel.close()
+        await self.analytics.close()
         await self.session_store.close()
         close_llm = getattr(self.llm, "close", None)
         if callable(close_llm):
@@ -345,8 +386,247 @@ class ChatbotService:
             self.indexes = indexes
             self.matcher = matcher
             self.router = router
+            self.tools.catalog = refreshed
             configure_matcher(indexes, refreshed)
             return len(refreshed)
+
+    def _resolve_tool_entity(self, value: str) -> str | None:
+        entity = resolve_page_entity(self.catalog, value, "course")
+        if entity is not None:
+            return str(safe_get(entity, "id", "") or "") or None
+
+        mentions = extract_mentions(value, self.matcher)
+        course_ids = {
+            str(candidate.entity_id)
+            for candidate in mentions.courses
+            if getattr(candidate, "confidence", None) == "HIGH"
+        }
+        university_ids = {
+            str(candidate.entity_id)
+            for candidate in mentions.universities
+            if getattr(candidate, "confidence", None) == "HIGH"
+        }
+        category_concepts = {
+            str(safe_get(self.indexes.entity_metadata.get(entity_id, {}), "category", ""))
+            for entity_id in course_ids
+        }
+        category_concepts.discard("")
+        if university_ids and category_concepts:
+            course_ids = {
+                str(entity_id)
+                for entity_id, metadata in self.indexes.entity_metadata.items()
+                if safe_get(metadata, "page_type") == "course"
+                and str(safe_get(metadata, "university_id", "")) in university_ids
+                and str(safe_get(metadata, "category", "")) in category_concepts
+            }
+        if university_ids:
+            course_ids = {
+                entity_id
+                for entity_id in course_ids
+                if str(safe_get(
+                    self.indexes.entity_metadata.get(entity_id, {}),
+                    "university_id",
+                    "",
+                ))
+                in university_ids
+            }
+        return next(iter(course_ids)) if len(course_ids) == 1 else None
+
+    def _lookup_tool_programs(self, discipline: str) -> list[str]:
+        """Resolve configured discipline keys only against published catalog fields."""
+
+        key = re.sub(r"[^a-z0-9]+", " ", discipline.casefold()).strip()
+        if not key:
+            return []
+        matches: list[str] = []
+        for entity_id, entity in self.catalog.entities.items():
+            page_type = str(safe_get(entity, "_meta.page_type", "") or "")
+            if page_type not in {"course", "specialization"}:
+                continue
+            fields = (
+                safe_get(entity, "discipline"),
+                safe_get(entity, "category"),
+                safe_get(entity, "program_name"),
+            )
+            normalized = {
+                re.sub(r"[^a-z0-9]+", " ", str(field or "").casefold()).strip() for field in fields
+            }
+            if key in normalized:
+                matches.append(str(entity_id))
+        return matches[:3]
+
+    def emit_funnel_event(
+        self,
+        event: str,
+        state: ConversationState,
+        *,
+        surface: str | None = None,
+        funnel_stage: str = "bottom",
+        content_version: str = "not_applicable",
+        attributes: dict[str, Any] | None = None,
+    ) -> bool:
+        """Build and queue one complete event without affecting the request path."""
+
+        try:
+            payload = build_event(
+                event,
+                session_id=state.session_id,
+                correlation_id=logging_setup.correlation_id(
+                    state.session_id,
+                    max(state.turn_count, state.navigation.interaction_count, 1),
+                ),
+                surface=surface or state.navigation.surface or "page:home",
+                funnel_stage=funnel_stage,
+                interaction_count=state.navigation.interaction_count,
+                entity={
+                    "type": state.navigation.page_type or None,
+                    "id": state.navigation.entity_id or state.focus.entity_id,
+                },
+                config_version=(
+                    state.navigation.config_version or self.chip_map.snapshot().version
+                ),
+                content_version=content_version,
+                attributes=attributes,
+            )
+        except Exception as exc:
+            LOGGER.warning("Unable to build analytics event %s: %s", event, exc)
+            return False
+        return self.analytics.emit(payload)
+
+    def record_chip_action(
+        self,
+        state: ConversationState,
+        *,
+        chip_id: str | None,
+        surface: str | None,
+        config_version: str | None,
+    ) -> bool:
+        """Accept only a chip that was rendered on the persisted surface/version."""
+
+        if not chip_id:
+            return False
+        rendered_version = (
+            config_version
+            or state.navigation.config_version
+            or self.chip_map.snapshot().version  # type: ignore[union-attr]
+        )
+        config = self.chip_map.snapshot(version=rendered_version)
+        if config is None:
+            LOGGER.warning(
+                "Rejected chip action %s: config version %s is no longer retained",
+                chip_id,
+                rendered_version,
+            )
+            return False
+        definition = config.chips.get(chip_id)
+        if definition is None:
+            LOGGER.warning("Rejected unknown chip action %s", chip_id)
+            return False
+        action_surface = str(surface or state.navigation.surface or "")
+        declared_surface = config.surfaces.get(action_surface)
+        declared_ids = (
+            set((*declared_surface.top, *declared_surface.more, *declared_surface.follow))
+            if declared_surface is not None
+            else set()
+        )
+        is_conversion = chip_id in config.progression.conversion_chips
+        if not is_conversion and (
+            action_surface != state.navigation.surface or chip_id not in declared_ids
+        ):
+            LOGGER.warning(
+                "Rejected chip action %s from stale or invalid surface %s (expected %s)",
+                chip_id,
+                action_surface,
+                state.navigation.surface,
+            )
+            return False
+        state.navigation.config_version = config.version
+        advance_navigation(
+            state,
+            chip_id=chip_id,
+            surface=action_surface or state.navigation.surface,
+        )
+        return True
+
+    def maybe_emit_lead_captured(
+        self,
+        state: ConversationState,
+        *,
+        lead_tags: dict[str, Any] | None = None,
+        source: str | None = None,
+    ) -> bool:
+        """Emit the north-star conversion once, only after name and phone exist."""
+
+        if (
+            state.lead.conversion_recorded
+            or not state.lead.name
+            or not state.lead.phone
+        ):
+            return False
+        attributes: dict[str, Any] = {}
+        if lead_tags:
+            attributes["lead_tags"] = dict(lead_tags)
+        if source:
+            attributes["source"] = source
+        emitted = self.emit_funnel_event(
+            LEAD_CAPTURED,
+            state,
+            surface=state.navigation.surface or "lead:capture",
+            funnel_stage="bottom",
+            attributes=attributes or None,
+        )
+        if emitted:
+            state.lead.conversion_recorded = True
+        return emitted
+
+    def emit_tool_turn(self, state: ConversationState, turn: Any) -> None:
+        """Translate one ActiveFlow transition into the stable analytics vocabulary."""
+
+        flow_meta = turn.response.metadata.get("tool_flow", {})
+        version = str(
+            getattr(turn, "content_version", None)
+            or flow_meta.get("version")
+            or (
+                state.active_flow.version
+                if state.active_flow is not None
+                else self.tools.content_store.version
+            )
+        )
+        status_value = getattr(getattr(turn, "result", None), "status", None)
+        answered_step = getattr(turn, "answered_step", None)
+        if answered_step:
+            self.emit_funnel_event(
+                TOOL_STEP,
+                state,
+                surface=f"tool:{turn.tool}",
+                funnel_stage="bottom",
+                content_version=version or "not_applicable",
+                attributes={
+                    "tool": turn.tool,
+                    "lifecycle": "answer",
+                    "step": str(answered_step),
+                    "status": str(status_value or "ok"),
+                },
+            )
+        event = {
+            "partial_reveal": TOOL_PARTIAL_REVEAL,
+            "await_lead": TOOL_LEAD_GATE,
+            "reveal": TOOL_COMPLETED,
+        }.get(str(turn.lifecycle))
+        if event is not None:
+            self.emit_funnel_event(
+                event,
+                state,
+                surface=f"tool:{turn.tool}",
+                funnel_stage="bottom",
+                content_version=version or "not_applicable",
+                attributes={
+                    "tool": turn.tool,
+                    "lifecycle": str(turn.lifecycle),
+                    "step": str(flow_meta.get("step") or turn.lifecycle),
+                    "status": str(status_value or "ok"),
+                },
+            )
 
     def _append_history(self, state: ConversationState, role: str, content: str) -> None:
         state.append_history(
@@ -365,23 +645,33 @@ class ChatbotService:
             return
         entity = resolve_page_entity(self.catalog, reference, chat.page_type)
         entity_id = str(safe_get(entity, "id", "") or "") if entity is not None else ""
-        metadata = self.catalog.get_metadata(entity_id) if entity_id else None
-        if entity is None or metadata is None:
+        if entity is None or not entity_id:
+            return
+
+        self._apply_catalog_focus(state, entity_id)
+
+    def _apply_catalog_focus(self, state: ConversationState, entity_id: str) -> None:
+        """Synchronize Focus from one explicit, exact catalog navigation selection."""
+
+        metadata = self.indexes.entity_metadata.get(entity_id)
+        if metadata is None:
             return
 
         focus = state.focus
-        focus.entity_id = metadata.id
-        focus.university_concept = metadata.university_name
-        focus.course_concept = metadata.category
-        focus.specialization_concept = metadata.specialization_name
+        page_type = str(safe_get(metadata, "page_type", "") or "")
+        focus.entity_id = str(safe_get(metadata, "id", entity_id) or entity_id)
+        focus.university_concept = safe_get(metadata, "university_name")
+        focus.course_concept = safe_get(metadata, "category")
+        focus.specialization_concept = safe_get(metadata, "specialization_name")
         focus.university = (
-            metadata.id
-            if metadata.page_type == "university"
-            else str(safe_get(entity, "linked_university", "") or "") or None
+            focus.entity_id if page_type == "university" else safe_get(metadata, "university_id")
         )
-        focus.category = metadata.category
-        focus.specialization = metadata.specialization_name
+        focus.category = safe_get(metadata, "category")
+        focus.specialization = safe_get(metadata, "specialization_name")
+        focus.attribute = None
+        focus.unknown_entities.clear()
         focus.source = "context"
+        focus.sources.clear()
         for slot, value in (
             ("university", focus.university_concept),
             ("course", focus.course_concept),
@@ -444,7 +734,29 @@ class ChatbotService:
             catalog=self.catalog,
             operands=result.presentation_operands,
             message=chat.message,
+            chip_engine=getattr(self, "chip_engine", None),
         )
+        rendered_action = next(
+            (
+                action
+                for action in result.payload.quick_actions
+                if action.chip_id and action.surface and action.config_version
+            ),
+            None,
+        )
+        if rendered_action is not None:
+            result.state.navigation.surface = (
+                rendered_action.surface or result.state.navigation.surface
+            )
+            result.state.navigation.config_version = (
+                rendered_action.config_version or result.state.navigation.config_version
+            )
+            if rendered_action.surface and rendered_action.surface.startswith("answer:"):
+                advance_answer_navigation(
+                    result.state,
+                    answer_state=rendered_action.surface.removeprefix("answer:"),
+                )
+            await self.session_store.set(result.state)
         return result
 
     async def _process_turn(self, chat: ChatRequest) -> TurnResult:
@@ -455,8 +767,12 @@ class ChatbotService:
             self.intent_metrics.record_action_source(message_metric, source)
 
         session_id = chat.session_id or str(uuid4())
-        state = await self.session_store.get_or_create(session_id)
+        existing_state = await self.session_store.get(session_id)
+        state = existing_state or ConversationState(session_id=session_id)
         hydrate_focus_concepts(state.focus, self.indexes)
+        if not state.navigation.config_version:
+            state.navigation.config_version = self.chip_map.snapshot().version  # type: ignore[union-attr]
+        first_message = state.turn_count == 0
         state.turn_count += 1
         self._append_history(state, "user", chat.message)
 
@@ -469,11 +785,146 @@ class ChatbotService:
         mentions = extract_mentions(chat.message, self.matcher)
         if not mentions.has_explicit_mentions:
             self._seed_page_focus(state, chat)
+        if chat.page_type:
+            opening = self.journey_engine.opening(chat.page_type)
+            sync_page_navigation(
+                state,
+                page_type=chat.page_type,
+                entity_id=state.focus.entity_id or state.navigation.entity_id,
+                config_version=opening.config_version,
+            )
+        if chat.chip_id:
+            self.record_chip_action(
+                state,
+                chip_id=chat.chip_id,
+                surface=chat.chip_surface,
+                config_version=chat.chip_config_version,
+            )
+        else:
+            state.navigation.interaction_count += 1
+        if first_message:
+            self.emit_funnel_event(
+                SESSION_START,
+                state,
+                surface=state.navigation.surface,
+                funnel_stage=(
+                    "top"
+                    if state.navigation.page_type in {"homepage", "pillar"}
+                    else "mid"
+                    if state.navigation.page_type in {"university", "course"}
+                    else "bottom"
+                ),
+            )
         cb_match = is_callback_request(chat.message)
         tl.info("chatbot.nlu", "callback_detector: %s", "match" if cb_match else "no match")
+
+        requested_tool = tool_id_from_message(chat.message)
+        if requested_tool is not None:
+            previous_flow = state.active_flow.model_copy(deep=True) if state.active_flow else None
+            turn = self.tools.enter(
+                state,
+                requested_tool,
+                initial_payload={
+                    "program_id": state.focus.entity_id,
+                    "question_bank_key": state.focus.entity_id,
+                }
+                if state.focus.entity_id
+                else None,
+            )
+            record_action_source("deterministic_rule")
+            if state.active_flow is not None:
+                state.navigation.step = NavigationStep.TOOL
+                state.navigation.interaction_count = 0
+                self.emit_funnel_event(
+                    TOOL_STARTED,
+                    state,
+                    surface=f"tool:{requested_tool}",
+                    funnel_stage="bottom",
+                    content_version=(
+                        getattr(turn, "content_version", None)
+                        or state.active_flow.version
+                    ),
+                    attributes={"tool": requested_tool},
+                )
+            else:
+                state.navigation.step = PAGE_STEPS.get(
+                    state.navigation.page_type,
+                    NavigationStep.HOMEPAGE,
+                )
+            if turn.replaced_tool:
+                self.emit_funnel_event(
+                    FLOW_ABANDONED,
+                    state,
+                    surface=f"tool:{turn.replaced_tool}",
+                    funnel_stage="bottom",
+                    content_version=(
+                        previous_flow.version
+                        if previous_flow is not None
+                        else "not_applicable"
+                    ),
+                    attributes={
+                        "tool": turn.replaced_tool,
+                        "reason": "replaced_by_tool",
+                    },
+                )
+            self.emit_tool_turn(state, turn)
+            await self._persist_result(state, turn.response)
+            tl.info("chatbot.routing", "route: tool (%s)", requested_tool)
+            return TurnResult(session_id, state, turn.response, "tool")
+
+        if state.active_flow is not None:
+            active_tool = state.active_flow.tool
+            active_version = state.active_flow.version
+            turn = self.tools.dispatch(
+                state,
+                chat.message,
+                escape=EscapeSignals(
+                    callback_request=cb_match,
+                    high_confidence_catalog_mention=mentions.has_high_confidence_mention,
+                ),
+            )
+            if turn is not None and turn.escaped:
+                state.navigation.step = PAGE_STEPS.get(
+                    state.navigation.page_type,
+                    NavigationStep.HOMEPAGE,
+                )
+                self.emit_funnel_event(
+                    FLOW_ABANDONED,
+                    state,
+                    surface=f"tool:{active_tool}",
+                    funnel_stage="bottom",
+                    content_version=active_version or "not_applicable",
+                    attributes={"tool": active_tool, "reason": "new_intent"},
+                )
+                tl.info("chatbot.routing", "tool %s abandoned for new intent", active_tool)
+            elif turn is not None:
+                record_action_source("deterministic_rule")
+                self.emit_tool_turn(state, turn)
+                if str(turn.lifecycle) == "exit" and state.active_flow is None:
+                    state.navigation.step = PAGE_STEPS.get(
+                        state.navigation.page_type,
+                        NavigationStep.HOMEPAGE,
+                    )
+                    self.emit_funnel_event(
+                        FLOW_ABANDONED,
+                        state,
+                        surface=f"tool:{active_tool}",
+                        funnel_stage="bottom",
+                        content_version=(
+                            getattr(turn, "content_version", None)
+                            or active_version
+                            or "not_applicable"
+                        ),
+                        attributes={"tool": active_tool, "reason": "tool_unavailable"},
+                    )
+                await self._persist_result(state, turn.response)
+                tl.info("chatbot.routing", "route: tool (%s)", active_tool)
+                return TurnResult(session_id, state, turn.response, "tool")
+
         if cb_match:
             record_action_source("deterministic_rule")
             state.advisor.clear()
+            state.navigation.step = NavigationStep.LEAD_CAPTURE
             payload = self.lead_funnel.handle_callback(state, chat.message)
             await self._persist_result(state, payload)
             tl.info("chatbot.routing", "route: lead (callback)")
@@ -632,6 +1083,7 @@ class ChatbotService:
                     state,
                     pending_answer,
                 )
+                self.maybe_emit_lead_captured(state, source="chat_funnel")
                 # Persist the lead snapshot before any downstream NLU/routing failure can
                 # diverge session state from the CRM event that was just scheduled.
                 await self.session_store.set(state)
@@ -815,6 +1267,7 @@ class ChatbotService:
 
         if action in {Action.CALLBACK, Action.OPEN_LEAD_FORM}:
             state.advisor.clear()
+            state.navigation.step = NavigationStep.LEAD_CAPTURE
             payload = self.lead_funnel.handle_callback(state, chat.message)
             await self._persist_result(state, payload)
             tl.info("chatbot.routing", "route: lead (Gemini callback)")
@@ -946,8 +1399,7 @@ class ChatbotService:
 
         if action is Action.UNSUPPORTED_ENTITY:
             unknowns = list(
-                getattr(mentions, "unresolved_terms", ())
-                or state.focus.unknown_entities
+                getattr(mentions, "unresolved_terms", ()) or state.focus.unknown_entities
             )
             payload = await handle_unsupported_entity(
                 state=state,
@@ -1082,8 +1534,7 @@ class ChatbotService:
                 update.comparison_entity_ids,
                 update.comparison_universities,
             )
-            if route == "comparison"
-            and not (decision is not None and decision.needs_clarification)
+            if route == "comparison" and not (decision is not None and decision.needs_clarification)
             else (),
         )
 
@@ -1235,6 +1686,7 @@ async def guided_prototype_script() -> FileResponse:
 @app.get("/api/widget/guide/context")
 async def widget_guide_context_endpoint(
     request: Request,
+    session_id: str | None = None,
     page_type: str | None = None,
     university: str | None = None,
     course: str | None = None,
@@ -1260,7 +1712,141 @@ async def widget_guide_context_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Guided catalog context not found",
         )
-    return result
+    resolved_page_type = str(result.get("context", {}).get("page_type") or "homepage")
+    resolved_entity_id = result.get("context", {}).get("entity_id")
+    opening = service.journey_engine.opening(resolved_page_type)
+    resolved_session_id = session_id or str(uuid4())
+    existing = await service.session_store.get(resolved_session_id)
+    state_value = existing or ConversationState(session_id=resolved_session_id)
+    if resolved_entity_id:
+        service._apply_catalog_focus(state_value, str(resolved_entity_id))
+        state_value.pending_clarification = None
+    elif resolved_page_type == "homepage":
+        state_value.focus.clear()
+        state_value.pending_clarification = None
+    sync_page_navigation(
+        state_value,
+        page_type=resolved_page_type,
+        entity_id=str(resolved_entity_id) if resolved_entity_id else None,
+        config_version=opening.config_version,
+    )
+    await service.session_store.set(state_value)
+    correlation_id = logging_setup.correlation_id(
+        resolved_session_id,
+        max(state_value.turn_count, state_value.navigation.interaction_count, 0),
+    )
+    current_tool = service.tools.current(state_value)
+    return {
+        **result,
+        "session_id": resolved_session_id,
+        "opening": opening_payload(opening, correlation_id=correlation_id),
+        "navigation": navigation_payload(state_value),
+        "active_flow": (
+            {
+                "tool": current_tool.tool,
+                "step": current_tool.response.metadata.get("tool_flow", {}).get("step"),
+                "response": current_tool.response.model_dump(mode="json", exclude_none=True),
+            }
+            if current_tool is not None
+            else None
+        ),
+    }
+
+
+@app.post("/api/widget/guide/chips")
+async def widget_guide_chips_endpoint(
+    command: GuidedChipRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Advance one persisted guided action and return config-owned follow-ups."""
+
+    service: ChatbotService = request.app.state.service
+    session_id = command.session_id or str(uuid4())
+    existing_state = await service.session_store.get(session_id)
+    state_value = existing_state or ConversationState(session_id=session_id)
+    current_version = service.chip_map.snapshot().version  # type: ignore[union-attr]
+    context_mismatch = state_value.navigation.page_type != command.page_type or (
+        command.entity_id is not None
+        and state_value.navigation.entity_id != command.entity_id
+    )
+    if existing_state is not None and context_mismatch:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Guided context is stale; reload the current page context",
+        )
+    if existing_state is None:
+        sync_page_navigation(
+            state_value,
+            page_type=command.page_type,
+            entity_id=command.entity_id,
+            config_version=current_version,
+        )
+    service.record_chip_action(
+        state_value,
+        chip_id=command.completed_chip_id,
+        surface=command.surface,
+        config_version=command.config_version,
+    )
+    advance_answer_navigation(state_value, answer_state=command.answer_state)
+    followup = service.chip_engine.lookup(
+        page_type=state_value.navigation.page_type,
+        card_type=command.card_type,
+        answer_state=command.answer_state,
+        interaction_count=state_value.navigation.interaction_count,
+        state=state_value,
+    )
+    state_value.navigation.surface = followup.surface
+    state_value.navigation.config_version = followup.config_version
+    await service.session_store.set(state_value)
+    correlation_id = logging_setup.correlation_id(
+        session_id,
+        max(state_value.turn_count, state_value.navigation.interaction_count, 1),
+    )
+    return {
+        "session_id": session_id,
+        "followup": followup_payload(followup, correlation_id=correlation_id),
+        "navigation": navigation_payload(state_value),
+    }
+
+
+@app.post("/api/widget/analytics")
+async def widget_analytics_endpoint(
+    command: WidgetAnalyticsRequest,
+    request: Request,
+) -> dict[str, Any]:
+    """Accept actual widget impressions/interactions without blocking on delivery."""
+
+    service: ChatbotService = request.app.state.service
+    session_id = command.session_id or str(uuid4())
+    state_value = await service.session_store.get_or_create(session_id)
+    key_block = {
+        "session_id": session_id,
+        "correlation_id": command.correlation_id
+        or logging_setup.correlation_id(
+            session_id,
+            max(state_value.turn_count, command.interaction_count, 1),
+        ),
+        "surface": command.surface,
+        "funnel_stage": command.funnel_stage,
+        "interaction_count": command.interaction_count,
+        "entity": command.entity,
+        "config_version": command.config_version,
+        "content_version": command.content_version,
+    }
+    try:
+        if command.event == "chip_shown":
+            event = build_chip_shown(command.chips, **key_block)
+        else:
+            event = build_event(
+                command.event,
+                chip_id=command.chip_id,
+                chip_handler=command.chip_handler,
+                attributes={"lead_tags": command.lead_tags} if command.lead_tags else None,
+                **key_block,
+            )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"accepted": service.analytics.emit(event), "session_id": session_id}
 
 
 @app.get("/api/widget/guide/catalog/{kind}")
@@ -1407,6 +1993,24 @@ async def widget_context_clear_endpoint(
     state_value = await service.session_store.get_or_create(command.session_id)
     state_value.focus.clear()
     state_value.pending_clarification = None
+    if state_value.active_flow is not None:
+        active_tool = state_value.active_flow.tool
+        active_version = state_value.active_flow.version
+        service.tools.abandon(state_value, reason="context_clear")
+        service.emit_funnel_event(
+            FLOW_ABANDONED,
+            state_value,
+            surface=f"tool:{active_tool}",
+            funnel_stage="bottom",
+            content_version=active_version or "not_applicable",
+            attributes={"tool": active_tool, "reason": "context_clear"},
+        )
+    opening = service.journey_engine.opening("homepage")
+    sync_page_navigation(
+        state_value,
+        page_type="homepage",
+        config_version=opening.config_version,
+    )
     await service.session_store.set(state_value)
     return ContextClearResponse(session_id=command.session_id, context=ResponseContext())
 
@@ -1439,7 +2043,11 @@ async def widget_page_context_endpoint(
     )
 
 
-@app.post("/api/widget/lead", response_model=WidgetLeadResponse)
+@app.post(
+    "/api/widget/lead",
+    response_model=WidgetLeadResponse,
+    response_model_exclude_none=True,
+)
 async def widget_lead_endpoint(
     lead: WidgetLeadRequest,
     request: Request,
@@ -1447,18 +2055,105 @@ async def widget_lead_endpoint(
     service: ChatbotService = request.app.state.service
     session_id = lead.session_id or str(uuid4())
     state_value = await service.session_store.get_or_create(session_id)
+    tool_lead_tags: dict[str, Any] = {}
+    active_flow = state_value.active_flow
+    awaiting_tool_lead = active_flow is not None and active_flow.step == "await_lead"
+    if awaiting_tool_lead and active_flow is not None:
+        raw_result = active_flow.payload.get("result")
+        if isinstance(raw_result, dict):
+            try:
+                tool_lead_tags = ToolResult.model_validate(raw_result).lead_tags
+            except ValueError:
+                LOGGER.warning(
+                    "Tool result lead tags could not be validated for session %s",
+                    session_id,
+                )
     try:
         service.lead_funnel.capture_phone_only(
             state_value,
             lead.phone,
+            name=lead.name,
+            require_name=awaiting_tool_lead,
             source=lead.source,
+            extra_context=tool_lead_tags,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    service.record_chip_action(
+        state_value,
+        chip_id=lead.chip_id,
+        surface=lead.chip_surface,
+        config_version=lead.chip_config_version,
+    )
+    state_value.navigation.step = NavigationStep.LEAD_CAPTURE
+    service.maybe_emit_lead_captured(
+        state_value,
+        lead_tags=tool_lead_tags,
+        source=lead.source or "widget",
+    )
+    tool_payload: ResponsePayload | None = None
+    if state_value.active_flow is not None:
+        active_tool = state_value.active_flow.tool
+        active_version = state_value.active_flow.version
+        duplicate_scholarship_attempt = bool(
+            state_value.active_flow.step == "await_lead"
+            and active_tool == "scholarship"
+            and not await service.session_store.claim_once(
+                "scholarship",
+                state_value.lead.phone or lead.phone,
+            )
+        )
+        if duplicate_scholarship_attempt:
+            service.tools.abandon(state_value, reason="phone_attempt_limit")
+            service.emit_funnel_event(
+                FLOW_ABANDONED,
+                state_value,
+                surface="tool:scholarship",
+                funnel_stage="bottom",
+                content_version=active_version or "not_applicable",
+                attributes={"tool": "scholarship", "reason": "phone_attempt_limit"},
+            )
+            tool_payload = enrich_response(
+                build_response(
+                    "The scholarship checker has already been completed for this phone number."
+                ),
+                state=state_value,
+                route="tool",
+                catalog=service.catalog,
+                chip_engine=service.chip_engine,
+            )
+            service._append_history(state_value, "assistant", tool_payload.text)
+        elif state_value.active_flow.step == "await_lead":
+            tool_turn = service.tools.resume_after_lead(state_value)
+        else:
+            tool_turn = service.tools.abandon(state_value, reason="lead_capture")
+            service.emit_funnel_event(
+                FLOW_ABANDONED,
+                state_value,
+                surface=f"tool:{active_tool}",
+                funnel_stage="bottom",
+                content_version=active_version or "not_applicable",
+                attributes={"tool": active_tool, "reason": "lead_capture"},
+            )
+        if not duplicate_scholarship_attempt and tool_turn is not None and tool_turn.consumed:
+            service.emit_tool_turn(state_value, tool_turn)
+            tool_payload = enrich_response(
+                tool_turn.response,
+                state=state_value,
+                route="tool",
+                catalog=service.catalog,
+                chip_engine=service.chip_engine,
+            )
+            service._append_history(state_value, "assistant", tool_payload.text)
     await service.session_store.set(state_value)
     return WidgetLeadResponse(
         session_id=session_id,
         message="Thanks — a DegreeBaba counsellor can contact you shortly.",
+        response=(
+            tool_payload.model_dump(mode="json", exclude_none=True)
+            if tool_payload is not None
+            else None
+        ),
     )
 
 
@@ -1486,6 +2181,7 @@ async def chat_endpoint(chat: ChatRequest, request: Request) -> StreamingRespons
             route="fallback",
             catalog=service.catalog,
             message=chat.message,
+            chip_engine=service.chip_engine,
         )
         result = TurnResult(session_id, state, payload, "fallback")
     return StreamingResponse(
@@ -1508,7 +2204,11 @@ async def health_endpoint(request: Request) -> dict[str, Any]:
 @app.get("/metrics")
 async def metrics_endpoint(request: Request) -> dict[str, Any]:
     service: ChatbotService = request.app.state.service
-    return service.intent_metrics.snapshot()
+    result = service.intent_metrics.snapshot()
+    analytics = service.analytics.snapshot()
+    analytics.pop("events", None)
+    result["funnel_analytics"] = analytics
+    return result
 
 
 @app.post("/admin/metrics/reset")
@@ -1521,7 +2221,8 @@ async def reset_metrics_endpoint(
     if expected and authorization != f"Bearer {expected}":
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin token")
     service.intent_metrics.reset()
-    return service.intent_metrics.snapshot()
+    await service.analytics.reset()
+    return await metrics_endpoint(request)
 
 
 @app.post("/admin/reindex", response_model=ReindexResponse)

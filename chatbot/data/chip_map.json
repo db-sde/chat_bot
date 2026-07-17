@@ -1,0 +1,323 @@
+{
+  "version": "2026-07-16",
+  "chips": {
+    "browse_universities": {
+      "handler": "list_universities",
+      "label": "🎓 Browse universities",
+      "funnel_stage": "top"
+    },
+    "browse_programs": {
+      "handler": "list_programs",
+      "label": "📚 Browse programs",
+      "funnel_stage": "top"
+    },
+    "career_quiz_tool": {
+      "handler": "tool_entry",
+      "tool": "career_quiz",
+      "label": "🎯 Help me choose",
+      "funnel_stage": "mid"
+    },
+    "specialization_quiz_tool": {
+      "handler": "tool_entry",
+      "tool": "career_quiz",
+      "label": "🎯 Which specialization suits me?",
+      "funnel_stage": "mid"
+    },
+    "validity": {
+      "handler": "get_validity",
+      "label": "🛡️ Is an online degree valid?",
+      "funnel_stage": "bottom"
+    },
+    "validity_course": {
+      "handler": "get_validity",
+      "label": "🛡️ Is this degree valid?",
+      "funnel_stage": "bottom"
+    },
+    "compare_universities": {
+      "handler": "compare",
+      "label": "⚖️ Compare universities",
+      "funnel_stage": "bottom"
+    },
+    "compare_top": {
+      "handler": "compare",
+      "label": "⚖️ Compare top universities",
+      "funnel_stage": "bottom"
+    },
+    "compare_others": {
+      "handler": "compare",
+      "label": "⚖️ Compare with others",
+      "funnel_stage": "bottom"
+    },
+    "compare": {
+      "handler": "compare",
+      "label": "⚖️ Compare these",
+      "funnel_stage": "bottom"
+    },
+    "fees_emi": {
+      "handler": "get_fees",
+      "label": "💰 Fees & EMI",
+      "funnel_stage": "bottom"
+    },
+    "fees_across": {
+      "handler": "get_fees",
+      "label": "💸 Fees across universities",
+      "funnel_stage": "bottom"
+    },
+    "starting_fees": {
+      "handler": "get_fees",
+      "label": "💰 Starting fees & EMI",
+      "funnel_stage": "bottom"
+    },
+    "see_fees": {
+      "handler": "get_fees",
+      "label": "💰 See fees",
+      "funnel_stage": "bottom"
+    },
+    "eligibility": {
+      "handler": "get_eligibility",
+      "label": "✅ Am I eligible?",
+      "funnel_stage": "bottom"
+    },
+    "check_eligibility": {
+      "handler": "get_eligibility",
+      "label": "✅ Check my eligibility",
+      "funnel_stage": "bottom"
+    },
+    "programs_here": {
+      "handler": "list_programs",
+      "label": "📚 Programs offered here",
+      "funnel_stage": "mid"
+    },
+    "list_providers": {
+      "handler": "list_providers",
+      "label": "🎓 Universities offering this",
+      "funnel_stage": "mid"
+    },
+    "approvals": {
+      "handler": "get_approvals",
+      "label": "🛡️ Approvals & accreditation",
+      "funnel_stage": "bottom"
+    },
+    "reviews": {
+      "handler": "get_reviews",
+      "label": "⭐ Student reviews",
+      "funnel_stage": "bottom"
+    },
+    "admission_process": {
+      "handler": "get_admission_steps",
+      "label": "🎓 Admission process",
+      "funnel_stage": "bottom"
+    },
+    "admission_steps": {
+      "handler": "get_admission_steps",
+      "label": "📝 Admission steps",
+      "funnel_stage": "bottom"
+    },
+    "admissions": {
+      "handler": "get_admission_steps",
+      "label": "🎓 Admissions",
+      "funnel_stage": "bottom"
+    },
+    "specializations": {
+      "handler": "get_specializations",
+      "label": "🎯 Specializations",
+      "funnel_stage": "bottom"
+    },
+    "other_specs": {
+      "handler": "get_specializations",
+      "label": "🔄 Other specializations",
+      "funnel_stage": "bottom"
+    },
+    "careers": {
+      "handler": "get_careers",
+      "label": "💼 Career & salary",
+      "funnel_stage": "bottom"
+    },
+    "careers_from_syllabus": {
+      "handler": "get_careers",
+      "label": "💼 Careers this leads to",
+      "funnel_stage": "bottom"
+    },
+    "syllabus": {
+      "handler": "get_syllabus",
+      "label": "📖 Syllabus",
+      "funnel_stage": "bottom"
+    },
+    "eligible_programs": {
+      "handler": "get_eligible_programs",
+      "label": "🎓 Programs I'm eligible for",
+      "funnel_stage": "bottom"
+    },
+    "roi_tool": {
+      "handler": "tool_entry",
+      "tool": "roi",
+      "label": "🧮 Calculate my ROI",
+      "funnel_stage": "bottom"
+    },
+    "scholarship_tool": {
+      "handler": "tool_entry",
+      "tool": "scholarship",
+      "label": "🎓 Check my scholarship",
+      "funnel_stage": "bottom"
+    },
+    "apply_now": {
+      "handler": "cta_apply",
+      "label": "📝 Apply now",
+      "funnel_stage": "bottom"
+    },
+    "counsellor": {
+      "handler": "cta_callback",
+      "label": "📞 Talk to a counsellor",
+      "funnel_stage": "bottom"
+    }
+  },
+  "surfaces": {
+    "page:home": {
+      "funnel_stage": "top",
+      "top": [
+        "browse_universities",
+        "browse_programs",
+        "career_quiz_tool",
+        "validity"
+      ],
+      "more": [
+        "compare_universities",
+        "fees_emi",
+        "roi_tool",
+        "counsellor"
+      ]
+    },
+    "page:pillar": {
+      "funnel_stage": "top",
+      "top": [
+        "list_providers",
+        "fees_across",
+        "specialization_quiz_tool",
+        "check_eligibility"
+      ],
+      "more": [
+        "compare_top",
+        "careers",
+        "roi_tool",
+        "counsellor"
+      ]
+    },
+    "page:university": {
+      "funnel_stage": "mid",
+      "top": [
+        "programs_here",
+        "approvals",
+        "reviews",
+        "counsellor"
+      ],
+      "more": [
+        "starting_fees",
+        "admission_process",
+        "compare_others",
+        "roi_tool"
+      ]
+    },
+    "page:course": {
+      "funnel_stage": "mid",
+      "top": [
+        "fees_emi",
+        "eligibility",
+        "specializations",
+        "apply_now"
+      ],
+      "more": [
+        "validity_course",
+        "careers",
+        "roi_tool",
+        "scholarship_tool",
+        "compare_universities",
+        "counsellor"
+      ]
+    },
+    "page:specialization": {
+      "funnel_stage": "bottom",
+      "top": [
+        "careers",
+        "fees_emi",
+        "eligibility",
+        "apply_now"
+      ],
+      "more": [
+        "syllabus",
+        "other_specs",
+        "roi_tool",
+        "scholarship_tool",
+        "counsellor"
+      ]
+    },
+    "card:university": {
+      "funnel_stage": "mid",
+      "follow": ["programs_here", "approvals", "reviews"]
+    },
+    "card:course": {
+      "funnel_stage": "mid",
+      "follow": ["fees_emi", "eligibility", "specializations"]
+    },
+    "card:specialization": {
+      "funnel_stage": "bottom",
+      "follow": ["careers", "fees_emi", "eligibility"]
+    },
+    "answer:fees": {
+      "funnel_stage": "bottom",
+      "follow": ["eligibility", "roi_tool", "counsellor"]
+    },
+    "answer:eligibility_yes": {
+      "funnel_stage": "bottom",
+      "follow": ["admission_steps", "scholarship_tool", "apply_now"]
+    },
+    "answer:eligibility_no": {
+      "funnel_stage": "bottom",
+      "follow": ["eligible_programs", "counsellor"]
+    },
+    "answer:eligibility_borderline": {
+      "funnel_stage": "bottom",
+      "follow": ["eligible_programs", "counsellor"]
+    },
+    "answer:careers": {
+      "funnel_stage": "bottom",
+      "follow": ["see_fees", "roi_tool", "apply_now"]
+    },
+    "answer:syllabus": {
+      "funnel_stage": "bottom",
+      "follow": ["careers_from_syllabus", "eligibility", "apply_now"]
+    },
+    "answer:validity": {
+      "funnel_stage": "bottom",
+      "follow": ["see_fees", "eligibility", "apply_now"]
+    },
+    "answer:approvals": {
+      "funnel_stage": "bottom",
+      "follow": ["see_fees", "eligibility", "apply_now"]
+    },
+    "answer:reviews": {
+      "funnel_stage": "bottom",
+      "follow": ["fees_emi", "apply_now", "counsellor"]
+    },
+    "answer:comparison": {
+      "funnel_stage": "bottom",
+      "follow": ["roi_tool", "apply_now", "counsellor"]
+    },
+    "answer:no_specializations": {
+      "funnel_stage": "bottom",
+      "follow": ["fees_emi", "eligibility", "admissions", "careers"]
+    },
+    "tool:reveal": {
+      "funnel_stage": "bottom",
+      "follow": ["compare", "apply_now", "counsellor"]
+    }
+  },
+  "faq_chips": {
+    "source": "faqs",
+    "count": 3
+  },
+  "progression": {
+    "escalate_after": 3,
+    "conversion_chips": ["apply_now", "counsellor"],
+    "tool_reveal_priority": ["apply_now", "counsellor", "compare"]
+  }
+}
