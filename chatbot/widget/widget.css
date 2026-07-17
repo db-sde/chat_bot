@@ -555,6 +555,12 @@
   margin: 0 7px;
   color: #9CA3AF;
 }
+.db-widget__card-trust {
+  margin-top: 3px;
+}
+.db-widget__card-trust .db-widget__trust-badge {
+  font-size: 11px;
+}
 .db-widget__stat-pills {
   display: flex;
   gap: 7px;
@@ -615,6 +621,47 @@
   font-family: 'DM Sans', system-ui, sans-serif;
 }
 
+.db-widget__pills-row {
+  display: flex;
+  gap: 7px;
+  margin-top: 13px;
+  width: 100%;
+}
+
+.db-widget__pill {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 8px 6px;
+  color: #0E1F3D;
+  background: #F3F4F6;
+  border-radius: 7px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.db-widget__card-emi {
+  margin-top: 9px;
+  color: #4B5563;
+  font-size: 12px;
+}
+
+.db-widget__card-job {
+  margin-top: 11px;
+  padding: 9px 11px;
+  color: #0E1F3D;
+  background: #FDF1EC;
+  border: 1px solid #F6D3C4;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .db-widget__card-list {
   display: flex;
   flex-direction: column;
@@ -635,16 +682,17 @@
   margin-top: 14px;
 }
 .db-widget__card-button {
-  flex: 0 0 auto;
-  width: auto;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
   border: none;
   border-radius: 8px;
-  padding: 7px 10px;
+  padding: 10px;
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  min-height: 28px;
+  min-height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2192,6 +2240,11 @@
 
   .db-widget__card {
     padding: 13px 14px;
+  }
+
+  .db-widget__program-card,
+  .db-widget__university-card {
+    padding: 15px 16px;
   }
 
   .db-widget__finder {

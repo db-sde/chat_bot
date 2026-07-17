@@ -690,6 +690,13 @@
     return row;
   }
 
+  function cardPills(values) {
+    const row = element("div", "db-widget__pills-row");
+    values.filter((value) => value !== null && value !== undefined && String(value).trim()).slice(0, 3)
+      .forEach((value) => row.appendChild(element("span", "db-widget__pill", String(value))));
+    return row;
+  }
+
   function compactFee(value, prefix = "") {
     const fee = String(value || "").trim().replace(/^INR\s*/i, "₹");
     if (!fee) return "";
@@ -765,25 +772,26 @@
     const header = element("div", "db-widget__card-header");
     const mark = element("span", "db-widget__card-mark", initials(component.name));
     const title = element("div", "db-widget__card-heading");
-    title.appendChild(element("span", "db-widget__eyebrow", "University"));
     title.appendChild(element("h3", "", component.name));
-    header.append(mark, title);
-    card.appendChild(header);
-
     const ugc = component.ugc_status || findFact(component, ["ugc", "approval"]);
     const naacRaw = component.naac_grade || findFact(component, ["naac"]);
     const naac = naacRaw && !String(naacRaw).toLowerCase().includes("naac") ? `NAAC ${naacRaw}` : naacRaw;
     const trust = trustRow([ugc, naac]);
-    if (trust) card.appendChild(trust);
+    if (trust) {
+      trust.classList.add("db-widget__card-trust");
+      title.appendChild(trust);
+    }
+    header.append(mark, title);
+    card.appendChild(header);
 
     const programsCount = publishedCount(component, "program_count", "num_programs", "programs");
-    const metadata = compactMetadata([
-      { label: "Starting fee", value: compactFee(component.starting_fee || findFact(component, ["starting fee", "fee"]), "From ") },
-      { label: "Programs", value: programsCount || programsCount === 0 ? `${programsCount} Programs` : "" },
-      { label: "Mode", value: component.learning_mode || component.mode || findFact(component, ["learning mode", "mode"]) },
+    const pills = cardPills([
+      compactFee(component.starting_fee || findFact(component, ["starting fee", "fee"]), "From "),
+      programsCount || programsCount === 0 ? `${programsCount} Programs` : "",
+      component.learning_mode || component.mode || findFact(component, ["learning mode", "mode"]),
     ]);
-    if (metadata.childElementCount) card.appendChild(metadata);
-    card.appendChild(cardActions(component));
+    if (pills.childElementCount) card.appendChild(pills);
+    card.appendChild(cardActions(component, "View details"));
     recordCardShown(component, "university");
     return card;
   }
@@ -806,33 +814,46 @@
     const card = element("article", "db-widget__card db-widget__program-card");
     const isSpecialization = component.kind === "specialization" || component.type === "specialization_card";
     const provider = component.university_name || "";
-    card.appendChild(element("span", "db-widget__eyebrow", provider || (isSpecialization ? "Specialization" : "Program")));
-    const heading = isSpecialization && component.category
-      ? `${String(component.category).toUpperCase()} in ${component.name}`
-      : component.name;
-    card.appendChild(element("h3", "", heading));
+    const category = String(component.category || "").trim().toUpperCase();
+    const programLabel = category ? `Online ${category}` : "";
+    const baseHeading = isSpecialization
+      ? [provider, programLabel].filter(Boolean).join(" ") + `${provider || programLabel ? " · " : ""}${component.name}`
+      : provider && !String(component.name).toLowerCase().includes(provider.toLowerCase())
+        ? `${provider} ${component.name}`
+        : component.name;
+    const header = element("div", "db-widget__card-header");
+    const mark = element("span", "db-widget__card-mark", initials(provider || baseHeading));
+    const title = element("div", "db-widget__card-heading");
+    title.appendChild(element("h3", "", baseHeading));
 
     const ugc = component.ugc_status || findFact(component, ["ugc", "approval"]);
     const naacRaw = component.naac_grade || findFact(component, ["naac"]);
     const naac = naacRaw && !String(naacRaw).toLowerCase().includes("naac") ? `NAAC ${naacRaw}` : naacRaw;
     const trust = trustRow([ugc, naac]);
-    if (trust) card.appendChild(trust);
+    if (trust) {
+      trust.classList.add("db-widget__card-trust");
+      title.appendChild(trust);
+    }
+    header.append(mark, title);
+    card.appendChild(header);
 
     const specializationCount = publishedCount(
       component, "specialization_count", "num_specializations", "specializations"
     );
-    const metadata = compactMetadata([
-      { label: "Fee", value: compactFee(component.fee || component.total_fee) },
-      { label: "Duration", value: component.duration },
-      {
-        label: isSpecialization ? "Mode" : "Specializations",
-        value: isSpecialization
-          ? component.mode
-          : specializationCount || specializationCount === 0 ? `${specializationCount} Specs` : "",
-      },
+    const pills = cardPills([
+      compactFee(component.fee || component.total_fee),
+      component.duration,
+      isSpecialization
+        ? component.mode
+        : specializationCount || specializationCount === 0
+          ? `${specializationCount} Specs`
+          : component.mode,
     ]);
-    if (metadata.childElementCount) card.appendChild(metadata);
-    card.appendChild(cardActions(component));
+    if (pills.childElementCount) card.appendChild(pills);
+    if (component.emi) card.appendChild(element("div", "db-widget__card-emi", displayCurrency(component.emi)));
+    const career = firstCareer(component);
+    if (career) card.appendChild(element("div", "db-widget__card-job", `💼 ${displayCurrency(career)}`));
+    card.appendChild(cardActions(component, "View details"));
     recordCardShown(component, isSpecialization ? "specialization" : "course");
     return card;
   }
@@ -1286,10 +1307,13 @@
     deactivateGuidedActions();
     collapseGuidedCards();
     const isRichCard = card.classList.contains("db-widget__rich-card-stack");
+    const isReferenceCard = card.matches(
+      ".db-widget__program-card, .db-widget__university-card, .db-widget__comparison-card",
+    );
     const view = createMessage("bot", isRichCard ? "" : message);
     if (isRichCard) view.bubble.remove();
     const stack = element("div", "db-widget__component-stack");
-    if (isRichCard) {
+    if (isRichCard || isReferenceCard) {
       card.dataset.guidePrimary = "true";
       stack.appendChild(card);
     } else {
@@ -1593,14 +1617,20 @@
     return card;
   }
 
-  function renderInlineLeadCard(kind) {
+  function renderInlineLeadCard(kind, options = {}) {
+    const isApplication = kind === "application" || /apply/i.test(String(options.label || ""));
+    const actionMeta = normalizedAction(options.chip) || {};
     const card = element("section", "db-widget__inline-lead");
     card.appendChild(element(
       "p",
       "db-widget__inline-lead-text",
-      kind === "fees"
+      isApplication
+        ? "Ready to apply? Share your number and a DegreeBaba admissions counsellor will help with the next step."
+        : kind === "fees"
         ? "Want me to check today's fee offer and seat availability? Just your number — no spam."
-        : "Want a counsellor to verify your eligibility? Share your number for one callback.",
+        : kind === "eligibility"
+          ? "Want a counsellor to verify your eligibility? Share your number for one callback."
+          : "Happy to connect you. Share your number for one admissions callback — no spam.",
     ));
     const form = element("form", "db-widget__inline-lead-form");
     const phoneWrapper = element("label", "db-widget__inline-phone-wrapper");
@@ -1629,16 +1659,27 @@
       phone.removeAttribute("aria-invalid");
       submit.disabled = true;
       status.textContent = "Saving your request…";
-      emitAnalytics("counsellor_clicked", null);
+      if (!options.analyticsRecorded) {
+        emitAnalytics(isApplication ? "apply_clicked" : "counsellor_clicked", null);
+      }
       try {
+        const chipPersisted = options.persistence ? await options.persistence : false;
+        const leadBody = {
+          session_id: state.sessionId || null,
+          phone: normalized,
+          source: options.source || `widget_${kind}`,
+        };
+        if (actionMeta.chip_id && !chipPersisted) leadBody.chip_id = actionMeta.chip_id;
+        const chipSurface = actionMeta.surface || state.currentChipSurface;
+        const chipConfigVersion = actionMeta.config_version || state.configVersion;
+        const chipCorrelationId = actionMeta.correlation_id || state.correlationId;
+        if (chipSurface) leadBody.chip_surface = chipSurface;
+        if (chipConfigVersion) leadBody.chip_config_version = chipConfigVersion;
+        if (chipCorrelationId) leadBody.chip_correlation_id = chipCorrelationId;
         const response = await fetchJson("/api/widget/lead", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            session_id: state.sessionId || null,
-            phone: normalized,
-            source: `widget_${kind}`,
-          }),
+          body: JSON.stringify(leadBody),
         });
         if (response.session_id) {
           state.sessionId = response.session_id;
@@ -1911,14 +1952,36 @@
     createMessage("user", label || action);
     if (action === "lead") {
       transitionNavigation("lead");
-      state.pendingLeadPersistence = chip && chip.chip_id
-        ? persistCompletedChip(chip)
-        : null;
-      openLeadPanel({
-        source: options.source || "guided_widget",
-        label,
-        chip,
-        analyticsRecorded: Boolean(chip && chip.chip_id),
+      const isApplication = /apply/i.test(String(label || ""));
+      const analyticsRecorded = Boolean(chip && chip.chip_id);
+      const persistence = analyticsRecorded ? persistCompletedChip(chip) : null;
+      if (!analyticsRecorded) {
+        emitAnalytics(isApplication ? "apply_clicked" : "counsellor_clicked", null);
+      }
+      if (state.toolLeadRequiresName) {
+        state.pendingLeadPersistence = persistence;
+        openLeadPanel({
+          source: options.source || "guided_widget",
+          label,
+          chip,
+          analyticsRecorded: true,
+          requireName: true,
+        });
+        return;
+      }
+      runGuidedResponse(async () => {
+        const leadStack = element("div", "db-widget__rich-card-stack");
+        leadStack.appendChild(renderInlineLeadCard(
+          isApplication ? "application" : "counsellor",
+          {
+            source: options.source || "guided_widget",
+            label,
+            chip,
+            persistence,
+            analyticsRecorded: true,
+          },
+        ));
+        presentGuidedCard("", leadStack, isApplication ? "Apply now" : "Talk to a counsellor");
       });
       return;
     }

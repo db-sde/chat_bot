@@ -192,27 +192,33 @@ def test_premium_admissions_ui_contracts_are_present() -> None:
     assert "@media (max-width: 560px)" in styles
 
 
-def test_recommendation_cards_use_compact_metadata_and_progressive_details() -> None:
+def test_recommendation_cards_match_the_reference_card_structure() -> None:
     source = _source("widget.js")
     styles = _source("widget.css")
     university_card = _function_source(source, "renderUniversityCard")
     program_card = _function_source(source, "renderProgramCard")
     card_actions = _function_source(source, "cardActions")
     open_details = _function_source(source, "openDetails")
+    presenter = _function_source(source, "presentGuidedCard")
 
     for renderer in (university_card, program_card):
-        assert "compactMetadata(" in renderer
+        assert "cardPills(" in renderer
+        assert "db-widget__card-header" in renderer
+        assert "db-widget__card-mark" in renderer
+        assert "compactMetadata(" not in renderer
         assert "statPills(" not in renderer
 
-    assert "db-widget__emi-line" not in program_card
+    assert "db-widget__card-emi" in program_card
+    assert "db-widget__card-job" in program_card
+    assert ".db-widget__program-card, .db-widget__university-card" in presenter
 
     assert 'detailsLabel = "Details"' in card_actions
     assert '"+ Compare"' in card_actions
     assert 'detailSection(detailBody, "Key details", details.key_details)' in open_details
-    assert ".db-widget__compact-meta" in styles
-    assert ".db-widget__compact-meta-item:not(:last-child)::after" in styles
-    assert "min-height: 28px" in styles
-    assert "width: auto" in styles
+    assert ".db-widget__pills-row" in styles
+    assert ".db-widget__card-job" in styles
+    assert "min-height: 42px" in styles
+    assert "flex: 1 1 0" in styles
 
 
 def test_catalog_picker_has_clear_sections_and_mobile_sheet_containment() -> None:
