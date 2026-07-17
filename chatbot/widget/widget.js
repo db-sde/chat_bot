@@ -162,7 +162,7 @@
     const behavior = payload && payload.behavior ? payload.behavior : payload || {};
     const color = /^#[0-9a-f]{6}$/i.test(branding.primary_color || "")
       ? branding.primary_color
-      : "#FF6B00";
+      : "#E84010";
     return {
       siteKey: payload.site_key || siteKey,
       botName: branding.bot_name || "DegreeBaba",
@@ -384,6 +384,33 @@
     return grid;
   }
 
+  function compactMetadata(facts) {
+    const row = element("div", "db-widget__compact-meta");
+    row.setAttribute("role", "list");
+    facts.filter((fact) => {
+      if (!fact || fact.value === null || fact.value === undefined) return false;
+      return String(fact.value).trim().length > 0;
+    }).slice(0, 3).forEach((fact) => {
+      const item = element("span", "db-widget__compact-meta-item", String(fact.value));
+      item.setAttribute("role", "listitem");
+      if (fact.label) item.setAttribute("aria-label", `${fact.label}: ${fact.value}`);
+      row.appendChild(item);
+    });
+    return row;
+  }
+
+  function compactFee(value, prefix = "") {
+    const fee = String(value || "").trim().replace(/^INR\s*/i, "₹");
+    if (!fee) return "";
+    return prefix && !fee.toLowerCase().startsWith(prefix.toLowerCase()) ? `${prefix}${fee}` : fee;
+  }
+
+  function publishedCount(component, directKey, alternateKey, collectionKey) {
+    if (component[directKey] !== null && component[directKey] !== undefined) return component[directKey];
+    if (component[alternateKey] !== null && component[alternateKey] !== undefined) return component[alternateKey];
+    return Array.isArray(component[collectionKey]) ? component[collectionKey].length : null;
+  }
+
   function cardReference(component) {
     const provider = component.university_name || "";
     const name = component.name || component.title || "this option";
@@ -394,15 +421,33 @@
   }
 
   function detailsFor(component) {
-    if (component.details && typeof component.details === "object") return component.details;
-    return {
+    const specializationCount = publishedCount(
+      component, "specialization_count", "num_specializations", "specializations"
+    );
+    const programsCount = publishedCount(component, "program_count", "num_programs", "programs");
+    const keyDetails = [
+      { label: "Fee", value: component.fee || component.total_fee || component.starting_fee },
+      { label: "Duration", value: component.duration },
+      specializationCount || specializationCount === 0
+        ? { label: "Specializations", value: `${specializationCount}` }
+        : null,
+      programsCount || programsCount === 0 ? { label: "Programs", value: `${programsCount}` } : null,
+      { label: "Learning mode", value: component.learning_mode || component.mode },
+      { label: "EMI", value: component.emi || component.emi_amount },
+      { label: "Established", value: component.established_year },
+      { label: "Career outcome", value: firstCareer(component) },
+    ].filter((item) => item && item.value !== null && item.value !== undefined && String(item.value).trim());
+    const fallback = {
       description: component.description || component.summary,
       accreditations: component.accreditations || component.highlights,
+      key_details: keyDetails,
       admission_steps: component.admission_steps,
       reviews: component.reviews,
       faqs: component.faqs,
       programs: component.programs,
     };
+    if (!component.details || typeof component.details !== "object" || Array.isArray(component.details)) return fallback;
+    return { ...fallback, ...component.details, key_details: component.details.key_details || keyDetails };
   }
 
   function hasDetails(component) {
@@ -410,7 +455,7 @@
     return Object.values(details).some((value) => Array.isArray(value) ? value.length : Boolean(value));
   }
 
-  function cardActions(component, detailsLabel = "View details") {
+  function cardActions(component, detailsLabel = "Details") {
     const actions = element("div", "db-widget__card-actions");
     const details = createButton(detailsLabel, "db-widget__card-button db-widget__card-action--primary", () => {
       if (hasDetails(component)) openDetails(component);
@@ -437,17 +482,16 @@
     const ugc = component.ugc_status || findFact(component, ["ugc", "approval"]);
     const naacRaw = component.naac_grade || findFact(component, ["naac"]);
     const naac = naacRaw && !String(naacRaw).toLowerCase().includes("naac") ? `NAAC ${naacRaw}` : naacRaw;
-    const established = component.established_year || findFact(component, ["established"]);
-    const trust = trustRow([ugc, naac, established && `Est. ${established}`]);
+    const trust = trustRow([ugc, naac]);
     if (trust) card.appendChild(trust);
 
-    const programsCount = component.program_count || component.num_programs || (component.programs || []).length;
-    const stats = statPills([
-      { label: "From", value: component.starting_fee || findFact(component, ["starting fee", "fee"]) },
-      { label: "Programs", value: programsCount ? `${programsCount}` : "" },
+    const programsCount = publishedCount(component, "program_count", "num_programs", "programs");
+    const metadata = compactMetadata([
+      { label: "Starting fee", value: compactFee(component.starting_fee || findFact(component, ["starting fee", "fee"]), "From ") },
+      { label: "Programs", value: programsCount || programsCount === 0 ? `${programsCount} Programs` : "" },
       { label: "Mode", value: component.learning_mode || component.mode || findFact(component, ["learning mode", "mode"]) },
     ]);
-    if (stats.childElementCount) card.appendChild(stats);
+    if (metadata.childElementCount) card.appendChild(metadata);
     card.appendChild(cardActions(component));
     return card;
   }
@@ -470,9 +514,9 @@
     const card = element("article", "db-widget__card db-widget__program-card");
     const isSpecialization = component.kind === "specialization" || component.type === "specialization_card";
     const provider = component.university_name || "";
-    card.appendChild(element("span", "db-widget__eyebrow", isSpecialization ? "Specialization" : provider || "Program"));
-    const heading = provider && isSpecialization
-      ? `${provider} ${component.category ? String(component.category).toUpperCase() : ""} in ${component.name}`.replace(/\s+/g, " ").trim()
+    card.appendChild(element("span", "db-widget__eyebrow", provider || (isSpecialization ? "Specialization" : "Program")));
+    const heading = isSpecialization && component.category
+      ? `${String(component.category).toUpperCase()} in ${component.name}`
       : component.name;
     card.appendChild(element("h3", "", heading));
 
@@ -482,22 +526,20 @@
     const trust = trustRow([ugc, naac]);
     if (trust) card.appendChild(trust);
 
-    const specializationCount = component.specialization_count || component.num_specializations || (component.specializations || []).length;
-    const stats = statPills([
-      { label: "Fee", value: component.fee || component.total_fee },
+    const specializationCount = publishedCount(
+      component, "specialization_count", "num_specializations", "specializations"
+    );
+    const metadata = compactMetadata([
+      { label: "Fee", value: compactFee(component.fee || component.total_fee) },
       { label: "Duration", value: component.duration },
       {
         label: isSpecialization ? "Mode" : "Specializations",
-        value: isSpecialization ? component.mode : specializationCount ? `${specializationCount}` : "",
+        value: isSpecialization
+          ? component.mode
+          : specializationCount || specializationCount === 0 ? `${specializationCount} Specs` : "",
       },
     ]);
-    if (stats.childElementCount) card.appendChild(stats);
-    const emi = component.emi || component.emi_amount;
-    if (emi) card.appendChild(element("p", "db-widget__emi-line", String(emi)));
-    const career = firstCareer(component);
-    if (isSpecialization && career) {
-      card.appendChild(element("p", "db-widget__career-line", `💼 ${career}`));
-    }
+    if (metadata.childElementCount) card.appendChild(metadata);
     card.appendChild(cardActions(component));
     return card;
   }
@@ -1142,9 +1184,11 @@
       state.messages.scrollTop = state.messages.scrollHeight;
     }
     state.typing.hidden = !show;
+    if (state.messages) state.messages.setAttribute("aria-busy", String(show));
     if (show && autoHideMs > 0) {
       state.typingTimer = window.setTimeout(() => {
         state.typing.hidden = true;
+        if (state.messages) state.messages.setAttribute("aria-busy", "false");
         state.typingTimer = null;
       }, autoHideMs);
     }
@@ -1407,9 +1451,11 @@
           const isHidden = secondaryGrid.style.display === "none";
           secondaryGrid.style.display = isHidden ? "grid" : "none";
           toggle.textContent = isHidden ? "Less" : "More";
+          toggle.setAttribute("aria-expanded", String(isHidden));
           toggle.classList.toggle("db-widget__more-toggle--less", !isHidden);
         }
       );
+      toggle.setAttribute("aria-expanded", "false");
       state.starterGrid.appendChild(toggle);
     }
   }
@@ -1530,6 +1576,13 @@
     state.overlay.className = "db-widget__overlay";
   }
 
+  function pickerTone(value) {
+    const hash = Array.from(String(value || "")).reduce((total, character) => {
+      return ((total * 31) + character.charCodeAt(0)) >>> 0;
+    }, 0);
+    return `${hash % 6}`;
+  }
+
   function pickerRow(item, kind, popular = false, options = {}) {
     const displayName = options.display === "university"
       ? item.university_name || item.name
@@ -1545,6 +1598,7 @@
       }
       selectGuidedEntity(item, displayName);
     });
+    row.dataset.tone = pickerTone(displayName);
     row.appendChild(element("span", "db-widget__picker-monogram", initials(displayName)));
     const copy = element("span", "db-widget__picker-copy");
     copy.appendChild(element("span", "db-widget__picker-name", displayName));
@@ -1575,17 +1629,17 @@
       container.appendChild(element("p", "db-widget__picker-empty", "No matching option."));
       return;
     }
-    const groups = new Map();
-    filtered.sort((a, b) => a.name.localeCompare(b.name)).forEach((item) => {
-      const displayName = options.display === "university" ? item.university_name || item.name : item.name;
-      const letter = (displayName[0] || "#").toUpperCase();
-      if (!groups.has(letter)) groups.set(letter, []);
-      groups.get(letter).push(item);
-    });
-    groups.forEach((items, letter) => {
-      container.appendChild(element("h3", "db-widget__picker-letter", letter));
-      items.forEach((item) => container.appendChild(pickerRow(item, kind, false, options)));
-    });
+    const allSection = element("section", "db-widget__picker-section db-widget__picker-section--all");
+    const sectionLabel = normalizedQuery ? `${filtered.length} Results` : "All";
+    allSection.appendChild(element("h3", "db-widget__picker-section-title", sectionLabel));
+    const list = element("div", "db-widget__picker-results");
+    filtered.sort((a, b) => {
+      const aName = options.display === "university" ? a.university_name || a.name : a.name;
+      const bName = options.display === "university" ? b.university_name || b.name : b.name;
+      return aName.localeCompare(bName);
+    }).forEach((item) => list.appendChild(pickerRow(item, kind, false, options)));
+    allSection.appendChild(list);
+    container.appendChild(allSection);
   }
 
   async function openPicker(kind, onSelectOrOptions = null) {
@@ -1619,6 +1673,9 @@
     window.setTimeout(() => search.focus(), 0);
     try {
       const data = await loadGuideCatalog(kind, options.filters || {});
+      const searchableLabel = options.display === "university" ? "universities" : label;
+      search.placeholder = `Search ${data.items.length} ${searchableLabel}…`;
+      search.setAttribute("aria-label", `Search ${searchableLabel}`);
       renderPickerResults(content, data, kind, "", options);
       search.addEventListener("input", () => renderPickerResults(content, data, kind, search.value, options));
     } catch (error) {
@@ -1872,6 +1929,7 @@
     const detailBody = element("div", "db-widget__detail-body db-widget__details-body");
     const details = detailsFor(component);
     detailSection(detailBody, "Overview", details.description || details.hero_description);
+    detailSection(detailBody, "Key details", details.key_details);
     detailSection(detailBody, "Accreditations", details.accreditations);
     detailSection(detailBody, "Admission steps", details.admission_steps);
     detailSection(detailBody, "Student reviews", details.reviews);
@@ -2143,6 +2201,8 @@
     const messages = element("div", "db-widget__messages");
     messages.setAttribute("role", "log");
     messages.setAttribute("aria-live", "polite");
+    messages.setAttribute("aria-relevant", "additions text");
+    messages.setAttribute("aria-busy", "false");
     state.messages = messages;
 
     const contextBar = element("div", "db-widget__context-bar db-widget__sticky-context");
@@ -2236,6 +2296,8 @@
     overlay.setAttribute("aria-modal", "true");
     const overlayHeader = element("header", "db-widget__picker-header db-widget__detail-header");
     const overlayTitle = element("h2", "db-widget__picker-title db-widget__detail-title");
+    overlayTitle.id = `${hostId}-overlay-title`;
+    overlay.setAttribute("aria-labelledby", overlayTitle.id);
     const overlayClose = createButton("×", "db-widget__picker-close db-widget__detail-close", closeOverlay);
     overlayClose.setAttribute("aria-label", "Close panel");
     overlayHeader.append(overlayTitle, overlayClose);

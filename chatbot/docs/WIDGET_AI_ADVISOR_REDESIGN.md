@@ -56,6 +56,27 @@ Widget shell
 - Starter choices collapse to one column below 360 px.
 - Follow-up chips wrap instead of hiding important options off-screen.
 
+## Compact recommendation cards
+
+- Recommendation cards use a 9–10 px inset, 12 px radius, hairline border, and restrained shadow.
+- University/program naming remains first, followed by accreditation and one inline metadata row.
+- Fee, duration, and specialization/program counts render as text separated by bullets; recommendation
+  cards no longer contain nested metric boxes.
+- Published EMI, career, establishment, and other available lower-priority facts move into the
+  `Details` view instead of increasing every card's height.
+- `Details` and `+ Compare` are 28 px compact actions rather than full-width button blocks.
+- Recommendation lists use a 7 px gap so two complete results and part of the next can remain visible
+  alongside the advisor's message on typical mobile viewports.
+
+## Catalog picker
+
+- The picker separates its sheet header, search control, optional published `Popular` results, and the
+  complete catalog with explicit section labels.
+- Search displays the current catalog count and changes the list heading to a live result count.
+- Results use single-column rows, quiet dividers, deterministic monogram tones, and no heavy alphabet bars.
+- Below 560 px the picker occupies the full viewport, includes a sheet handle and safe-area spacing, and
+  hides the separate launcher while the widget is open.
+
 ## Interaction states
 
 - **Hover:** neutral actions move to orange-soft; high-intent actions become solid orange.
@@ -74,5 +95,7 @@ Widget shell
 - The context card separates institution, program, and trust metadata so scope is scannable.
 - Orange is reserved for AI accents and conversion moments, improving hierarchy and trust.
 - Quick actions keep common next steps tappable and prevent unnecessary keyboard use.
+- Progressive disclosure keeps recommendations scannable while preserving published decision data in
+  the detail surface.
 - Apply actions appear after high-value answers; brochure actions are intentionally omitted until
   a real brochure URL or API field exists.

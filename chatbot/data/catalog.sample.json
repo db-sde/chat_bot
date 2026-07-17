@@ -323,6 +323,50 @@
       "eligibility_summary": "Bachelor's degree in any discipline"
     },
     {
+      "id": "spec-nmims-bba-marketing",
+      "slug": "nmims-bba-marketing",
+      "category": "bba",
+      "specialization_name": "Marketing Management",
+      "aliases": [
+        "marketing"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "NMIMS BBA Marketing Management",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
+      "spec_name": "Marketing Management",
+      "university_name": "NMIMS",
+      "linked_university": "uni-nmims",
+      "linked_course": "course-nmims-bba",
+      "duration": "3 Years",
+      "mode": "Online",
+      "total_fee": "INR 1,66,000",
+      "eligibility_summary": "10+2 in any stream"
+    },
+    {
+      "id": "spec-nmims-bba-finance",
+      "slug": "nmims-bba-finance",
+      "category": "bba",
+      "specialization_name": "Finance Management",
+      "aliases": [
+        "finance"
+      ],
+      "_meta": {
+        "page_type": "specialization",
+        "document_title": "NMIMS BBA Finance Management",
+        "generated_by": "DegreeBaba Content Publisher"
+      },
+      "spec_name": "Finance Management",
+      "university_name": "NMIMS",
+      "linked_university": "uni-nmims",
+      "linked_course": "course-nmims-bba",
+      "duration": "3 Years",
+      "mode": "Online",
+      "total_fee": "INR 1,66,000",
+      "eligibility_summary": "10+2 in any stream"
+    },
+    {
       "id": "course-amity-bca",
       "slug": "amity-online-bca",
       "category": "bca",

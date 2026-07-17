@@ -183,3 +183,71 @@ def test_premium_admissions_ui_contracts_are_present() -> None:
     assert "db-widget__context-meta-item" in styles
     assert "db-widget__ai-accent" in styles
     assert "@media (max-width: 560px)" in styles
+
+
+def test_recommendation_cards_use_compact_metadata_and_progressive_details() -> None:
+    source = _source("widget.js")
+    styles = _source("widget.css")
+    university_card = _function_source(source, "renderUniversityCard")
+    program_card = _function_source(source, "renderProgramCard")
+    card_actions = _function_source(source, "cardActions")
+    open_details = _function_source(source, "openDetails")
+
+    for renderer in (university_card, program_card):
+        assert "compactMetadata(" in renderer
+        assert "statPills(" not in renderer
+
+    assert "db-widget__emi-line" not in program_card
+
+    assert 'detailsLabel = "Details"' in card_actions
+    assert '"+ Compare"' in card_actions
+    assert 'detailSection(detailBody, "Key details", details.key_details)' in open_details
+    assert ".db-widget__compact-meta" in styles
+    assert ".db-widget__compact-meta-item:not(:last-child)::after" in styles
+    assert "min-height: 28px" in styles
+    assert "width: auto" in styles
+
+
+def test_catalog_picker_has_clear_sections_and_mobile_sheet_containment() -> None:
+    source = _source("widget.js")
+    styles = _source("widget.css")
+    results = _function_source(source, "renderPickerResults")
+    open_picker = _function_source(source, "openPicker")
+
+    assert '"⭐ Popular"' in results
+    assert '"db-widget__picker-section db-widget__picker-section--all"' in results
+    assert 'normalizedQuery ? `${filtered.length} Results` : "All"' in results
+    assert "db-widget__picker-letter" not in results
+    assert "data.items.length" in open_picker
+    assert '.db-widget__launcher--open' in styles
+    assert "grid-template-columns: minmax(0, 1fr)" in styles
+    assert ".db-widget__picker-search:focus" in styles
+    assert ".db-widget__picker-overlay .db-widget__picker-header::before" in styles
+
+
+def test_widget_uses_degreebaba_tokens_and_exposes_accessible_ui_state() -> None:
+    source = _source("widget.js")
+    styles = _source("widget.css")
+    show_typing = _function_source(source, "showTyping")
+    starter_bank = _function_source(source, "renderStarterBank")
+    build_widget = _function_source(source, "buildWidget")
+
+    canonical_tokens = {
+        "--color-navy: #0e1f3d",
+        "--color-orange: #e84010",
+        "--color-bg: #f7f8fa",
+        "--color-border: #e5e7eb",
+        "--font-sans: \"DM Sans\"",
+        "--radius-lg: 12px",
+        "--shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06)",
+        "--shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.12)",
+    }
+    for token in canonical_tokens:
+        assert token in styles
+
+    assert "linear-gradient" not in styles
+    assert "backdrop-filter: blur" not in styles
+    assert '"#E84010"' in source
+    assert 'setAttribute("aria-busy"' in show_typing
+    assert 'setAttribute("aria-expanded"' in starter_bank
+    assert 'setAttribute("aria-labelledby"' in build_widget
