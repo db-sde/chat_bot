@@ -46,7 +46,7 @@
   widgetNamespace.loading[siteKey] = true;
 
   const GUIDED_THINKING_MS = 650;
-  const GUIDED_VISIBLE_ACTIONS = 3;
+  const GUIDED_VISIBLE_ACTIONS = 4;
   const NavigationStep = Object.freeze({
     HOMEPAGE: "HOMEPAGE",
     UNIVERSITY_PICKER: "UNIVERSITY_PICKER",
@@ -183,6 +183,7 @@
     typingTimer: null,
     messages: null,
     input: null,
+    send: null,
     panel: null,
     launcher: null,
     contextBar: null,
@@ -486,8 +487,8 @@
       image.referrerPolicy = "no-referrer";
       avatar.appendChild(image);
     } else {
-      avatar.innerHTML =
-        '<svg viewBox="0 0 24 24" aria-hidden="true" width="24" height="24"><path d="M12 3a7 7 0 0 0-7 7v1.2A3 3 0 0 0 3 14v2a3 3 0 0 0 3 3h1.2l1.1 1.3a1 1 0 0 0 .8.4h5.8a1 1 0 0 0 .8-.4l1.1-1.3H18a3 3 0 0 0 3-3v-2a3 3 0 0 0-2-2.8V10a7 7 0 0 0-7-7Zm-3 8.5a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5Zm6 0a1.25 1.25 0 1 1 0 2.5 1.25 1.25 0 0 1 0-2.5ZM8.7 16h6.6a3.7 3.7 0 0 1-6.6 0Z"/></svg>';
+      avatar.textContent = "DB";
+      avatar.style.fontWeight = "700";
     }
     return avatar;
   }
@@ -920,7 +921,7 @@
         if (button) row.appendChild(button);
       });
       emitChipShown(visible);
-      const nextOffset = offset === 0 ? GUIDED_VISIBLE_ACTIONS : offset + 2;
+      const nextOffset = offset === 0 ? 3 : offset + 2;
       if (nextOffset < available.length) {
         row.appendChild(createButton("More", "db-widget__more-toggle", () => renderPage(nextOffset)));
       }
@@ -951,8 +952,10 @@
   function anchorBotMessage(row) {
     window.requestAnimationFrame(() => {
       if (!state.messages || !row || !row.isConnected) return;
-      const contextHeight = state.contextBar && !state.contextBar.hidden ? state.contextBar.offsetHeight : 0;
-      const top = Math.max(0, row.offsetTop - contextHeight - 8);
+      const messageBounds = state.messages.getBoundingClientRect();
+      const rowBounds = row.getBoundingClientRect();
+      const rowTopInStream = rowBounds.top - messageBounds.top + state.messages.scrollTop;
+      const top = Math.max(0, rowTopInStream - 8);
       if (typeof state.messages.scrollTo === "function") {
         state.messages.scrollTo({ top, behavior: "smooth" });
       } else {
@@ -1282,24 +1285,31 @@
   function presentGuidedCard(message, card, title, actions = []) {
     deactivateGuidedActions();
     collapseGuidedCards();
-    const view = createMessage("bot", message);
+    const isRichCard = card.classList.contains("db-widget__rich-card-stack");
+    const view = createMessage("bot", isRichCard ? "" : message);
+    if (isRichCard) view.bubble.remove();
     const stack = element("div", "db-widget__component-stack");
-    const disclosure = element("details", "db-widget__collapsed-answer");
-    disclosure.dataset.guidePrimary = "true";
-    disclosure.open = true;
-    disclosure.appendChild(element(
-      "summary",
-      "db-widget__collapsed-answer-summary",
-      title || card.querySelector("h3") && card.querySelector("h3").textContent || "Information",
-    ));
-    disclosure.appendChild(card);
-    disclosure.addEventListener("toggle", () => {
-      if (!disclosure.open) return;
-      state.messages.querySelectorAll("details.db-widget__collapsed-answer[open]").forEach((candidate) => {
-        if (candidate !== disclosure) candidate.open = false;
+    if (isRichCard) {
+      card.dataset.guidePrimary = "true";
+      stack.appendChild(card);
+    } else {
+      const disclosure = element("details", "db-widget__collapsed-answer");
+      disclosure.dataset.guidePrimary = "true";
+      disclosure.open = true;
+      disclosure.appendChild(element(
+        "summary",
+        "db-widget__collapsed-answer-summary",
+        title || card.querySelector("h3") && card.querySelector("h3").textContent || "Information",
+      ));
+      disclosure.appendChild(card);
+      disclosure.addEventListener("toggle", () => {
+        if (!disclosure.open) return;
+        state.messages.querySelectorAll("details.db-widget__collapsed-answer[open]").forEach((candidate) => {
+          if (candidate !== disclosure) candidate.open = false;
+        });
       });
-    });
-    stack.appendChild(disclosure);
+      stack.appendChild(disclosure);
+    }
     const actionRow = renderGuidedActions(actions);
     if (actionRow.childElementCount) stack.appendChild(actionRow);
     view.content.appendChild(stack);
@@ -1331,12 +1341,329 @@
     card.appendChild(section);
   }
 
+  const RICH_CARD_ICONS = Object.freeze({
+    checkWhite: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
+    checkGreen: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
+    dollar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E84010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>',
+    chevron: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>',
+  });
+
+  function richCardIcon(className, svg) {
+    const icon = element("span", className);
+    icon.innerHTML = svg;
+    return icon;
+  }
+
+  function publishedValue(value, emptyCopy = "Not published") {
+    const text = String(value || "").trim();
+    return text || emptyCopy;
+  }
+
+  function displayCurrency(value, emptyCopy = "Not published") {
+    return publishedValue(value, emptyCopy).replace(/\bINR\s*/gi, "₹");
+  }
+
+  function renderFeesCard(data, entity) {
+    const card = element("article", "db-widget__fees");
+    const hero = element("div", "db-widget__fees-hero");
+    const total = element("div");
+    total.append(
+      element("div", "db-widget__fees-total-label", "Total programme fee"),
+      element("div", "db-widget__fees-total-value", displayCurrency(data.total_fee || entity.fee)),
+    );
+    const semester = element("div");
+    semester.append(
+      element("div", "db-widget__fees-sem-label", "Per semester"),
+      element("div", "db-widget__fees-sem-value", displayCurrency(data.semester_fee)),
+    );
+    hero.append(total, semester);
+    card.appendChild(hero);
+
+    const plans = Array.isArray(data.plans) ? data.plans.filter(Boolean) : [];
+    if (plans.length) {
+      const planList = element("div", "db-widget__fees-plans");
+      plans.forEach((plan) => {
+        const row = element("div", "db-widget__fees-plan-row");
+        const copy = element("div");
+        copy.appendChild(element(
+          "div",
+          "db-widget__fees-plan-label",
+          publishedValue(plan.name || plan.label || plan.title, "Payment plan"),
+        ));
+        if (plan.total && plan.total !== plan.amount) {
+          copy.appendChild(element("div", "db-widget__fees-plan-note", `Total ${displayCurrency(plan.total)}`));
+        }
+        row.append(
+          copy,
+          element("div", "db-widget__fees-plan-value", displayCurrency(plan.amount || plan.value || plan.total)),
+        );
+        planList.appendChild(row);
+      });
+      card.appendChild(planList);
+    } else {
+      card.appendChild(element(
+        "p",
+        "db-widget__rich-card-empty",
+        "Payment-plan details haven't been published yet.",
+      ));
+    }
+    const emi = String(data.emi || entity.emi || "").trim();
+    if (emi) {
+      const note = element("div", "db-widget__fees-emi");
+      note.append(richCardIcon("", RICH_CARD_ICONS.dollar), element("span", "", displayCurrency(emi)));
+      card.appendChild(note);
+    }
+    return card;
+  }
+
+  function renderEligibilityCard(data, entity) {
+    const card = element("article", "db-widget__elig");
+    const summary = String(data.summary || entity.eligibility || "").trim();
+    const hero = element("div", "db-widget__elig-hero");
+    hero.append(
+      richCardIcon("db-widget__elig-check", RICH_CARD_ICONS.checkWhite),
+      (() => {
+        const copy = element("div");
+        copy.append(
+          element("div", "db-widget__elig-verdict", "Published requirements"),
+          element("div", "db-widget__elig-sub", summary || "Review the criteria below"),
+        );
+        return copy;
+      })(),
+    );
+    card.appendChild(hero);
+    const requirements = Array.isArray(data.requirements) ? data.requirements.filter(Boolean) : [];
+    if (requirements.length) {
+      const list = element("div", "db-widget__elig-list");
+      requirements.forEach((requirement) => {
+        const row = element("div", "db-widget__elig-row");
+        row.append(
+          richCardIcon("db-widget__elig-icon db-widget__elig-icon--ok", RICH_CARD_ICONS.checkGreen),
+          element("div", "db-widget__elig-req-title", typeof requirement === "object"
+            ? publishedValue(requirement.title || requirement.label || requirement.text)
+            : requirement),
+        );
+        list.appendChild(row);
+      });
+      card.appendChild(list);
+    } else {
+      card.appendChild(element(
+        "p",
+        "db-widget__rich-card-empty",
+        summary || "A qualification checklist hasn't been published yet.",
+      ));
+    }
+    return card;
+  }
+
+  function renderCareerCard(data, entity) {
+    const card = element("article", "db-widget__career");
+    const averageSalary = String(data.average_salary || entity.average_salary || "").trim();
+    if (averageSalary) {
+      const hero = element("div", "db-widget__career-hero");
+      hero.append(
+        element("div", "db-widget__career-label", "Average starting salary"),
+        element("div", "db-widget__career-avg", averageSalary),
+      );
+      card.appendChild(hero);
+    }
+    const roles = Array.isArray(data.job_roles) ? data.job_roles.filter(Boolean) : [];
+    const rolesSection = element("div", "db-widget__career-roles");
+    rolesSection.appendChild(element("div", "db-widget__career-roles-label", "Roles you can target"));
+    if (roles.length) {
+      roles.forEach((role) => {
+        const row = element("div", "db-widget__career-role-row");
+        const roleTitle = typeof role === "object" ? role.title || role.name || role.label : role;
+        const salary = typeof role === "object" ? role.salary || role.value : "";
+        row.appendChild(element("div", "db-widget__career-role-title", publishedValue(roleTitle)));
+        if (salary) row.appendChild(element("div", "db-widget__career-role-salary", salary));
+        rolesSection.appendChild(row);
+      });
+    } else {
+      rolesSection.appendChild(element("p", "db-widget__rich-card-empty", "Job roles haven't been published yet."));
+    }
+    card.appendChild(rolesSection);
+    const recruiters = Array.isArray(data.recruiters) ? data.recruiters.filter(Boolean) : [];
+    if (recruiters.length) {
+      const recruiterSection = element("div", "db-widget__career-recruiters");
+      recruiterSection.appendChild(element("div", "db-widget__career-recruiters-label", "Top recruiters"));
+      const tags = element("div", "db-widget__recruiter-tags");
+      recruiters.forEach((recruiter) => tags.appendChild(element(
+        "span",
+        "db-widget__recruiter-tag",
+        typeof recruiter === "object" ? publishedValue(recruiter.name || recruiter.label) : recruiter,
+      )));
+      recruiterSection.appendChild(tags);
+      card.appendChild(recruiterSection);
+    }
+    return card;
+  }
+
+  function reviewPercentage(value) {
+    const match = String(value || "").trim().match(/^(\d+(?:\.\d+)?)%$/);
+    if (!match) return 0;
+    return Math.max(0, Math.min(100, Number(match[1])));
+  }
+
+  function renderReviewsCard(data) {
+    const card = element("article", "db-widget__reviews");
+    const rating = String(data.rating || "").trim();
+    const breakdown = Array.isArray(data.breakdown) ? data.breakdown.filter(Boolean) : [];
+    if (rating || breakdown.length) {
+      const summary = element("div", "db-widget__reviews-summary");
+      const score = element("div");
+      score.appendChild(element("div", "db-widget__rating-big", rating || "—"));
+      const numericRating = Number.parseFloat(rating);
+      if (Number.isFinite(numericRating)) {
+        const filled = Math.max(0, Math.min(5, Math.round(numericRating)));
+        score.appendChild(element("div", "db-widget__rating-stars", `${"★".repeat(filled)}${"☆".repeat(5 - filled)}`));
+      }
+      summary.appendChild(score);
+      if (breakdown.length) {
+        const bars = element("div", "db-widget__rating-bars");
+        breakdown.forEach((item) => {
+          const row = element("div", "db-widget__bar-row");
+          const label = typeof item === "object" ? item.label || item.name || "" : "";
+          const value = typeof item === "object" ? item.value || item.score || "" : item;
+          const track = element("div", "db-widget__bar-track");
+          const fill = element("div", "db-widget__bar-fill");
+          fill.style.width = `${reviewPercentage(value)}%`;
+          track.appendChild(fill);
+          row.append(element("span", "db-widget__bar-label", label), track);
+          bars.appendChild(row);
+        });
+        summary.appendChild(bars);
+      }
+      card.appendChild(summary);
+    }
+    const testimonials = Array.isArray(data.testimonials) ? data.testimonials.filter(Boolean) : [];
+    if (testimonials.length) {
+      const quotes = element("div", "db-widget__reviews-quotes");
+      testimonials.forEach((testimonial) => {
+        const quote = element("blockquote", "db-widget__quote");
+        const text = typeof testimonial === "object" ? testimonial.text || testimonial.description : testimonial;
+        quote.appendChild(element("p", "db-widget__quote-text", publishedValue(text)));
+        if (testimonial && typeof testimonial === "object") {
+          const attribution = [testimonial.reviewer_name, testimonial.reviewer_label].filter(Boolean).join(" · ");
+          if (attribution) quote.appendChild(element("footer", "db-widget__quote-name", attribution));
+        }
+        quotes.appendChild(quote);
+      });
+      card.appendChild(quotes);
+    }
+    if (!rating && !breakdown.length && !testimonials.length) {
+      card.appendChild(element("p", "db-widget__rich-card-empty", "Student reviews haven't been published yet."));
+    }
+    return card;
+  }
+
+  function renderSyllabusCard(data, entity) {
+    const card = element("article", "db-widget__syllabus");
+    const semesters = Array.isArray(data.semesters) ? data.semesters.filter(Boolean) : [];
+    const head = element("div", "db-widget__syllabus-head");
+    head.append(
+      element("div", "db-widget__syllabus-title", `${entity.name || entity.category || "Program"} · Syllabus`),
+      element("div", "db-widget__syllabus-meta", semesters.length ? `${semesters.length} semesters` : "Published curriculum"),
+    );
+    card.appendChild(head);
+    if (!semesters.length) {
+      card.appendChild(element("p", "db-widget__rich-card-empty", "A semester-wise syllabus hasn't been published yet."));
+      return card;
+    }
+    semesters.forEach((semester, index) => {
+      const details = element("details", "db-widget__sem-item");
+      if (index === 0) details.open = true;
+      const summary = element("summary", "db-widget__sem-toggle");
+      const label = element("span", "db-widget__sem-toggle-inner");
+      label.append(
+        element("span", "db-widget__sem-num", String(index + 1)),
+        element("span", "db-widget__sem-title", semester.title || `Semester ${index + 1}`),
+      );
+      summary.append(label, richCardIcon("db-widget__sem-chevron", RICH_CARD_ICONS.chevron));
+      details.appendChild(summary);
+      const subjects = element("div", "db-widget__sem-subs");
+      (semester.items || []).filter(Boolean).forEach((subject) => {
+        const item = element("div", "db-widget__sem-sub");
+        item.append(element("span", "db-widget__sub-dot"), document.createTextNode(String(subject)));
+        subjects.appendChild(item);
+      });
+      details.appendChild(subjects);
+      card.appendChild(details);
+    });
+    return card;
+  }
+
+  function renderInlineLeadCard(kind) {
+    const card = element("section", "db-widget__inline-lead");
+    card.appendChild(element(
+      "p",
+      "db-widget__inline-lead-text",
+      kind === "fees"
+        ? "Want me to check today's fee offer and seat availability? Just your number — no spam."
+        : "Want a counsellor to verify your eligibility? Share your number for one callback.",
+    ));
+    const form = element("form", "db-widget__inline-lead-form");
+    const phoneWrapper = element("label", "db-widget__inline-phone-wrapper");
+    phoneWrapper.appendChild(element("span", "db-widget__inline-phone-prefix", "+91"));
+    const phone = document.createElement("input");
+    phone.className = "db-widget__inline-phone-input";
+    phone.type = "tel";
+    phone.inputMode = "numeric";
+    phone.autocomplete = "tel";
+    phone.placeholder = "Your number";
+    phone.setAttribute("aria-label", "10-digit mobile number");
+    phoneWrapper.appendChild(phone);
+    const submit = element("button", "db-widget__inline-lead-send", "Send");
+    submit.type = "submit";
+    const status = element("p", "db-widget__inline-lead-note", "No spam. One call about your admission query.");
+    form.append(phoneWrapper, submit);
+    card.append(form, status);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const normalized = phone.value.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
+      if (!/^[6-9]\d{9}$/.test(normalized)) {
+        phone.setAttribute("aria-invalid", "true");
+        status.textContent = "Please enter a valid 10-digit mobile number.";
+        return;
+      }
+      phone.removeAttribute("aria-invalid");
+      submit.disabled = true;
+      status.textContent = "Saving your request…";
+      emitAnalytics("counsellor_clicked", null);
+      try {
+        const response = await fetchJson("/api/widget/lead", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            session_id: state.sessionId || null,
+            phone: normalized,
+            source: `widget_${kind}`,
+          }),
+        });
+        if (response.session_id) {
+          state.sessionId = response.session_id;
+          rememberSessionId(state.sessionId);
+        }
+        card.replaceChildren();
+        const done = element("div", "db-widget__inline-lead-done");
+        done.append(
+          richCardIcon("db-widget__inline-lead-done-icon", RICH_CARD_ICONS.checkGreen),
+          element("p", "db-widget__inline-lead-done-text", response.message || "Thanks — a DegreeBaba counsellor can contact you shortly."),
+        );
+        card.appendChild(done);
+      } catch (error) {
+        submit.disabled = false;
+        status.textContent = error.message || "We couldn't save that request. Please try again.";
+      }
+    });
+    return card;
+  }
+
   function guidedInfoCard(kind) {
     const bundle = state.guideBundle || {};
     const info = bundle.info || {};
     const entity = bundle.entity || {};
     const data = info[kind] || {};
-    const card = element("article", `db-widget__card db-widget__info-card db-widget__info-card--${kind}`);
     const titles = {
       fees: ["Fees", "Fees & EMI"],
       eligibility: ["Admissions", "Eligibility"],
@@ -1346,52 +1673,23 @@
       accreditations: ["Recognition", "Accreditations"],
     };
     const [eyebrow, title] = titles[kind] || ["Details", "Published information"];
-    card.append(element("span", "db-widget__eyebrow", eyebrow), element("h3", "", title));
+    const richRenderers = {
+      fees: () => renderFeesCard(data, entity),
+      eligibility: () => renderEligibilityCard(data, entity),
+      career: () => renderCareerCard(data, entity),
+      syllabus: () => renderSyllabusCard(data, entity),
+      reviews: () => renderReviewsCard(data),
+    };
+    if (richRenderers[kind]) {
+      const stack = element("div", "db-widget__rich-card-stack");
+      stack.appendChild(richRenderers[kind]());
+      if (["fees", "eligibility"].includes(kind)) stack.appendChild(renderInlineLeadCard(kind));
+      return { card: stack, title };
+    }
 
-    if (kind === "fees") {
-      const facts = statPills([
-        { label: "Total Fee", value: data.total_fee || entity.fee },
-        { label: "Semester Fee", value: data.semester_fee },
-        { label: "EMI", value: data.emi || entity.emi },
-      ]);
-      if (facts.childElementCount) card.appendChild(facts);
-      else card.appendChild(element("p", "db-widget__state-copy", "Confirmed fee details haven't been published yet."));
-      guideSection(card, "EMI plans", data.plans, "EMI plans haven't been published yet.");
-    } else if (kind === "eligibility") {
-      const summary = data.summary || entity.eligibility;
-      card.appendChild(element(
-        "p",
-        summary ? "db-widget__card-summary" : "db-widget__state-copy",
-        summary || "Confirmed eligibility requirements haven't been published yet.",
-      ));
-      guideSection(card, "Qualification checklist", data.requirements, "A qualification checklist hasn't been published yet.");
-    } else if (kind === "career") {
-      const facts = statPills([{ label: "Average Salary", value: data.average_salary || entity.average_salary }]);
-      if (facts.childElementCount) card.appendChild(facts);
-      else card.appendChild(element("p", "db-widget__state-copy", "Average salary information hasn't been published yet."));
-      guideSection(card, "Job roles", data.job_roles, "Job roles haven't been published yet.");
-      guideSection(card, "Recruiters", data.recruiters, "Recruiter information hasn't been published yet.");
-    } else if (kind === "syllabus") {
-      const semesters = Array.isArray(data.semesters) ? data.semesters : [];
-      if (!semesters.length) {
-        card.appendChild(element("p", "db-widget__state-copy", "A semester-wise syllabus hasn't been published yet."));
-      } else {
-        semesters.forEach((semester, index) => {
-          const details = element("details", "db-widget__detail-section");
-          if (index === 0) details.open = true;
-          details.appendChild(element("summary", "", semester.title || `Semester ${index + 1}`));
-          const list = element("ul", "db-widget__message-list");
-          (semester.items || []).forEach((item) => list.appendChild(element("li", "", item)));
-          details.appendChild(list);
-          card.appendChild(details);
-        });
-      }
-    } else if (kind === "reviews") {
-      const rating = statPills([{ label: "Rating", value: data.rating ? `${data.rating} / 5` : "" }]);
-      if (rating.childElementCount) card.appendChild(rating);
-      guideSection(card, "Rating breakdown", data.breakdown, "A rating breakdown hasn't been published yet.");
-      guideSection(card, "Testimonials", data.testimonials, "Student testimonials haven't been published yet.");
-    } else if (kind === "accreditations") {
+    const card = element("article", `db-widget__card db-widget__info-card db-widget__info-card--${kind}`);
+    card.append(element("span", "db-widget__eyebrow", eyebrow), element("h3", "", title));
+    if (kind === "accreditations") {
       guideSection(card, "Published recognition", data.items, "Accreditation details haven't been published yet.");
       card.appendChild(element(
         "p",
@@ -1745,6 +2043,7 @@
     const hadActiveFlow = Boolean(state.activeFlow);
     state.lastMessage = message;
     state.input.value = "";
+    if (state.send) state.send.classList.remove("db-widget__send--active");
     if (state.starter && options.keepStarter !== true) state.starter.hidden = true;
     if (options.displayUser !== false) {
       createMessage("user", String(options.displayText || message));
@@ -1993,16 +2292,13 @@
 
     state.starterGrid.replaceChildren();
 
-    // Scroll wrapper to contain all options if they exceed max-height
-    const scrollContainer = element("div", "db-widget__starter-scroll");
     const primaryGrid = element("div", "db-widget__starter-grid");
 
     primary.forEach((action) => {
       const button = actionButton(action, "db-widget__starter-action");
       if (button) primaryGrid.appendChild(button);
     });
-    scrollContainer.appendChild(primaryGrid);
-    state.starterGrid.appendChild(scrollContainer);
+    state.starterGrid.appendChild(primaryGrid);
     emitStarterImpressions();
 
     if (secondary.length) {
@@ -2014,7 +2310,7 @@
         const button = actionButton(action, "db-widget__starter-action");
         if (button) secondaryGrid.appendChild(button);
       });
-      scrollContainer.appendChild(secondaryGrid);
+      state.starterGrid.appendChild(secondaryGrid);
 
       const toggle = createButton(
         "More",
@@ -2256,12 +2552,17 @@
     const sheet = element("section", "db-widget__picker db-widget__picker-sheet");
     sheet.style.gridTemplateRows = "auto minmax(0, 1fr)";
     const searchWrap = element("div", "db-widget__picker-search-wrap");
+    const searchField = element("div", "db-widget__picker-search-field");
+    const searchIcon = element("span", "db-widget__picker-search-icon");
+    searchIcon.setAttribute("aria-hidden", "true");
+    searchIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>';
     const search = document.createElement("input");
     search.className = "db-widget__picker-search";
     search.type = "search";
     search.placeholder = options.display === "university" ? "Search universities" : `Search ${label}`;
     search.setAttribute("aria-label", search.placeholder);
-    searchWrap.appendChild(search);
+    searchField.append(searchIcon, search);
+    searchWrap.appendChild(searchField);
     const content = element("div", "db-widget__picker-content db-widget__picker-list");
     content.appendChild(element("p", "db-widget__picker-empty", "Loading published options…"));
     sheet.append(searchWrap, content);
@@ -2810,6 +3111,9 @@
     state.launcher.setAttribute("aria-expanded", String(state.open));
     state.launcher.setAttribute("aria-label", state.open ? "Close admission advisor" : "Open admission advisor");
     state.launcher.classList.toggle("db-widget__launcher--open", state.open);
+    state.launcher.innerHTML = state.open
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg>'
+      : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5.6A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>';
     if (state.open) {
       state.input.blur();
       emitStarterImpressions();
@@ -2828,6 +3132,7 @@
     shadow.appendChild(stylesheet);
 
     const shell = element("section", "db-widget");
+    shell.dataset.position = script.dataset.position === "left" ? "left" : "right";
     shell.style.setProperty("--db-primary", config.primaryColor);
     shell.classList.toggle("db-widget--no-avatar", !config.showAvatar);
 
@@ -2842,10 +3147,10 @@
     if (config.showAvatar) identity.appendChild(createAvatar("db-widget__avatar--header"));
     const labels = element("div", "db-widget__identity-copy");
     labels.appendChild(element("strong", "db-widget__bot-name", config.botName));
-    labels.appendChild(element("span", "db-widget__bot-role", "Admissions guide"));
-    labels.appendChild(element("span", "db-widget__status", "Online"));
+    labels.appendChild(element("span", "db-widget__status", "Online · replies instantly"));
     identity.appendChild(labels);
-    const close = createButton("×", "db-widget__icon-button", () => setOpen(false));
+    const close = createButton("", "db-widget__icon-button", () => setOpen(false));
+    close.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
     close.setAttribute("aria-label", "Minimize advisor");
     header.append(identity, close);
 
@@ -2878,7 +3183,6 @@
     contextClear.setAttribute("aria-label", "Clear current university and program context");
     contextChip.append(contextCopy, contextClear);
     contextBar.appendChild(contextChip);
-    messages.appendChild(contextBar);
     state.contextBar = contextBar;
     state.contextChip = contextChip;
     state.contextLabel = contextLabel;
@@ -2891,10 +3195,9 @@
     state.welcomeView = welcome;
 
     const starter = element("section", "db-widget__starter db-widget__opening");
-    starter.appendChild(element("p", "db-widget__starter-label db-widget__opening-label", "What would you like to explore?"));
-    const starterGrid = element("div", "db-widget__starter-grid db-widget__opening-actions");
+    starter.appendChild(element("p", "db-widget__starter-label db-widget__opening-label", "Or type your question below."));
+    const starterGrid = element("div", "db-widget__opening-actions");
     starter.appendChild(starterGrid);
-    starter.appendChild(element("p", "db-widget__quiet-hint db-widget__starter-hint", "Or type your question."));
     messages.appendChild(starter);
     state.starter = starter;
     state.starterGrid = starterGrid;
@@ -2915,7 +3218,7 @@
     input.className = "db-widget__input";
     input.rows = 1;
     input.maxLength = 4000;
-    input.placeholder = "Ask about courses, fees, eligibility…";
+    input.placeholder = "Type your question...";
     input.setAttribute("aria-label", "Message the admission advisor");
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter" && !event.shiftKey) {
@@ -2928,12 +3231,16 @@
     send.type = "submit";
     send.setAttribute("aria-label", "Send message");
     send.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
+    input.addEventListener("input", () => {
+      send.classList.toggle("db-widget__send--active", Boolean(input.value.trim()));
+    });
     composer.append(composerInner, send);
     composer.addEventListener("submit", (event) => {
       event.preventDefault();
       sendMessage(input.value);
     });
     state.input = input;
+    state.send = send;
 
     const privacy = element("p", "db-widget__privacy", "Admissions guidance · Your choices stay in this chat");
 
@@ -2954,20 +3261,24 @@
     overlayHeader.append(overlayTitle, overlayClose);
     const overlayBody = element("div", "db-widget__overlay-body");
     overlay.append(overlayHeader, overlayBody);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay && overlay.classList.contains("db-widget__picker-overlay")) {
+        closeOverlay();
+      }
+    });
     state.overlay = overlay;
     state.overlayBody = overlayBody;
     state.overlayTitle = overlayTitle;
     state.overlayClose = overlayClose;
 
-    panel.append(header, messages, composer, privacy, compareTray, overlay);
+    panel.append(header, contextBar, messages, composer, privacy, compareTray, overlay);
 
     const launcher = element("button", "db-widget__launcher", "");
     launcher.type = "button";
     launcher.setAttribute("aria-expanded", "false");
     launcher.setAttribute("aria-controls", hostId);
     launcher.setAttribute("aria-label", "Open admission advisor");
-    launcher.innerHTML =
-      '<span class="db-widget__launcher-spark">✦</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v12H7l-3 3V4Zm4 5h8v2H8V9Z"/></svg>';
+    launcher.innerHTML = '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5.6A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>';
     launcher.addEventListener("click", () => setOpen(!state.open));
     state.launcher = launcher;
 
