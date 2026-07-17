@@ -153,6 +153,11 @@ def test_information_projection_never_fabricates_absent_publisher_data(
         "available": True,
         "items": ["UGC Entitled", "NAAC grade A+"],
     }
+    assert info["admissions"] == {
+        "available": False,
+        "steps": None,
+        "fee_note": None,
+    }
 
 
 def test_related_records_follow_catalog_links(guide_client: TestClient) -> None:

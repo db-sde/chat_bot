@@ -298,6 +298,10 @@
       "funnel_stage": "bottom",
       "follow": ["fees_emi", "apply_now", "counsellor"]
     },
+    "answer:admissions": {
+      "funnel_stage": "bottom",
+      "follow": ["eligibility", "see_fees", "apply_now"]
+    },
     "answer:comparison": {
       "funnel_stage": "bottom",
       "follow": ["roi_tool", "apply_now", "counsellor"]

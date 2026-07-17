@@ -113,6 +113,9 @@
     syllabus: "syllabus",
     validity: "online_validity",
     validity_course: "online_validity",
+    admission_process: "admissions",
+    admission_steps: "admissions",
+    admissions: "admissions",
     compare: "compare",
     compare_top: "compare",
     compare_others: "compare",
@@ -130,6 +133,7 @@
     get_syllabus: "syllabus",
     get_reviews: "reviews",
     get_approvals: "accreditations",
+    get_admission_steps: "admissions",
     compare: "compare",
     cta_apply: "lead",
     cta_callback: "lead",
@@ -1470,11 +1474,11 @@
         list.appendChild(row);
       });
       card.appendChild(list);
-    } else {
+    } else if (!summary) {
       card.appendChild(element(
         "p",
         "db-widget__rich-card-empty",
-        summary || "A qualification checklist hasn't been published yet.",
+        "A qualification checklist hasn't been published yet.",
       ));
     }
     return card;
@@ -1712,6 +1716,7 @@
       syllabus: ["Curriculum", "Syllabus"],
       reviews: ["Student voice", "Student Reviews"],
       accreditations: ["Recognition", "Accreditations"],
+      admissions: ["Next steps", "Admission process"],
     };
     const [eyebrow, title] = titles[kind] || ["Details", "Published information"];
     const richRenderers = {
@@ -1737,6 +1742,14 @@
         "db-widget__card-summary",
         "Always confirm the current recognition status for the exact university and program before enrolling.",
       ));
+    } else if (kind === "admissions") {
+      guideSection(
+        card,
+        "Published admission steps",
+        data.steps,
+        "Admission-process details haven't been published yet.",
+      );
+      if (data.fee_note) guideSection(card, "Fee note", data.fee_note, "");
     }
     return { card, title };
   }
@@ -1764,6 +1777,7 @@
       syllabus: "syllabus",
       reviews: "reviews",
       accreditations: "approvals",
+      admissions: "admissions",
     };
     const followups = await loadFollowupChips({
       answerState: answerStates[kind] || kind,
@@ -1775,8 +1789,11 @@
         id: String(bundle.entity.id || bundle.context && bundle.context.entity_id || kind),
       },
     });
+    const intro = Boolean(bundle.info && bundle.info[kind] && bundle.info[kind].available)
+      ? `Here's the confirmed ${result.title.toLowerCase()} information for ${currentGuideLabel()}.`
+      : `${result.title} details haven't been published for ${currentGuideLabel()} yet.`;
     presentGuidedCard(
-      `Here's the confirmed ${result.title.toLowerCase()} information for ${currentGuideLabel()}.`,
+      intro,
       result.card,
       result.title,
       followups,
@@ -2002,7 +2019,7 @@
         transitionNavigation("specialization_picker");
         if (currentGuideEntity()) await showCourseSpecializations(chip);
         else await openPicker("specialization", { onSelect: selectGuidedEntity });
-      } else if (["fees", "eligibility", "career", "syllabus", "reviews", "accreditations"].includes(action)) {
+      } else if (["fees", "eligibility", "career", "syllabus", "reviews", "accreditations", "admissions"].includes(action)) {
         await showGuidedInfo(action, chip);
       } else if (action === "compare") {
         await beginGuidedComparison(null, chip);
@@ -2204,7 +2221,16 @@
     const values = contextValues(context);
     state.context = values.length ? context : null;
     state.contextBar.hidden = !values.length;
-    if (!values.length) return;
+    if (!values.length) {
+      state.contextLabel.textContent = "";
+      state.contextCourse.textContent = "";
+      state.contextCourse.hidden = true;
+      state.contextCourse.parentElement.hidden = true;
+      state.contextMeta.replaceChildren();
+      state.contextMeta.hidden = true;
+      state.contextChip.removeAttribute("aria-label");
+      return;
+    }
     const university = values[0] || "Current university";
     const academicPath = values.slice(1).join(" • ");
     const entity = state.guideBundle && state.guideBundle.entity || {};
@@ -2214,8 +2240,9 @@
       entity.learning_mode || entity.mode,
     ].map((value) => String(value || "").trim()).filter(Boolean);
     state.contextLabel.textContent = university;
-    state.contextCourse.textContent = academicPath;
+    state.contextCourse.textContent = academicPath ? `· ${academicPath}` : "";
     state.contextCourse.hidden = !academicPath;
+    state.contextCourse.parentElement.hidden = !academicPath;
     state.contextMeta.replaceChildren();
     metadata.slice(0, 3).forEach((value) => {
       state.contextMeta.appendChild(element("span", "db-widget__context-meta-item", value));
@@ -2563,15 +2590,18 @@
   function renderPickerResults(container, data, kind, query = "", options = {}) {
     container.replaceChildren();
     const normalizedQuery = query.trim().toLowerCase();
+    const excludedIds = new Set((options.excludeIds || []).map((value) => String(value)));
     const filtered = data.items.filter((item) => {
+      if (excludedIds.has(String(item.id))) return false;
       const displayName = options.display === "university" ? item.university_name || item.name : item.name;
       return `${displayName} ${item.meta}`.toLowerCase().includes(normalizedQuery);
     });
-    if (!normalizedQuery && data.popular.length) {
+    const popular = data.popular.filter((item) => !excludedIds.has(String(item.id)));
+    if (!normalizedQuery && popular.length) {
       const section = element("section", "db-widget__picker-section");
       section.appendChild(element("h3", "db-widget__picker-section-title", "⭐ Popular"));
       const grid = element("div", "db-widget__picker-popular");
-      data.popular.slice(0, 8).forEach((item) => grid.appendChild(pickerRow(item, kind, true, options)));
+      popular.slice(0, 8).forEach((item) => grid.appendChild(pickerRow(item, kind, true, options)));
       section.appendChild(grid);
       container.appendChild(section);
     }
@@ -2626,6 +2656,14 @@
     search.setAttribute("aria-label", search.placeholder);
     searchField.append(searchIcon, search);
     searchWrap.appendChild(searchField);
+    if (options.selectionLabel) {
+      const selection = element("div", "db-widget__picker-selection");
+      selection.append(
+        element("span", "db-widget__picker-selection-label", "Selected"),
+        element("strong", "", options.selectionLabel),
+      );
+      searchWrap.prepend(selection);
+    }
     const content = element("div", "db-widget__picker-content db-widget__picker-list");
     content.appendChild(element("p", "db-widget__picker-empty", "Loading published options…"));
     sheet.append(searchWrap, content);
@@ -2929,16 +2967,20 @@
   function openComparisonPicker() {
     const kind = comparisonPickerKind();
     const entity = state.compareSelections[0] && state.compareSelections[0].component || currentGuideEntity() || {};
+    const selected = state.compareSelections[0] || null;
+    const optionLabel = kind === "university" ? "university" : kind === "course" ? "program" : "specialization";
     const filters = {};
     if (kind === "course" && entity.category) filters.course = entity.category;
     if (kind === "specialization" && entity.name) filters.q = entity.name;
     return openPicker(kind, {
-      title: state.compareSelections.length ? "Choose one more option" : "Choose an option to compare",
+      title: selected ? `Choose a different ${optionLabel}` : `Choose a ${optionLabel} to compare`,
       display: kind === "course" ? "university" : undefined,
       filters,
+      excludeIds: state.compareSelections.map((item) => item.id),
+      selectionLabel: selected && selected.label,
       onSelect: (item) => {
         const selectionCount = addToComparison(item);
-        if (selectionCount <= 1) {
+        if (selectionCount === 1) {
           window.setTimeout(() => openComparisonPicker(), 0);
         }
       },

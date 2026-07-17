@@ -544,6 +544,17 @@ def _accreditation_info(entity: Any, catalog: Any) -> dict[str, Any]:
     return {"available": bool(items), "items": items}
 
 
+def _admission_info(entity: Any, catalog: Any) -> dict[str, Any]:
+    sources = _relation_chain(entity, catalog)
+    steps = _first_text(sources, "admission_steps")
+    fee_note = _first_text(sources, "admission_fee_note")
+    return {
+        "available": bool(steps or fee_note),
+        "steps": steps,
+        "fee_note": fee_note,
+    }
+
+
 def _info(entity: Any, catalog: Any) -> dict[str, Any]:
     return {
         "fees": _fee_info(entity, catalog),
@@ -552,6 +563,7 @@ def _info(entity: Any, catalog: Any) -> dict[str, Any]:
         "syllabus": _syllabus_info(entity),
         "reviews": _review_info(entity),
         "accreditations": _accreditation_info(entity, catalog),
+        "admissions": _admission_info(entity, catalog),
     }
 
 
@@ -672,6 +684,7 @@ def guide_context(
                     "testimonials": [],
                 },
                 "accreditations": {"available": False, "items": []},
+                "admissions": {"available": False, "steps": None, "fee_note": None},
             },
         }
 

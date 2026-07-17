@@ -190,6 +190,19 @@ def test_premium_admissions_ui_contracts_are_present() -> None:
     assert "db-widget__context-meta-item" in styles
     assert "db-widget__ai-accent" in styles
     assert "@media (max-width: 560px)" in styles
+    assert ".db-widget__sticky-context[hidden]" in styles
+
+
+def test_clearing_context_removes_all_stale_context_content() -> None:
+    source = _source("widget.js")
+    update_context = _function_source(source, "updateContext")
+
+    assert 'state.contextLabel.textContent = ""' in update_context
+    assert 'state.contextCourse.textContent = ""' in update_context
+    assert 'academicPath ? `· ${academicPath}` : ""' in update_context
+    assert "state.contextCourse.parentElement.hidden = true" in update_context
+    assert "state.contextMeta.replaceChildren()" in update_context
+    assert 'state.contextChip.removeAttribute("aria-label")' in update_context
 
 
 def test_recommendation_cards_match_the_reference_card_structure() -> None:
@@ -236,6 +249,25 @@ def test_catalog_picker_has_clear_sections_and_mobile_sheet_containment() -> Non
     assert "grid-template-columns: minmax(0, 1fr)" in styles
     assert ".db-widget__picker-search:focus" in styles
     assert ".db-widget__picker-overlay .db-widget__picker-header::before" in styles
+
+
+def test_comparison_picker_confirms_and_excludes_the_first_selection() -> None:
+    source = _source("widget.js")
+    results = _function_source(source, "renderPickerResults")
+    picker = _function_source(source, "openPicker")
+    comparison = _function_source(source, "openComparisonPicker")
+    styles = _source("widget.css")
+
+    assert "options.excludeIds" in results
+    assert "excludedIds.has(String(item.id))" in results
+    assert "options.selectionLabel" in picker
+    assert '"db-widget__picker-selection"' in picker
+    assert "`Choose a different ${optionLabel}`" in comparison
+    assert "excludeIds: state.compareSelections.map" in comparison
+    assert "selectionLabel: selected && selected.label" in comparison
+    assert "selectionCount === 1" in comparison
+    assert ".db-widget__picker-selection" in styles
+    assert ".db-widget__picker-search-field .db-widget__picker-search:focus-visible" in styles
 
 
 def test_widget_uses_degreebaba_tokens_and_exposes_accessible_ui_state() -> None:
@@ -343,6 +375,33 @@ def test_generic_info_flow_uses_neutral_eligibility_and_a_down_funnel_picker() -
     assert "await showProgramOptions()" in guided_info
     assert "safeFallbackActions()" not in guided_info
     assert "state.pendingGuidedInfo" in select_entity
+
+
+def test_admission_chip_uses_grounded_guided_info_instead_of_generic_chat() -> None:
+    source = _source("widget.js")
+    guided_card = _function_source(source, "guidedInfoCard")
+    executor = _function_source(source, "executeGuidedAction")
+
+    assert 'admission_process: "admissions"' in source
+    assert 'get_admission_steps: "admissions"' in source
+    assert 'admissions: ["Next steps", "Admission process"]' in guided_card
+    assert '"accreditations", "admissions"' in executor
+    assert "Admission-process details haven't been published yet." in guided_card
+
+
+def test_eligibility_summary_is_not_repeated_as_a_missing_checklist() -> None:
+    source = _source("widget.js")
+    renderer = _function_source(source, "renderEligibilityCard")
+
+    assert "else if (!summary)" in renderer
+
+
+def test_guided_info_does_not_claim_unpublished_data_is_confirmed() -> None:
+    source = _source("widget.js")
+    guided_info = _function_source(source, "showGuidedInfo")
+
+    assert "bundle.info[kind].available" in guided_info
+    assert "details haven't been published" in guided_info
 
 
 def test_first_send_waits_for_context_and_starter_impressions_require_visibility() -> None:
