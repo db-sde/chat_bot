@@ -177,6 +177,41 @@ def test_information_projection_never_fabricates_absent_publisher_data(
     }
 
 
+def test_fee_projection_returns_published_backend_plans_for_nmims_bca(
+    guide_client: TestClient,
+) -> None:
+    response = guide_client.get(
+        "/api/widget/guide/context",
+        params={"entity_id": "course-nmims-bca"},
+    )
+
+    assert response.status_code == 200
+    fees = response.json()["info"]["fees"]
+    assert fees["total_fee"] == "INR 66,000"
+    assert fees["semester_fee"] == "INR 33,000.0 per semester"
+    assert fees["emi"] == "From INR 2,800 per month"
+    assert fees["plans"] == [
+        {
+            "name": "Pay in full",
+            "amount": "INR 66,000",
+            "total": "INR 66,000",
+            "note": "One-time payment",
+        },
+        {
+            "name": "Semester-wise",
+            "amount": "INR 33,000",
+            "total": "INR 66,000",
+            "note": "Available payment option",
+        },
+        {
+            "name": "Monthly EMI",
+            "amount": "From INR 2,800 per month",
+            "total": None,
+            "note": "Easy EMI option",
+        },
+    ]
+
+
 def test_related_records_follow_catalog_links(guide_client: TestClient) -> None:
     course = guide_client.get(
         "/api/widget/guide/context",
@@ -323,4 +358,3 @@ def test_guide_routes_do_not_enter_existing_chat_pipeline(guide_client: TestClie
 
     assert context.status_code == catalog.status_code == comparison.status_code == 200
     process_turn.assert_not_awaited()
-

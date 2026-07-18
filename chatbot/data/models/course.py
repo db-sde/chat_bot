@@ -24,6 +24,7 @@ class FeePlan(PublisherModel):
     plan_name: str | None = None
     plan_amount: str | None = None
     plan_total: str | None = None
+    plan_note: str | None = None
 
 
 class JobProfile(PublisherModel):

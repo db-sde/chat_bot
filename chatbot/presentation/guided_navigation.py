@@ -351,6 +351,7 @@ def _fee_info(entity: Any, catalog: Any) -> dict[str, Any]:
                 "name": _first_text((row,), "plan_name", "name"),
                 "amount": _first_text((row,), "plan_amount", "amount"),
                 "total": _first_text((row,), "plan_total", "total"),
+                "note": _first_text((row,), "plan_note", "note"),
             }
             if any(plan.values()):
                 plans.append(plan)

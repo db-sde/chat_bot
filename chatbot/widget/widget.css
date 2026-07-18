@@ -876,15 +876,6 @@
   font-weight: 600;
   overflow-wrap: anywhere;
 }
-.db-widget__fees-metadata {
-  padding: 7px 16px;
-  color: #6B7280;
-  border-bottom: 1px solid #F3F4F6;
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: .04em;
-  text-transform: capitalize;
-}
 .db-widget__fees-plans {
   padding: 4px 16px 6px;
 }
@@ -931,11 +922,6 @@
   font-weight: 500;
   line-height: 1.45;
 }
-.db-widget__fees-emi > span:first-child {
-  display: inline-flex;
-  flex-shrink: 0;
-}
-
 /* Eligibility */
 .db-widget__elig {
   width: 100%;

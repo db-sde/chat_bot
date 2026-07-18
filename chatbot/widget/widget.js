@@ -1302,7 +1302,6 @@
   const RICH_CARD_ICONS = Object.freeze({
     checkWhite: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
     checkGreen: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
-    dollar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E84010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>',
     chevron: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>',
   });
 
@@ -1321,31 +1320,27 @@
     return publishedValue(value, emptyCopy).replace(/\bINR\s*/gi, "₹");
   }
 
+  function displayFeeAmount(value, { stripSemester = false } = {}) {
+    let rendered = displayCurrency(value).replace(/(\d[\d,]*)\.0(?=\s|$)/g, "$1");
+    if (stripSemester) rendered = rendered.replace(/\s+per\s+semester\s*$/i, "");
+    return rendered;
+  }
+
   function renderFeesCard(data, entity) {
     const card = element("article", "db-widget__fees db-fees");
     const hero = element("div", "db-widget__fees-hero db-fees-hero");
     const total = element("div");
     total.append(
       element("div", "db-widget__fees-total-label db-fees-total-label", "Total programme fee"),
-      element("div", "db-widget__fees-total-value db-fees-total-value", displayCurrency(data.total_fee || entity.fee)),
+      element("div", "db-widget__fees-total-value db-fees-total-value", displayFeeAmount(data.total_fee || entity.fee)),
     );
     const semester = element("div");
     semester.append(
       element("div", "db-widget__fees-sem-label db-fees-sem-label", "Per semester"),
-      element("div", "db-widget__fees-sem-value db-fees-sem-value", displayCurrency(data.semester_fee)),
+      element("div", "db-widget__fees-sem-value db-fees-sem-value", displayFeeAmount(data.semester_fee, { stripSemester: true })),
     );
     hero.append(total, semester);
     card.appendChild(hero);
-    const feeMetadata = data.fee_metadata && typeof data.fee_metadata === "object"
-      ? data.fee_metadata
-      : null;
-    if (feeMetadata) {
-      const metadata = [feeMetadata.currency, feeMetadata.fee_type, feeMetadata.billing_cycle]
-        .filter(Boolean)
-        .join(" · ");
-      if (metadata) card.appendChild(element("div", "db-widget__fees-metadata", metadata));
-    }
-
     const plans = Array.isArray(data.plans) ? data.plans.filter(Boolean) : [];
     if (plans.length) {
       const planList = element("div", "db-widget__fees-plans db-fees-plans");
@@ -1365,7 +1360,7 @@
         }
         row.append(
           copy,
-          element("div", "db-widget__fees-plan-value db-fees-plan-value", displayCurrency(plan.amount || plan.value || plan.total)),
+          element("div", "db-widget__fees-plan-value db-fees-plan-value", displayFeeAmount(plan.amount || plan.value || plan.total)),
         );
         planList.appendChild(row);
       });
@@ -1380,7 +1375,7 @@
     const emi = String(data.emi || entity.emi || "").trim();
     if (emi) {
       const note = element("div", "db-widget__fees-emi db-fees-emi");
-      note.append(richCardIcon("", RICH_CARD_ICONS.dollar), element("span", "", displayCurrency(emi)));
+      note.appendChild(element("span", "", displayFeeAmount(emi)));
       card.appendChild(note);
     }
     return card;

@@ -280,6 +280,20 @@ def test_design_reference_hooks_cover_all_migrated_widget_surfaces() -> None:
             assert hook in function_source, f"{function_name} is missing the {hook} design hook"
 
 
+def test_fee_card_formats_backend_currency_without_embedded_display_data() -> None:
+    renderer = _source("src/renderer.js")
+    styles = _source("widget.css")
+
+    assert "displayFeeAmount" in renderer
+    assert "stripSemester" in renderer
+    assert "RICH_CARD_ICONS.dollar" not in renderer
+    assert "db-widget__fees-emi-symbol" not in renderer
+    assert "db-widget__fees-metadata" not in renderer
+    assert ".db-widget__fees-metadata" not in styles
+    for catalog_value in ("66,000", "33,000", "2,800"):
+        assert catalog_value not in renderer
+
+
 def test_clearing_context_removes_all_stale_context_content() -> None:
     source = _source("widget.js")
     update_context = _function_source(source, "updateContext")
