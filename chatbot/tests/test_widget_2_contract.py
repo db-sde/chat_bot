@@ -506,6 +506,50 @@ def test_active_tool_resume_and_lead_gate_name_are_supported() -> None:
     assert "leadBody.name = normalizedName" in lead_panel
 
 
+def test_roi_uses_one_persistent_interactive_card_without_answer_bubbles() -> None:
+    source = _source("widget.js")
+    styles = _source("widget.css")
+    handler = _function_source(source, "handleAction")
+    ensure_widget = _function_source(source, "ensureRoiWidget")
+    request_step = _function_source(source, "requestRoiStep")
+    renderer = _function_source(source, "renderRoiWidget")
+    sender = _function_source(source, "sendMessage")
+    loader = _function_source(source, "loadGuideContext")
+
+    assert 'String(action.tool) === "roi"' in handler
+    assert "openRoiCalculator(action)" in handler
+    assert "state.roiWidget.row.isConnected" in ensure_widget
+    assert 'displayUser: false' in request_step
+    assert 'showTyping: false' in request_step
+    assert 'onPayload: (payload) => updateRoiWidget(payload)' in request_step
+    assert "widget.body.replaceChildren()" in renderer
+    assert 'requestRoiStep("tool:roi"' in renderer
+    assert 'requestRoiStep("tool:continue", { detail: true })' in source
+    assert "else if (roiFlowMetadata(payload)) updateRoiWidget(payload)" in sender
+    assert "updateRoiWidget(resumeResponse)" in loader
+    assert "options.roiWidget && state.roiWidget" in source
+    assert "db-widget__roi-progress-track" in styles
+    assert "db-widget__roi-option" in styles
+    assert "@media (prefers-reduced-motion: reduce)" in styles
+
+
+def test_roi_exits_cleanly_and_does_not_take_over_a_different_page() -> None:
+    source = _source("widget.js")
+    closer = _function_source(source, "closeRoiCalculator")
+    abandon = _function_source(source, "abandonPersistedRoiFlow")
+    loader = _function_source(source, "loadGuideContext")
+
+    assert 'fetchJson("/api/widget/context/clear"' in abandon
+    assert "applyActiveFlow(null)" in abandon
+    assert "forgetRoiPage()" in abandon
+    assert "await abandonPersistedRoiFlow()" in closer
+    assert "await hydratePageContext()" in closer
+    assert "state.starter.hidden = false" in closer
+    assert "storedRoiPageKey()" in loader
+    assert "roiOrigin !== currentPageKey()" in loader
+    assert "return loadGuideContext(entityReference, logicalType)" in loader
+
+
 def test_action_lead_tags_are_preserved_in_analytics() -> None:
     source = _source("widget.js")
     payload = _function_source(source, "analyticsPayload")

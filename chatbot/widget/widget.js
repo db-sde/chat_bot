@@ -47,6 +47,7 @@
   widgetNamespace.loading[siteKey] = true;
 
   const GUIDED_THINKING_MS = 650;
+  const ROI_TOTAL_STEPS = 2;
   const responsiveActionLayouts = new Set();
   const NavigationStep = Object.freeze({
     HOMEPAGE: "HOMEPAGE",
@@ -181,6 +182,34 @@
     }
   }
 
+  function currentPageKey() {
+    return `${pageType}:${pageEntitySlug || pageUniversitySlug || "home"}`;
+  }
+
+  function storedRoiPageKey() {
+    try {
+      return window.sessionStorage.getItem(`degreebaba:${siteKey}:roi-page`) || "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function rememberRoiPage() {
+    try {
+      window.sessionStorage.setItem(`degreebaba:${siteKey}:roi-page`, currentPageKey());
+    } catch (_error) {
+      // Storage can be unavailable in privacy-restricted third-party contexts.
+    }
+  }
+
+  function forgetRoiPage() {
+    try {
+      window.sessionStorage.removeItem(`degreebaba:${siteKey}:roi-page`);
+    } catch (_error) {
+      // Storage can be unavailable in privacy-restricted third-party contexts.
+    }
+  }
+
   function safeHttpUrl(value) {
     if (!value) return "";
     try {
@@ -232,6 +261,7 @@
     starterImpressionKey: "",
     activeFlow: null,
     activeFlowResumeKey: "",
+    roiWidget: null,
     toolLeadRequiresName: false,
     pendingLeadPersistence: null,
     viewedActions: new Set(),
@@ -386,6 +416,11 @@
     const metadata = payload && payload.metadata;
     const flow = metadata && metadata.tool_flow;
     return flow && typeof flow === "object" ? flow : null;
+  }
+
+  function roiFlowMetadata(payload) {
+    const flow = activeFlowMetadata(payload);
+    return flow && String(flow.tool || "") === "roi" ? flow : null;
   }
 
   function applyActiveFlow(flow) {
@@ -682,6 +717,10 @@
     const label = action.label.toLowerCase();
     const payload = action.payload || {};
     if (String(action.chip_handler) === "tool_entry" && action.tool) {
+      if (String(action.tool) === "roi") {
+        openRoiCalculator(action);
+        return;
+      }
       transitionNavigation("tool");
       const toolMessage = action.message && action.message !== action.label
         ? action.message
@@ -1056,6 +1095,413 @@
       .map((action) => actionButton(action))
       .filter(Boolean);
     return responsiveActionGrid(available, rendered, { onVisible: emitChipShown });
+  }
+
+  function roiQuestionNumber(step) {
+    if (step === "current_salary") return 2;
+    return 1;
+  }
+
+  function roiQuestionText(message) {
+    const text = String(message || "").trim();
+    if (!text) return "Choose an option to continue.";
+    const question = text.match(/(?:^|[.!]\s+)([^.!?]*\?)\s*$/);
+    return question ? question[1].trim() : text;
+  }
+
+  function roiPaybackText(message) {
+    const match = String(message || "").match(/\b(\d{1,3})\s+months?\b/i);
+    return match ? `${match[1]} months` : "";
+  }
+
+  function ensureRoiWidget() {
+    if (state.roiWidget && state.roiWidget.row.isConnected) return state.roiWidget;
+    deactivateGuidedActions();
+    collapseGuidedCards();
+    const view = createMessage("bot", "");
+    view.row.classList.add("db-widget__message-row--roi");
+    view.bubble.remove();
+    const stack = element("div", "db-widget__component-stack db-widget__roi-stack");
+    const card = element("section", "db-widget__roi-card");
+    card.setAttribute("aria-label", "ROI Calculator");
+
+    const header = element("header", "db-widget__roi-header");
+    const identity = element("div", "db-widget__roi-identity");
+    const icon = element("span", "db-widget__roi-icon", "🧮");
+    icon.setAttribute("aria-hidden", "true");
+    const title = element("div", "db-widget__roi-title");
+    const status = element("span", "db-widget__roi-status", "Ready when you are");
+    title.append(element("strong", "", "ROI Calculator"), status);
+    identity.append(icon, title);
+    const close = createButton("×", "db-widget__roi-close", closeRoiCalculator);
+    close.setAttribute("aria-label", "Collapse ROI Calculator");
+    header.append(identity, close);
+
+    const body = element("div", "db-widget__roi-body");
+    const live = element("p", "db-widget__sr-only");
+    live.setAttribute("aria-live", "polite");
+    card.append(header, body, live);
+    stack.appendChild(card);
+    view.content.appendChild(stack);
+    state.roiWidget = {
+      view,
+      row: view.row,
+      card,
+      body,
+      live,
+      status,
+      mode: "idle",
+      step: 0,
+      payload: null,
+      message: "",
+      actions: [],
+      components: [],
+      collapsed: false,
+      busy: false,
+      retryMessage: "",
+      chip: null,
+      detailRequested: false,
+      leadConfirmation: "",
+    };
+    anchorBotMessage(view.row);
+    return state.roiWidget;
+  }
+
+  function roiActionButton(label, className, handler) {
+    const button = createButton(label, className, handler);
+    button.disabled = Boolean(state.roiWidget && state.roiWidget.busy);
+    return button;
+  }
+
+  async function abandonPersistedRoiFlow() {
+    if (!state.sessionId) {
+      applyActiveFlow(null);
+      forgetRoiPage();
+      return;
+    }
+    await fetchJson("/api/widget/context/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: state.sessionId }),
+    });
+    applyActiveFlow(null);
+    state.activeFlowResumeKey = "";
+    forgetRoiPage();
+  }
+
+  async function closeRoiCalculator() {
+    const widget = state.roiWidget;
+    if (!widget || widget.busy) return;
+    widget.collapsed = true;
+    const unfinished = Boolean(state.activeFlow && state.activeFlow.tool === "roi");
+    if (!unfinished) {
+      renderRoiWidget();
+      return;
+    }
+    widget.mode = "closed";
+    widget.busy = true;
+    widget.message = "The calculator is closed.";
+    renderRoiWidget();
+    try {
+      await abandonPersistedRoiFlow();
+      state.conversationStarted = false;
+      await hydratePageContext();
+      if (state.starter) {
+        state.messages.appendChild(state.starter);
+        state.starter.hidden = false;
+        refreshResponsiveActionLayouts();
+      }
+    } catch (error) {
+      widget.mode = "error";
+      widget.message = "I couldn’t close the calculator just now. Please try again.";
+      console.warn("DegreeBaba could not close the ROI calculator", error);
+    } finally {
+      widget.busy = false;
+      renderRoiWidget();
+    }
+  }
+
+  function renderRoiProgress(widget) {
+    const progress = element("div", "db-widget__roi-progress");
+    const copy = element("div", "db-widget__roi-progress-copy");
+    copy.append(
+      element("span", "", `Question ${widget.step}`),
+      element("strong", "", `${widget.step} of ${ROI_TOTAL_STEPS}`),
+    );
+    const track = element("div", "db-widget__roi-progress-track");
+    track.setAttribute("role", "progressbar");
+    track.setAttribute("aria-label", "ROI calculator progress");
+    track.setAttribute("aria-valuemin", "0");
+    track.setAttribute("aria-valuemax", String(ROI_TOTAL_STEPS));
+    track.setAttribute("aria-valuenow", String(widget.step));
+    const fill = element("span", "db-widget__roi-progress-fill");
+    fill.style.setProperty("--db-roi-progress", `${widget.step / ROI_TOTAL_STEPS * 100}%`);
+    track.appendChild(fill);
+    progress.append(copy, track);
+    return progress;
+  }
+
+  function renderRoiCollapsed(widget) {
+    const compact = element("div", "db-widget__roi-compact");
+    const payback = roiPaybackText(widget.message);
+    const copy = element("div", "db-widget__roi-compact-copy");
+    copy.appendChild(element(
+      "strong",
+      "",
+      widget.mode === "complete"
+        ? "Completed"
+        : widget.mode === "closed"
+          ? "Closed"
+          : widget.mode === "idle"
+            ? "Not started"
+            : "In progress",
+    ));
+    copy.appendChild(element(
+      "span",
+      "",
+      payback
+        ? `Estimated payback: ${payback}`
+        : widget.mode === "closed"
+          ? "You can start again at any time"
+        : widget.step
+          ? `Question ${widget.step} of ${ROI_TOTAL_STEPS}`
+          : "2 quick questions",
+    ));
+    compact.append(copy, roiActionButton(
+      widget.mode === "closed" ? "Start again" : "View again",
+      "db-widget__roi-link",
+      () => {
+      if (widget.mode === "closed") {
+        widget.mode = "idle";
+        widget.step = 0;
+        widget.message = "";
+        widget.actions = [];
+        widget.components = [];
+      }
+      widget.collapsed = false;
+      renderRoiWidget();
+      anchorBotMessage(widget.row);
+      },
+    ));
+    return compact;
+  }
+
+  function requestRoiStep(message, options = {}) {
+    const widget = ensureRoiWidget();
+    if (widget.busy) return;
+    if (message === "tool:roi") rememberRoiPage();
+    widget.busy = true;
+    widget.retryMessage = message;
+    widget.detailRequested = options.detail === true;
+    renderRoiWidget();
+    sendMessage(message, {
+      chip: options.chip || null,
+      displayUser: false,
+      showTyping: false,
+      keepStarter: false,
+      blurInput: false,
+      onPayload: (payload) => updateRoiWidget(payload),
+      onError: (payload) => {
+        widget.busy = false;
+        widget.mode = "error";
+        widget.message = payload.message;
+        renderRoiWidget();
+      },
+    });
+  }
+
+  function renderRoiQuestion(widget, content) {
+    content.appendChild(renderRoiProgress(widget));
+    content.appendChild(element("h3", "db-widget__roi-question", roiQuestionText(widget.message)));
+    const options = element("div", "db-widget__roi-options");
+    widget.actions.forEach((action) => {
+      const choice = roiActionButton(action.label, "db-widget__roi-option", () => {
+        requestRoiStep(action.message);
+      });
+      options.appendChild(choice);
+    });
+    content.appendChild(options);
+  }
+
+  function renderRoiResult(widget, content) {
+    const payback = roiPaybackText(widget.message);
+    content.appendChild(element("span", "db-widget__roi-eyebrow", "Estimated ROI"));
+    const outcome = element("div", "db-widget__roi-outcome");
+    const metric = element("div", "db-widget__roi-metric");
+    metric.append(
+      element("span", "", "Payback period"),
+      element("strong", "", payback || "Estimate ready"),
+    );
+    outcome.appendChild(metric);
+    content.appendChild(outcome);
+    if (widget.message) content.appendChild(element("p", "db-widget__roi-summary", widget.message));
+    if (widget.leadConfirmation) {
+      content.appendChild(element("p", "db-widget__roi-confirmation", widget.leadConfirmation));
+    }
+
+    const actions = element("div", "db-widget__roi-footer-actions");
+    if (widget.mode === "partial") {
+      actions.classList.add("db-widget__roi-footer-actions--result");
+      actions.appendChild(roiActionButton("View detailed result", "db-widget__roi-primary", () => {
+        requestRoiStep("tool:continue", { detail: true });
+      }));
+    } else if (widget.mode === "gated") {
+      actions.classList.add("db-widget__roi-footer-actions--result");
+      actions.appendChild(roiActionButton("Continue to detailed result", "db-widget__roi-primary", () => {
+        openLeadPanel({
+          source: "roi_calculator",
+          label: "View detailed result",
+          requireName: true,
+          roiWidget: true,
+        });
+      }));
+    } else if (widget.mode === "complete" && widget.actions.length) {
+      widget.actions.slice(0, 3).forEach((action, index) => {
+        actions.appendChild(roiActionButton(
+          action.label,
+          index === 0 ? "db-widget__roi-primary" : "db-widget__roi-secondary",
+          () => handleAction(action),
+        ));
+      });
+    }
+    actions.appendChild(roiActionButton("Restart", "db-widget__roi-secondary", () => {
+      widget.mode = "idle";
+      widget.step = 0;
+      widget.message = "";
+      widget.actions = [];
+      widget.components = [];
+      widget.leadConfirmation = "";
+      widget.collapsed = false;
+      requestRoiStep("tool:roi");
+    }));
+    content.appendChild(actions);
+
+    if (widget.mode === "complete" && widget.components.length) {
+      const details = element("details", "db-widget__roi-details");
+      details.appendChild(element("summary", "", "Recommended programs"));
+      const list = element("div", "db-widget__roi-detail-content");
+      widget.components.forEach((component) => {
+        const rendered = renderComponent(component);
+        if (rendered) list.appendChild(rendered);
+      });
+      if (list.childElementCount) {
+        details.appendChild(list);
+        content.appendChild(details);
+      }
+    }
+  }
+
+  function renderRoiWidget() {
+    const widget = state.roiWidget;
+    if (!widget || !widget.row.isConnected) return;
+    widget.status.textContent = widget.mode === "complete"
+      ? "Completed"
+      : widget.mode === "question"
+        ? `Question ${widget.step} of ${ROI_TOTAL_STEPS}`
+        : widget.mode === "closed"
+          ? "Closed"
+        : ["partial", "gated"].includes(widget.mode)
+          ? "Estimate ready"
+          : widget.mode === "idle"
+            ? "Ready when you are"
+            : "Needs attention";
+    widget.body.replaceChildren();
+    const content = element("div", "db-widget__roi-stage");
+    if (widget.collapsed) {
+      content.appendChild(renderRoiCollapsed(widget));
+    } else if (widget.mode === "idle") {
+      content.append(
+        element("h3", "db-widget__roi-intro", "See how fast this program pays for itself."),
+        element("p", "db-widget__roi-supporting", "2 quick questions. Your answers stay inside this calculator."),
+        roiActionButton("Start", "db-widget__roi-primary", () => {
+          requestRoiStep("tool:roi", { chip: widget.chip });
+        }),
+      );
+    } else if (widget.mode === "question") {
+      renderRoiQuestion(widget, content);
+    } else if (["partial", "gated", "complete"].includes(widget.mode)) {
+      renderRoiResult(widget, content);
+    } else {
+      content.append(
+        element("h3", "db-widget__roi-intro", "The calculator could not continue."),
+        element("p", "db-widget__roi-supporting", widget.message || "Please try again."),
+        roiActionButton("Try again", "db-widget__roi-primary", () => {
+          requestRoiStep(widget.retryMessage || "tool:roi");
+        }),
+      );
+    }
+    if (widget.busy) {
+      content.classList.add("db-widget__roi-stage--busy");
+      content.setAttribute("aria-busy", "true");
+      content.appendChild(element("span", "db-widget__roi-loading", "Updating…"));
+    }
+    widget.body.appendChild(content);
+    widget.live.textContent = widget.mode === "question"
+      ? `ROI calculator question ${widget.step} of ${ROI_TOTAL_STEPS}`
+      : widget.mode === "complete"
+        ? "ROI calculator completed"
+        : "ROI calculator updated";
+  }
+
+  function updateRoiWidget(payload) {
+    const widget = ensureRoiWidget();
+    const safePayload = payload && typeof payload === "object" ? payload : {};
+    const flow = roiFlowMetadata(safePayload);
+    const rawFlow = activeFlowMetadata(safePayload);
+    widget.busy = false;
+    widget.payload = safePayload;
+    widget.message = String(safePayload.message || safePayload.text || "").trim();
+    widget.actions = payloadActions(safePayload, Array.isArray(safePayload.components) ? safePayload.components : [])
+      .map(normalizedAction)
+      .filter((action) => action && action.label);
+    widget.components = (Array.isArray(safePayload.components) ? safePayload.components : [])
+      .filter((component) => component && !["quick_actions", "lead_cta"].includes(component.type));
+    applyActionMetadata(widget.actions);
+    if (rawFlow) applyActiveFlow(rawFlow);
+
+    const step = String(flow && flow.step || rawFlow && rawFlow.step || "");
+    if (["program", "current_salary"].includes(step)) {
+      rememberRoiPage();
+      widget.mode = "question";
+      widget.step = roiQuestionNumber(step);
+    } else if (step === "partial_reveal") {
+      widget.mode = "partial";
+      widget.step = ROI_TOTAL_STEPS;
+    } else if (step === "await_lead") {
+      widget.mode = "gated";
+      widget.step = ROI_TOTAL_STEPS;
+    } else if (step === "reveal") {
+      forgetRoiPage();
+      widget.mode = "complete";
+      widget.step = ROI_TOTAL_STEPS;
+    } else {
+      forgetRoiPage();
+      widget.mode = "error";
+    }
+    widget.collapsed = false;
+    renderRoiWidget();
+    anchorBotMessage(widget.row);
+    if (step === "await_lead" && widget.detailRequested) {
+      widget.detailRequested = false;
+      openLeadPanel({
+        source: "roi_calculator",
+        label: "View detailed result",
+        requireName: true,
+        roiWidget: true,
+      });
+    }
+  }
+
+  function openRoiCalculator(action) {
+    state.conversationStarted = true;
+    if (state.starter) state.starter.hidden = true;
+    deactivateGuidedActions();
+    transitionNavigation("tool");
+    const widget = ensureRoiWidget();
+    widget.chip = action || widget.chip;
+    widget.collapsed = false;
+    renderRoiWidget();
+    anchorBotMessage(widget.row);
   }
 
   function renderComponent(component) {
@@ -2302,6 +2748,7 @@
       console.warn("DegreeBaba initial guide hydration did not complete", error);
     }
     const hadActiveFlow = Boolean(state.activeFlow);
+    const hadRoiFlow = Boolean(state.activeFlow && state.activeFlow.tool === "roi");
     state.lastMessage = message;
     state.input.value = "";
     if (state.send) state.send.classList.remove("db-widget__send--active");
@@ -2309,7 +2756,7 @@
     if (options.displayUser !== false) {
       createMessage("user", String(options.displayText || message));
     }
-    showTyping(true);
+    if (options.showTyping !== false) showTyping(true);
     let finalPayload = null;
     let bufferedText = "";
     const controller = new AbortController();
@@ -2367,21 +2814,31 @@
         if (event === "token" && payload.token) bufferedText += payload.token;
         if (["response", "final", "replace"].includes(event)) finalPayload = payload;
       });
-      showTyping(false);
+      if (options.showTyping !== false) showTyping(false);
       const payload = finalPayload || { message: bufferedText };
       if (hadActiveFlow && !activeFlowMetadata(payload)) applyActiveFlow(null);
-      renderBotPayload(payload);
+      if (typeof options.onPayload === "function") options.onPayload(payload);
+      else if (roiFlowMetadata(payload)) updateRoiWidget(payload);
+      else {
+        if (hadRoiFlow && state.roiWidget) {
+          state.roiWidget.collapsed = true;
+          renderRoiWidget();
+        }
+        renderBotPayload(payload);
+      }
     } catch (error) {
-      showTyping(false);
+      if (options.showTyping !== false) showTyping(false);
       const timeoutMessage = error && error.name === "AbortError"
         ? "The advisor took too long to respond. Your chat is safe—please try once more."
         : "I couldn’t reach the advisor just now. Please try again in a moment.";
-      renderBotPayload(errorPayload(timeoutMessage, message));
+      const failure = errorPayload(timeoutMessage, message);
+      if (typeof options.onError === "function") options.onError(failure, error);
+      else renderBotPayload(failure);
       console.error("DegreeBaba widget request failed", error);
     } finally {
       window.clearTimeout(timeout);
       state.busy = false;
-      state.input.blur();
+      if (options.blurInput !== false) state.input.blur();
     }
   }
 
@@ -2459,6 +2916,19 @@
     const activeFlow = payload.active_flow && typeof payload.active_flow === "object"
       ? payload.active_flow
       : null;
+    const roiOrigin = storedRoiPageKey();
+    if (
+      activeFlow && String(activeFlow.tool || "") === "roi" &&
+      roiOrigin && roiOrigin !== currentPageKey()
+    ) {
+      try {
+        await abandonPersistedRoiFlow();
+        state.conversationStarted = false;
+        return loadGuideContext(entityReference, logicalType);
+      } catch (error) {
+        console.warn("DegreeBaba could not reset ROI after the page context changed", error);
+      }
+    }
     const resumeResponse = activeFlow && activeFlow.response && typeof activeFlow.response === "object"
       ? activeFlow.response
       : null;
@@ -2479,7 +2949,8 @@
     renderStarterBank(state.starterType);
     if (shouldResume) {
       state.activeFlowResumeKey = resumeKey;
-      renderBotPayload(resumeResponse);
+      if (String(activeFlow.tool || "") === "roi") updateRoiWidget(resumeResponse);
+      else renderBotPayload(resumeResponse);
     }
     return state.guideBundle;
   }
@@ -3238,6 +3709,7 @@
 
   function openLeadPanel(options = {}) {
     const isApplication = /apply/i.test(String(options.label || ""));
+    const isRoiResult = options.roiWidget === true;
     const requiresName = options.requireName === true || state.toolLeadRequiresName;
     const actionMeta = normalizedAction(options.chip || options.component) || {};
     transitionNavigation("lead");
@@ -3245,7 +3717,7 @@
       emitAnalytics(isApplication ? "apply_clicked" : "counsellor_clicked", null);
     }
     const body = openOverlay(
-      isApplication ? "Start your application" : "Talk to a counsellor",
+      isRoiResult ? "Your detailed ROI" : isApplication ? "Start your application" : "Talk to a counsellor",
       "db-widget__detail-overlay db-widget__lead-overlay",
     );
     const panel = element("section", "db-widget__detail-panel db-widget__lead-panel");
@@ -3256,12 +3728,18 @@
     intro.appendChild(element(
       "h3",
       "",
-      isApplication ? "Take the next step with an admissions counsellor" : "Talk to a real admissions counsellor",
+      isRoiResult
+        ? "Unlock your detailed ROI result"
+        : isApplication
+          ? "Take the next step with an admissions counsellor"
+          : "Talk to a real admissions counsellor",
     ));
     intro.appendChild(element(
       "p",
       "",
-      "Share your phone number and a DegreeBaba counsellor can help with fees, eligibility, and next steps.",
+      isRoiResult
+        ? "Share your details to view the full estimate and get help understanding the result."
+        : "Share your phone number and a DegreeBaba counsellor can help with fees, eligibility, and next steps.",
     ));
     const form = element("form", "db-widget__lead-form");
     const name = document.createElement("input");
@@ -3282,7 +3760,7 @@
     const submit = element(
       "button",
       "db-widget__lead-button",
-      isApplication ? "Continue with a counsellor" : "Request a callback",
+      isRoiResult ? "View detailed result" : isApplication ? "Continue with a counsellor" : "Request a callback",
     );
     submit.type = "submit";
     if (requiresName) form.appendChild(name);
@@ -3338,15 +3816,25 @@
         ));
         if (response.response && typeof response.response === "object") {
           closeOverlay();
-          renderBotPayload({
-            message: response.message || "Thanks — your details are saved.",
-          });
-          renderBotPayload(response.response);
+          if (options.roiWidget && state.roiWidget) {
+            state.roiWidget.leadConfirmation = response.message || "Your details are saved.";
+            updateRoiWidget(response.response);
+          } else {
+            renderBotPayload({
+              message: response.message || "Thanks — your details are saved.",
+            });
+            renderBotPayload(response.response);
+          }
         }
       } catch (error) {
         console.warn("DegreeBaba phone-only lead endpoint unavailable; using chat funnel", error);
-        closeOverlay();
-        sendMessage(`${options.label || "Talk to a counsellor"} ${normalized}`);
+        if (options.roiWidget) {
+          submit.disabled = false;
+          status.textContent = "I couldn’t save that just now. Please check your connection and try again.";
+        } else {
+          closeOverlay();
+          sendMessage(`${options.label || "Talk to a counsellor"} ${normalized}`);
+        }
       }
     });
     content.append(intro, form);

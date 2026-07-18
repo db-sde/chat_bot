@@ -37,6 +37,10 @@
   from { transform: rotate(-90deg) scale(0); opacity: 0; }
   to   { transform: rotate(0deg) scale(1);  opacity: 1; }
 }
+@keyframes db-roi-stage-in {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
 
 /* ── Shadow DOM boundary resets ── */
 :host {
@@ -1465,6 +1469,322 @@
 }
 .db-widget__more-toggle:hover {
   background: #F7F8FA;
+}
+
+/* ── Persistent ROI Calculator ───────────────────────────────── */
+.db-widget__sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.db-widget__message-row--roi .db-widget__message-content,
+.db-widget__roi-stack {
+  width: 100%;
+}
+.db-widget__roi-card {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--db-line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-card);
+}
+.db-widget__roi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--db-line);
+  background: #fff;
+}
+.db-widget__roi-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.db-widget__roi-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 10px;
+  background: var(--db-primary-soft);
+  font-size: 18px;
+}
+.db-widget__roi-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.db-widget__roi-title strong {
+  color: var(--db-navy);
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.db-widget__roi-status {
+  color: var(--db-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.db-widget__roi-close {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border: 1px solid var(--db-line);
+  border-radius: 9px;
+  background: #F7F8FA;
+  color: var(--db-muted);
+  font-size: 21px;
+  line-height: 1;
+  cursor: pointer;
+}
+.db-widget__roi-close:hover {
+  color: var(--db-navy);
+  background: #F3F4F6;
+}
+.db-widget__roi-body {
+  padding: 15px;
+}
+.db-widget__roi-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: db-roi-stage-in .18s ease both;
+}
+.db-widget__roi-stage--busy > :not(.db-widget__roi-loading) {
+  opacity: .55;
+  pointer-events: none;
+}
+.db-widget__roi-loading {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  color: var(--db-orange);
+  font-size: 11px;
+  font-weight: 600;
+}
+.db-widget__roi-intro,
+.db-widget__roi-question {
+  color: var(--db-navy);
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 650;
+}
+.db-widget__roi-supporting,
+.db-widget__roi-summary {
+  color: var(--db-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.db-widget__roi-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.db-widget__roi-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--db-muted);
+  font-size: 11px;
+}
+.db-widget__roi-progress-copy strong {
+  color: var(--db-navy);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+}
+.db-widget__roi-progress-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #F3F4F6;
+}
+.db-widget__roi-progress-fill {
+  display: block;
+  width: var(--db-roi-progress, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: var(--db-orange);
+  transition: width .22s ease;
+}
+.db-widget__roi-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.db-widget__roi-option,
+.db-widget__roi-primary,
+.db-widget__roi-secondary,
+.db-widget__roi-link {
+  min-height: 46px;
+  border-radius: 9px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, transform .14s ease;
+}
+.db-widget__roi-primary,
+.db-widget__roi-secondary {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.db-widget__roi-option {
+  padding: 10px 11px;
+  border: 1px solid var(--db-line);
+  background: #fff;
+  color: var(--db-navy);
+  text-align: left;
+}
+.db-widget__roi-option:hover {
+  border-color: var(--db-navy);
+  background: #F7F8FA;
+}
+.db-widget__roi-option:active,
+.db-widget__roi-primary:active,
+.db-widget__roi-secondary:active {
+  transform: scale(.985);
+}
+.db-widget__roi-option:disabled,
+.db-widget__roi-primary:disabled,
+.db-widget__roi-secondary:disabled,
+.db-widget__roi-link:disabled {
+  cursor: wait;
+}
+.db-widget__roi-primary {
+  padding: 11px 16px;
+  border: 1px solid var(--db-orange);
+  background: var(--db-orange);
+  color: #fff;
+  text-align: center;
+}
+.db-widget__roi-primary:hover {
+  border-color: var(--db-orange-hover);
+  background: var(--db-orange-hover);
+}
+.db-widget__roi-secondary {
+  padding: 11px 14px;
+  border: 1px solid var(--db-line);
+  background: #fff;
+  color: var(--db-navy);
+  text-align: center;
+}
+.db-widget__roi-secondary:hover {
+  background: #F7F8FA;
+}
+.db-widget__roi-eyebrow {
+  color: var(--db-orange);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.db-widget__roi-outcome {
+  padding: 13px 14px;
+  border: 1px solid #F6D3C4;
+  border-radius: 11px;
+  background: var(--db-primary-soft);
+}
+.db-widget__roi-metric {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.db-widget__roi-metric span {
+  color: var(--db-muted);
+  font-size: 12px;
+}
+.db-widget__roi-metric strong {
+  color: var(--db-navy);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 19px;
+  line-height: 1.2;
+}
+.db-widget__roi-confirmation {
+  padding: 9px 11px;
+  border-radius: 9px;
+  background: #EAF3DE;
+  color: #254414;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.db-widget__roi-footer-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.db-widget__roi-footer-actions--result {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.db-widget__roi-footer-actions--result .db-widget__roi-secondary {
+  padding-right: 12px;
+  padding-left: 12px;
+}
+.db-widget__roi-footer-actions > :only-child,
+.db-widget__roi-footer-actions > :first-child:nth-last-child(3) {
+  grid-column: 1 / -1;
+}
+.db-widget__roi-compact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.db-widget__roi-compact-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.db-widget__roi-compact-copy strong {
+  color: var(--db-navy);
+  font-size: 13px;
+}
+.db-widget__roi-compact-copy span {
+  color: var(--db-muted);
+  font-size: 11px;
+}
+.db-widget__roi-link {
+  min-height: 40px;
+  padding: 8px 10px;
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--db-orange);
+}
+.db-widget__roi-link:hover {
+  background: var(--db-primary-soft);
+}
+.db-widget__roi-details {
+  border-top: 1px solid var(--db-line);
+  padding-top: 10px;
+}
+.db-widget__roi-details summary {
+  color: var(--db-navy);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.db-widget__roi-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 10px;
 }
 
 /* ── Opening/Starter Area ────────────────────────────────────── */
