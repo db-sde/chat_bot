@@ -429,10 +429,6 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
   overflow-wrap: anywhere;
 }
-.db-widget__message-row--grouped .db-widget__bubble--bot {
-  border-radius: 15px;
-}
-
 /* User Message Bubble */
 .db-widget__bubble--user {
   width: max-content;
@@ -447,10 +443,6 @@
   white-space: pre-wrap;
 }
 
-.db-widget__avatar--message {
-  display: none;
-}
-
 /* Typing Indicator */
 .db-widget__typing {
   align-self: flex-start;
@@ -463,21 +455,16 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
   animation: db-fade-in .22s ease both;
 }
-.db-widget__typing-dots {
-  display: flex;
-  gap: 5px;
-  align-items: center;
-}
-.db-widget__typing-dots span {
+.db-widget__typing .db-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
   background: #9CA3AF;
   display: inline-block;
 }
-.db-widget__typing-dots span:nth-child(1) { animation: db-blink 1.2s infinite; }
-.db-widget__typing-dots span:nth-child(2) { animation: db-blink 1.2s .2s infinite; }
-.db-widget__typing-dots span:nth-child(3) { animation: db-blink 1.2s .4s infinite; }
+.db-widget__typing .db-dot:nth-child(1) { animation: db-blink 1.2s infinite; }
+.db-widget__typing .db-dot:nth-child(2) { animation: db-blink 1.2s .2s infinite; }
+.db-widget__typing .db-dot:nth-child(3) { animation: db-blink 1.2s .4s infinite; }
 
 /* ── Program & University Cards ──────────────────────────────── */
 .db-widget__component-stack {

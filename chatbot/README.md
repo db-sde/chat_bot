@@ -104,6 +104,10 @@ program, specialization, stacked comparison, picker, guided-finder, detail, call
 quick-action states without adding dependencies to the host site. Add exact page context on
 entity pages:
 
+Widget JavaScript is edited only in `widget/src/`. Generate the production artifact with
+`node widget/build.mjs`, or run `node widget/build.mjs --watch` during development. The backend
+continues to serve the generated `widget/widget.js` at the public `/widget.js` URL.
+
 ```html
 <script
   src="https://ai.degreebaba.com/widget.js"
