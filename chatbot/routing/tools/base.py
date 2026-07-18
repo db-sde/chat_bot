@@ -185,9 +185,13 @@ def _steps_for(
         return (), definition.unavailable_reason or "This tool has not been configured yet."
     if tool == "scholarship":
         key = _scholarship_bank_key(payload)
-        if key is None:
-            return (), "A scholarship question bank has not been mapped to this program."
-        steps = definition.question_bank.get(key, ())
+        steps = (
+            definition.question_bank.get(key, ())
+            if key is not None
+            else ()
+        )
+        if not steps:
+            steps = definition.question_bank.get("default", ()) or definition.steps
         if len(steps) != 7:
             return (
                 (),
@@ -326,7 +330,7 @@ def _score(
     if flow.tool == "roi":
         from .roi import score_roi
 
-        return score_roi(flow.answers, flow.payload, catalog)
+        return score_roi(flow.answers, flow.payload, catalog, definition=definition)
     if flow.tool == "career_quiz":
         from .career_quiz import score_career_quiz
 

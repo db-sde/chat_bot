@@ -48,7 +48,7 @@ from nlu.callback_detector import is_callback_request
 from nlu.intent import Intent, decide_action, heuristic_intent, should_use_reasoning_llm
 from nlu.mention_extractor import extract_mentions
 from presentation import enrich_response
-from presentation.chips import followup_payload, opening_payload
+from presentation.chips import catalog_chip_context, followup_payload, opening_payload
 from presentation.experience import (
     catalog_options,
     context_from_entity,
@@ -448,11 +448,18 @@ class ChatbotService:
                 safe_get(entity, "discipline"),
                 safe_get(entity, "category"),
                 safe_get(entity, "program_name"),
+                safe_get(entity, "specialization_name"),
+                safe_get(entity, "spec_name"),
             )
             normalized = {
                 re.sub(r"[^a-z0-9]+", " ", str(field or "").casefold()).strip() for field in fields
             }
-            if key in normalized:
+            structured_terms = {
+                re.sub(r"[^a-z0-9]+", " ", str(value or "").casefold()).strip()
+                for field in ("discovery_tags", "career_outcomes")
+                for value in (safe_get(entity, field, []) or [])
+            }
+            if key in normalized or key in structured_terms:
                 matches.append(str(entity_id))
         return matches[:3]
 
@@ -1744,14 +1751,20 @@ async def widget_guide_context_endpoint(
         )
     resolved_page_type = str(result.get("context", {}).get("page_type") or "homepage")
     resolved_entity_id = result.get("context", {}).get("entity_id")
-    opening = service.journey_engine.opening(resolved_page_type)
+    resolved_entity = (
+        service.catalog.get_entity(str(resolved_entity_id)) if resolved_entity_id else None
+    )
+    opening = service.journey_engine.opening(
+        resolved_page_type,
+        entity_context=catalog_chip_context(resolved_entity, service.catalog),
+    )
     resolved_session_id = session_id or str(uuid4())
     existing = await service.session_store.get(resolved_session_id)
     state_value = existing or ConversationState(session_id=resolved_session_id)
     if resolved_entity_id:
         service._apply_catalog_focus(state_value, str(resolved_entity_id))
         state_value.pending_clarification = None
-    elif resolved_page_type == "homepage":
+    elif resolved_page_type in {"homepage", "pillar"}:
         state_value.focus.clear()
         state_value.pending_clarification = None
     sync_page_navigation(
@@ -1824,6 +1837,12 @@ async def widget_guide_chips_endpoint(
         answer_state=command.answer_state,
         interaction_count=state_value.navigation.interaction_count,
         state=state_value,
+        entity_context=catalog_chip_context(
+            service.catalog.get_entity(
+                command.entity_id or state_value.navigation.entity_id or ""
+            ),
+            service.catalog,
+        ),
     )
     state_value.navigation.surface = followup.surface
     state_value.navigation.config_version = followup.config_version
@@ -2067,8 +2086,14 @@ async def widget_page_context_endpoint(
     reference = page_entity_slug or entity_slug or page_university_slug
     if not reference:
         return PageContextResponse()
-    if page_type not in {None, "university", "course", "specialization"}:
+    if page_type not in {None, "pillar", "university", "course", "specialization"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid page_type")
+    if page_type == "pillar":
+        return PageContextResponse(
+            page_type="pillar",
+            slug=reference,
+            context=ResponseContext(course=reference),
+        )
     entity = resolve_page_entity(service.catalog, reference, page_type)
     if entity is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Page entity not found")

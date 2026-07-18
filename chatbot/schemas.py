@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-PageType = Literal["university", "course", "specialization"]
+PageType = Literal["pillar", "university", "course", "specialization"]
 SlotType = Literal["university", "course", "specialization"]
 Intent = Literal[
     "factual",

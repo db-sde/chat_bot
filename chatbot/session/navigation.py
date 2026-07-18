@@ -41,6 +41,9 @@ CHIP_STEPS: dict[str, NavigationStep] = {
     "careers_from_syllabus": NavigationStep.CAREERS,
     "approvals": NavigationStep.APPROVALS,
     "reviews": NavigationStep.REVIEWS,
+    "average_rating": NavigationStep.REVIEWS,
+    "placement_support": NavigationStep.CAREERS,
+    "why_choose": NavigationStep.UNIVERSITY_CARD,
     "syllabus": NavigationStep.SYLLABUS,
     "admission_process": NavigationStep.ADMISSIONS,
     "admission_steps": NavigationStep.ADMISSIONS,
@@ -52,6 +55,8 @@ CHIP_STEPS: dict[str, NavigationStep] = {
     "compare_top": NavigationStep.COMPARISON,
     "compare_universities": NavigationStep.COMPARISON,
     "compare_others": NavigationStep.COMPARISON,
+    "compare_program": NavigationStep.COMPARISON,
+    "compare_specializations": NavigationStep.COMPARISON,
     "roi_tool": NavigationStep.TOOL,
     "career_quiz_tool": NavigationStep.TOOL,
     "specialization_quiz_tool": NavigationStep.TOOL,
@@ -68,6 +73,9 @@ ANSWER_STEPS: dict[str, NavigationStep] = {
     "careers": NavigationStep.CAREERS,
     "approvals": NavigationStep.APPROVALS,
     "reviews": NavigationStep.REVIEWS,
+    "average_rating": NavigationStep.REVIEWS,
+    "placement": NavigationStep.CAREERS,
+    "overview": NavigationStep.UNIVERSITY_CARD,
     "syllabus": NavigationStep.SYLLABUS,
     "validity": NavigationStep.VALIDITY,
     "comparison": NavigationStep.COMPARISON,
@@ -108,7 +116,7 @@ def sync_page_navigation(
         navigation.surface = PAGE_SURFACES[normalized]
     navigation.page_type = normalized
     navigation.entity_id = next_entity_id
-    if normalized == "homepage":
+    if normalized in {"homepage", "pillar"}:
         navigation.university_id = None
         navigation.course_id = None
         navigation.specialization_id = None

@@ -36,26 +36,50 @@ def _ids(chips: object) -> list[str]:
             ["compare_universities", "fees_emi", "roi_tool", "counsellor"],
         ),
         (
+            "pillar",
+            ["list_providers", "fees_across", "specialization_quiz_tool", "check_eligibility"],
+            ["compare_top", "careers", "roi_tool", "counsellor"],
+        ),
+        (
             "university",
-            ["programs_here", "approvals", "reviews", "counsellor"],
-            ["starting_fees", "admission_process", "compare_others", "roi_tool"],
+            ["programs_here", "starting_fees", "placement_support", "reviews"],
+            [
+                "approvals",
+                "why_choose",
+                "admission_process",
+                "compare_others",
+                "counsellor",
+                "average_rating",
+            ],
         ),
         (
             "course",
-            ["fees_emi", "eligibility", "specializations", "apply_now"],
+            ["fees_emi", "eligibility", "specializations", "reviews"],
             [
-                "validity_course",
                 "careers",
-                "roi_tool",
+                "placement_support",
+                "admission_process",
                 "scholarship_tool",
-                "compare_universities",
+                "syllabus",
+                "apply_now",
+                "compare_program",
+                "roi_tool",
                 "counsellor",
             ],
         ),
         (
             "specialization",
-            ["careers", "fees_emi", "eligibility", "apply_now"],
-            ["syllabus", "other_specs", "roi_tool", "scholarship_tool", "counsellor"],
+            ["careers", "fees_emi", "eligibility", "placement_support"],
+            [
+                "admission_process",
+                "reviews",
+                "scholarship_tool",
+                "compare_specializations",
+                "syllabus",
+                "apply_now",
+                "counsellor",
+                "roi_tool",
+            ],
         ),
     ],
 )
@@ -69,8 +93,22 @@ def test_journey_engine_returns_only_configured_opening_sets(
 
     assert _ids(result.top) == top
     assert _ids(result.more) == more
-    assert result.config_version == "2026-07-16"
+    assert result.config_version == "2026-07-18-chip-ux"
     assert not result.missing_surface
+
+
+def test_catalog_v3_chip_labels_are_short_and_action_oriented(
+    store: ChipMapStore,
+) -> None:
+    chips = store.snapshot().chips
+
+    assert chips["programs_here"].label == "📚 Programs offered"
+    assert chips["starting_fees"].label == "💰 Fees & EMI"
+    assert chips["eligibility"].label == "✅ Eligibility"
+    assert chips["syllabus"].label == "📖 Curriculum"
+    assert chips["scholarship_tool"].label == "🎓 Scholarships"
+    assert chips["compare_program"].label == "⚖️ Compare this program"
+    assert chips["compare_specializations"].label == "⚖️ Compare specializations"
 
 
 @pytest.mark.parametrize(
@@ -109,8 +147,20 @@ def test_progression_adds_conversion_and_promotes_it_at_threshold(
     early = engine.lookup("course", card_type="course", interaction_count=2)
     warm = engine.lookup("course", card_type="course", interaction_count=3)
 
-    assert _ids(early.chips) == ["fees_emi", "eligibility", "specializations", "apply_now"]
-    assert _ids(warm.chips) == ["apply_now", "fees_emi", "eligibility", "specializations"]
+    assert _ids(early.chips) == [
+        "fees_emi",
+        "eligibility",
+        "specializations",
+        "reviews",
+        "apply_now",
+    ]
+    assert _ids(warm.chips) == [
+        "apply_now",
+        "fees_emi",
+        "eligibility",
+        "specializations",
+        "reviews",
+    ]
 
 
 def test_progression_never_returns_an_up_funnel_chip(store: ChipMapStore) -> None:
@@ -228,7 +278,7 @@ def test_invalid_hot_reload_keeps_last_good_snapshot(
     with caplog.at_level("WARNING"):
         snapshot = store.reload()
 
-    assert snapshot.version == "2026-07-16"
+    assert snapshot.version == "2026-07-18-chip-ux"
     assert snapshot.chips["fees_emi"].handler == "get_fees"
     assert "keeping last-good config" in caplog.text
 
@@ -264,7 +314,7 @@ def test_chip_map_retains_prior_version_for_in_flight_actions(tmp_path: Path) ->
     store.reload()
 
     current = store.snapshot()
-    prior = store.snapshot(version="2026-07-16")
+    prior = store.snapshot(version=first["version"])
     assert current is not None and current.version == "2026-07-17"
     assert prior is not None
     assert prior.chips["fees_emi"].label == "💰 Fees & EMI"

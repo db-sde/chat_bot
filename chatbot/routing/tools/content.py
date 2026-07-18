@@ -41,6 +41,8 @@ class ToolOption(ContentModel):
     weights: dict[str, float] = Field(default_factory=dict)
     correct: bool | None = None
     value: str | int | float | None = None
+    bonus: int = Field(default=0, ge=0)
+    reason_label: str | None = Field(default=None, min_length=1, max_length=300)
 
 
 class ToolStep(ContentModel):
@@ -66,15 +68,35 @@ class ToolStep(ContentModel):
         return self
 
 
+class RoiBucket(ContentModel):
+    option_id: str = Field(min_length=1, max_length=80)
+    payback_months: int = Field(ge=1, le=1200)
+    headline: str = Field(min_length=1, max_length=500)
+
+
 class RewardBand(ContentModel):
-    min_correct: int = Field(ge=0)
-    max_correct: int = Field(ge=0)
+    min_correct: int | None = Field(default=None, ge=0)
+    max_correct: int | None = Field(default=None, ge=0)
+    min_waiver: int | None = Field(default=None, ge=0)
+    max_waiver: int | None = Field(default=None, ge=0)
     label: str = Field(min_length=1, max_length=200)
 
     @model_validator(mode="after")
     def validate_range(self) -> RewardBand:
-        if self.max_correct < self.min_correct:
-            raise ValueError("reward band max_correct must be >= min_correct")
+        score_range = self.min_correct is not None or self.max_correct is not None
+        waiver_range = self.min_waiver is not None or self.max_waiver is not None
+        if score_range == waiver_range:
+            raise ValueError("reward band requires exactly one complete score or waiver range")
+        if score_range:
+            if self.min_correct is None or self.max_correct is None:
+                raise ValueError("reward score range is incomplete")
+            if self.max_correct < self.min_correct:
+                raise ValueError("reward band max_correct must be >= min_correct")
+        if waiver_range:
+            if self.min_waiver is None or self.max_waiver is None:
+                raise ValueError("reward waiver range is incomplete")
+            if self.max_waiver < self.min_waiver:
+                raise ValueError("reward band max_waiver must be >= min_waiver")
         return self
 
 
@@ -87,6 +109,15 @@ class ToolDefinition(ContentModel):
     steps: tuple[ToolStep, ...] = ()
     question_bank: dict[str, tuple[ToolStep, ...]] = Field(default_factory=dict)
     reward_bands: tuple[RewardBand, ...] = ()
+    roi_buckets: tuple[RoiBucket, ...] = ()
+    tie_break: Literal["last_answer"] | None = None
+    partial_reveal_template: str | None = Field(default=None, max_length=1000)
+    full_reveal_template: str | None = Field(default=None, max_length=2000)
+    job_profiles: dict[str, str] = Field(default_factory=dict)
+    base_waiver: int = Field(default=0, ge=0)
+    max_waiver: int | None = Field(default=None, ge=0)
+    standard_fee: int | None = Field(default=None, ge=0)
+    claim_steps: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def validate_step_identity(self) -> ToolDefinition:
@@ -95,10 +126,19 @@ class ToolDefinition(ContentModel):
             ids = [step.id.casefold() for step in steps]
             if len(ids) != len(set(ids)):
                 raise ValueError("tool definition contains duplicate step ids")
-        ordered = sorted(self.reward_bands, key=lambda band: band.min_correct)
-        for previous, current in pairwise(ordered):
-            if current.min_correct <= previous.max_correct:
-                raise ValueError("scholarship reward bands must not overlap")
+        score_bands = [band for band in self.reward_bands if band.min_correct is not None]
+        waiver_bands = [band for band in self.reward_bands if band.min_waiver is not None]
+        for bands, minimum, maximum in (
+            (score_bands, "min_correct", "max_correct"),
+            (waiver_bands, "min_waiver", "max_waiver"),
+        ):
+            ordered = sorted(bands, key=lambda band: int(getattr(band, minimum) or 0))
+            for previous, current in pairwise(ordered):
+                if int(getattr(current, minimum) or 0) <= int(getattr(previous, maximum) or 0):
+                    raise ValueError("scholarship reward bands must not overlap")
+        bucket_ids = [bucket.option_id.casefold() for bucket in self.roi_buckets]
+        if len(bucket_ids) != len(set(bucket_ids)):
+            raise ValueError("ROI buckets contain duplicate option ids")
         return self
 
 
@@ -263,6 +303,7 @@ __all__ = [
     "KNOWN_TOOLS",
     "TOOLS_CONTENT_PATH_ENV",
     "RewardBand",
+    "RoiBucket",
     "ToolDefinition",
     "ToolId",
     "ToolOption",

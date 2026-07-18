@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping
+from contextlib import suppress
 from typing import Any
 
 from data.accessor import safe_get
@@ -23,7 +24,7 @@ from response.templates import accreditation_items
 
 from .cards import build_comparison_card, build_entity_card
 
-_PAGE_TYPES = {"homepage", "university", "course", "specialization"}
+_PAGE_TYPES = {"homepage", "pillar", "university", "course", "specialization"}
 _PROGRAM_NAMES = {
     "mba": "MBA",
     "mca": "MCA",
@@ -251,7 +252,7 @@ def _resolve_context_entity(
         if entity is None:
             return None
         return entity
-    if page_type == "homepage":
+    if page_type in {"homepage", "pillar"}:
         return None
     university_entity = _resolve_university(catalog, university)
     if university and university_entity is None:
@@ -526,7 +527,23 @@ def _syllabus_info(entity: Any) -> dict[str, Any]:
     return {"available": bool(semesters), "semesters": semesters}
 
 
-def _review_info(entity: Any) -> dict[str, Any]:
+def _review_info(entity: Any, catalog: Any) -> dict[str, Any]:
+    review_sources: list[tuple[Any, str | None]] = [(entity, None)]
+    scope_label: str | None = None
+    direct_reviews = safe_get(entity, "reviews", None) or []
+    if entity_page_type(entity) == "university" and not direct_reviews:
+        linked_courses = [
+            course
+            for course in _courses_for_university(catalog, entity)
+            if safe_get(course, "reviews", None)
+        ]
+        if linked_courses:
+            review_sources = [(course, _course_name(course)) for course in linked_courses]
+            scope_label = (
+                f"Published reviews across {len(linked_courses)} "
+                f"{_university_name(entity)} programs"
+            )
+
     rating = clean_text(
         first_value(entity, "rating", "average_rating", "overall_rating", default=None)
     ) or None
@@ -546,41 +563,61 @@ def _review_info(entity: Any) -> dict[str, Any]:
                 breakdown.append({"label": label, "value": score})
 
     testimonials: list[dict[str, str | None]] = []
-    reviews = safe_get(entity, "reviews", None) or []
-    if isinstance(reviews, Iterable) and not isinstance(reviews, (str, bytes, Mapping)):
+    ratings: list[float] = []
+    theme_counts: dict[str, int] = {}
+    published_review_count = 0
+    for source, source_label in review_sources:
+        reviews = safe_get(source, "reviews", None) or []
+        if not isinstance(reviews, Iterable) or isinstance(reviews, (str, bytes, Mapping)):
+            continue
         for review in reviews:
             text = clean_text(first_value(review, "review_text", "text", default=None))
             if not text:
                 continue
+            published_review_count += 1
+            review_rating = safe_get(review, "rating", None)
+            with suppress(TypeError, ValueError):
+                ratings.append(float(review_rating))
+            theme = clean_text(safe_get(review, "theme", None)) or None
+            if theme:
+                normalized_theme = theme.title()
+                theme_counts[normalized_theme] = theme_counts.get(normalized_theme, 0) + 1
             testimonials.append(
                 {
                     "text": text,
-                    "reviewer_name": clean_text(safe_get(review, "reviewer_name", None)) or None,
-                    "reviewer_label": clean_text(safe_get(review, "reviewer_label", None)) or None,
-                    "rating": safe_get(review, "rating", None),
-                    "theme": clean_text(safe_get(review, "theme", None)) or None,
+                    "reviewer_name": clean_text(safe_get(review, "reviewer_name", None))
+                    or None,
+                    "reviewer_label": (
+                        clean_text(safe_get(review, "reviewer_label", None))
+                        or source_label
+                    ),
+                    "rating": review_rating,
+                    "theme": theme,
                 }
             )
-            if len(testimonials) >= 12:
-                break
+
+    if scope_label and ratings:
+        rating = clean_text(round(sum(ratings) / len(ratings), 2)) or None
     if not breakdown and testimonials:
-        theme_counts: dict[str, int] = {}
-        for item in testimonials:
-            theme = clean_text(item.get("theme")).title()
-            if theme:
-                theme_counts[theme] = theme_counts.get(theme, 0) + 1
         total = sum(theme_counts.values())
         breakdown = [
             {"label": theme, "value": f"{round(count / total * 100)}%"}
             for theme, count in sorted(theme_counts.items())
         ] if total else []
-    return {
+    result = {
         "available": bool(rating or breakdown or testimonials),
         "rating": rating,
         "breakdown": breakdown,
         "testimonials": testimonials,
-        "review_count": safe_get(entity, "review_count", None),
+        "review_count": (
+            published_review_count
+            if scope_label
+            else safe_get(entity, "review_count", None)
+        ),
     }
+    if scope_label:
+        result["scope_label"] = scope_label
+    return result
 
 
 def _accreditation_info(entity: Any, catalog: Any) -> dict[str, Any]:
@@ -612,15 +649,44 @@ def _admission_info(entity: Any, catalog: Any) -> dict[str, Any]:
     }
 
 
+def _placement_info(entity: Any, catalog: Any) -> dict[str, Any]:
+    sources = _relation_chain(entity, catalog)
+    supported = any(safe_get(source, "placement_support", None) is True for source in sources)
+    industry_projects = any(
+        safe_get(source, "industry_projects", None) is True for source in sources
+    )
+    content = _first_text(sources, "placement_content")
+    return {
+        "available": bool(supported or industry_projects or content),
+        "supported": supported,
+        "industry_projects": industry_projects,
+        "content": content,
+    }
+
+
+def _overview_info(entity: Any) -> dict[str, Any]:
+    why_choose = clean_text(safe_get(entity, "why_choose_content", None)) or None
+    description = clean_text(
+        first_value(entity, "hero_description", "about_content", default=None)
+    ) or None
+    return {
+        "available": bool(why_choose or description),
+        "why_choose": why_choose,
+        "description": description,
+    }
+
+
 def _info(entity: Any, catalog: Any) -> dict[str, Any]:
     return {
         "fees": _fee_info(entity, catalog),
         "eligibility": _eligibility_info(entity, catalog),
         "career": _career_info(entity),
         "syllabus": _syllabus_info(entity),
-        "reviews": _review_info(entity),
+        "reviews": _review_info(entity, catalog),
         "accreditations": _accreditation_info(entity, catalog),
         "admissions": _admission_info(entity, catalog),
+        "placement": _placement_info(entity, catalog),
+        "overview": _overview_info(entity),
     }
 
 
@@ -685,6 +751,8 @@ def guide_context(
     """Build one grounded guided-navigation state, or ``None`` when unresolved."""
 
     normalized_page_type = clean_text(page_type).casefold() or "homepage"
+    if normalized_page_type in {"discipline", "discipline_hub", "pillar_page"}:
+        normalized_page_type = "pillar"
     if normalized_page_type not in _PAGE_TYPES:
         raise ValueError("Invalid page_type")
     entity = _resolve_context_entity(
@@ -695,19 +763,20 @@ def guide_context(
         specialization=specialization,
         entity_id=entity_id,
     )
-    if entity is None and normalized_page_type != "homepage":
+    if entity is None and normalized_page_type not in {"homepage", "pillar"}:
         return None
     if entity is not None:
         normalized_page_type = entity_page_type(entity)
 
     if entity is None:
+        pillar_course = clean_text(course) if normalized_page_type == "pillar" else None
         context = {
-            "page_type": "homepage",
+            "page_type": normalized_page_type,
             "university": None,
-            "course": None,
+            "course": pillar_course or None,
             "specialization": None,
             "entity_id": None,
-            "label": None,
+            "label": pillar_course or None,
         }
         return {
             "context": context,
@@ -742,6 +811,17 @@ def guide_context(
                 },
                 "accreditations": {"available": False, "items": []},
                 "admissions": {"available": False, "steps": None, "fee_note": None},
+                "placement": {
+                    "available": False,
+                    "supported": False,
+                    "industry_projects": False,
+                    "content": None,
+                },
+                "overview": {
+                    "available": False,
+                    "why_choose": None,
+                    "description": None,
+                },
             },
         }
 
@@ -783,10 +863,22 @@ def guide_catalog(
     normalized_kind = clean_text(kind).casefold()
     term = _normalise(query)
     if normalized_kind == "universities":
+        matching_provider_ids: set[str] | None = None
+        if course:
+            matching_provider_ids = {
+                _entity_id(provider)
+                for candidate in _entities(catalog, "course")
+                if _matches(candidate, course, catalog)
+                and (provider := _parent_university(candidate, catalog)) is not None
+            }
         entities = [
             entity
             for entity in _entities(catalog, "university")
-            if not term or any(term in value for value in _entity_terms(entity, catalog))
+            if (
+                matching_provider_ids is None
+                or _entity_id(entity) in matching_provider_ids
+            )
+            and (not term or any(term in value for value in _entity_terms(entity, catalog)))
         ]
         return _card_list(entities, catalog, limit=100)
 

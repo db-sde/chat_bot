@@ -181,6 +181,98 @@ def test_guide_context_returns_persisted_session_opening_and_navigation(
     assert persisted.navigation.config_version == payload["opening"]["config_version"]
 
 
+@pytest.mark.parametrize(
+    ("params", "surface", "expected_top"),
+    [
+        (
+            {"page_type": "homepage"},
+            "page:home",
+            ["browse_universities", "browse_programs", "career_quiz_tool", "validity"],
+        ),
+        (
+            {"page_type": "pillar", "course": "MBA"},
+            "page:pillar",
+            ["list_providers", "fees_across", "specialization_quiz_tool", "check_eligibility"],
+        ),
+        (
+            {"page_type": "university", "entity_id": "uni-nmims"},
+            "page:university",
+            ["programs_here", "starting_fees", "placement_support"],
+        ),
+        (
+            {"page_type": "course", "entity_id": "course-nmims-mca"},
+            "page:course",
+            ["fees_emi", "eligibility", "specializations", "reviews"],
+        ),
+        (
+            {
+                "page_type": "specialization",
+                "entity_id": "spec-nmims-mca-cloud-computing",
+            },
+            "page:specialization",
+            ["careers", "fees_emi", "eligibility", "placement_support"],
+        ),
+    ],
+)
+def test_each_page_returns_its_own_approved_opening_chip_set(
+    client: TestClient,
+    params: dict[str, str],
+    surface: str,
+    expected_top: list[str],
+) -> None:
+    session_id = f"opening-{surface.replace(':', '-')}"
+    response = client.get(
+        "/api/widget/guide/context",
+        params={"session_id": session_id, **params},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["opening"]["surface"] == surface
+    assert [action["chip_id"] for action in payload["opening"]["top"]] == expected_top
+    assert payload["navigation"]["page_type"] == params["page_type"]
+
+
+def test_opening_chips_are_filtered_by_catalog_v3_data(client: TestClient) -> None:
+    university = client.get(
+        "/api/widget/guide/context",
+        params={"page_type": "university", "entity_id": "uni-nmims"},
+    ).json()["opening"]
+    course = client.get(
+        "/api/widget/guide/context",
+        params={
+            "page_type": "course",
+            "entity_id": "course-sikkim-manipal-bba",
+        },
+    ).json()["opening"]
+    specialization = client.get(
+        "/api/widget/guide/context",
+        params={
+            "page_type": "specialization",
+            "entity_id": "spec-nmims-mca-cloud-computing",
+        },
+    ).json()["opening"]
+
+    university_ids = {
+        action["chip_id"] for action in [*university["top"], *university["more"]]
+    }
+    course_ids = {action["chip_id"] for action in [*course["top"], *course["more"]]}
+    specialization_ids = {
+        action["chip_id"]
+        for action in [*specialization["top"], *specialization["more"]]
+    }
+    assert "reviews" not in university_ids
+    assert "average_rating" not in university_ids
+    assert {"placement_support", "starting_fees", "why_choose"}.issubset(
+        university_ids
+    )
+    assert "specializations" not in course_ids
+    assert "compare_program" in course_ids
+    assert "reviews" not in specialization_ids
+    assert "syllabus" not in specialization_ids
+    assert "compare_specializations" in specialization_ids
+
+
 def test_homepage_hydration_clears_stale_academic_focus(client: TestClient) -> None:
     session_id = "widget-v2-home-clears-focus"
     course = client.get(
@@ -206,6 +298,48 @@ def test_homepage_hydration_clears_stale_academic_focus(client: TestClient) -> N
     assert persisted.focus.university_concept is None
     assert persisted.focus.course_concept is None
     assert persisted.navigation.page_type == "homepage"
+
+
+def test_pillar_hydration_has_distinct_chips_and_clears_single_entity_focus(
+    client: TestClient,
+) -> None:
+    session_id = "widget-v2-pillar-clears-focus"
+    course = client.get(
+        "/api/widget/guide/context",
+        params={
+            "session_id": session_id,
+            "page_type": "course",
+            "entity_id": "course-nmims-mca",
+        },
+    )
+    assert course.status_code == 200
+
+    pillar = client.get(
+        "/api/widget/guide/context",
+        params={"session_id": session_id, "page_type": "pillar", "course": "MCA"},
+    )
+
+    assert pillar.status_code == 200
+    payload = pillar.json()
+    assert payload["context"]["page_type"] == "pillar"
+    assert payload["context"]["course"] == "MCA"
+    assert payload["opening"]["surface"] == "page:pillar"
+    persisted = _persisted_state(client, session_id)
+    assert persisted.focus.entity_id is None
+    assert persisted.navigation.page_type == "pillar"
+    assert persisted.navigation.course_id is None
+
+    providers = client.get(
+        "/api/widget/guide/catalog/universities",
+        params={"course": "MCA"},
+    )
+    no_providers = client.get(
+        "/api/widget/guide/catalog/universities",
+        params={"course": "not-a-published-program"},
+    )
+    assert providers.status_code == no_providers.status_code == 200
+    assert providers.json()["items"]
+    assert no_providers.json()["items"] == []
 
 
 def test_guide_chip_post_persists_progress_and_suppresses_completed_action(
@@ -420,22 +554,23 @@ def test_guide_chip_rejects_stale_page_context(client: TestClient) -> None:
     assert persisted.navigation.completed_actions == []
 
 
-def test_unconfigured_roi_tool_is_honest_clears_flow_and_never_calls_llm(
+def test_configured_roi_tool_starts_from_versioned_content_without_calling_llm(
     client: TestClient,
 ) -> None:
     service = client.app.state.service
     service.analytics.reset_snapshot()
     decide_action = AsyncMock(side_effect=AssertionError("tool entry must not call the LLM"))
     with patch.object(type(service.llm), "decide_action_tiny", new=decide_action):
-        payload = _chat(client, "tool:roi", "widget-v2-roi-unavailable")
+        payload = _chat(client, "tool:roi", "widget-v2-roi-configured")
 
-    persisted = _persisted_state(client, "widget-v2-roi-unavailable")
-    assert "unavailable" in payload["text"].casefold()
-    assert "fee_numeric" in payload["text"]
-    assert persisted.active_flow is None
-    assert persisted.navigation.step is NavigationStep.HOMEPAGE
+    persisted = _persisted_state(client, "widget-v2-roi-configured")
+    assert "Which program are you considering?" in payload["text"]
+    assert persisted.active_flow is not None
+    assert persisted.active_flow.tool == "roi"
+    assert persisted.active_flow.step == "program"
+    assert persisted.navigation.step is NavigationStep.TOOL
     event_counts = service.analytics.snapshot()["event_counts"]
-    assert event_counts.get("tool_started", 0) == 0
+    assert event_counts.get("tool_started", 0) == 1
     assert event_counts.get("tool_completed", 0) == 0
     decide_action.assert_not_awaited()
 
@@ -447,6 +582,37 @@ def test_roi_program_step_reuses_catalog_matcher_for_university_course_phrase(
 
     assert service._resolve_tool_entity("NMIMS MCA") == "course-nmims-mca"
     assert service._resolve_tool_entity("a course that is not in the catalog") is None
+    assert service._lookup_tool_programs("Business Analytics")
+
+
+def test_production_tool_content_reaches_partial_reveal_for_all_tools(
+    client: TestClient,
+) -> None:
+    roi = _chat(client, "tool:roi", "production-tool-roi")
+    roi = _chat(client, roi["quick_actions"][0]["message"], "production-tool-roi")
+    roi = _chat(client, roi["quick_actions"][0]["message"], "production-tool-roi")
+    assert roi["metadata"]["tool_flow"]["step"] == "partial_reveal"
+    assert "under a year" in roi["text"].casefold()
+
+    career = _chat(client, "tool:career_quiz", "production-tool-career")
+    for _ in range(5):
+        career = _chat(
+            client,
+            career["quick_actions"][0]["message"],
+            "production-tool-career",
+        )
+    assert career["metadata"]["tool_flow"]["step"] == "partial_reveal"
+    assert "Business Analytics" in career["text"]
+
+    scholarship = _chat(client, "tool:scholarship", "production-tool-scholarship")
+    for _ in range(7):
+        scholarship = _chat(
+            client,
+            scholarship["quick_actions"][0]["message"],
+            "production-tool-scholarship",
+        )
+    assert scholarship["metadata"]["tool_flow"]["step"] == "partial_reveal"
+    assert "fee waiver" in scholarship["text"].casefold()
 
 
 def test_configured_tool_flow_survives_reload_and_strong_intents_escape(

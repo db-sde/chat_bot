@@ -7,8 +7,10 @@ from types import SimpleNamespace
 import pytest
 
 from data.loader import SAMPLE_CATALOG_PATH, CatalogStore
+from funnel import ChipEngine, ChipMapStore, JourneyEngine
 from main import ChatbotService
 from presentation.cards import build_comparison_card, build_entity_card
+from presentation.chips import catalog_chip_context
 from presentation.experience import catalog_options
 from presentation.guided_navigation import guide_context
 from response.cards import entity_label
@@ -141,6 +143,89 @@ def test_guided_consumers_use_exact_links_and_structured_info(
         "flexibility",
         "lms",
     }
+
+
+def test_university_reviews_use_only_published_linked_program_reviews(
+    v3_catalog: CatalogStore,
+) -> None:
+    context = guide_context(
+        v3_catalog,
+        page_type="university",
+        entity_id="uni-nmims",
+    )
+
+    assert context is not None
+    reviews = context["info"]["reviews"]
+    assert reviews["available"] is True
+    assert reviews["review_count"] == 16
+    assert reviews["scope_label"] == (
+        "Published reviews across 4 NMIMS Global Access programs"
+    )
+    assert {item["reviewer_label"] for item in reviews["testimonials"]} == {
+        "MCA",
+        "MCom",
+        "BCA",
+        "MSc AI & ML",
+    }
+    assert all(item["text"] for item in reviews["testimonials"])
+
+
+def test_v3_opening_chips_follow_published_entity_capabilities(
+    v3_catalog: CatalogStore,
+) -> None:
+    journey = JourneyEngine(ChipMapStore(auto_reload=False))
+    nmims = v3_catalog.get_entity("uni-nmims")
+    amity = v3_catalog.get_entity("uni-amity")
+    no_specializations = v3_catalog.get_entity("course-sikkim-manipal-bba")
+
+    nmims_opening = journey.opening(
+        "university",
+        entity_context=catalog_chip_context(nmims, v3_catalog),
+    )
+    amity_opening = journey.opening(
+        "university",
+        entity_context=catalog_chip_context(amity, v3_catalog),
+    )
+    course_opening = journey.opening(
+        "course",
+        entity_context=catalog_chip_context(no_specializations, v3_catalog),
+    )
+
+    assert [chip.id for chip in nmims_opening.top] == [
+        "programs_here",
+        "starting_fees",
+        "placement_support",
+    ]
+    assert "reviews" not in {chip.id for chip in nmims_opening.top}
+    assert [chip.id for chip in (*amity_opening.top, *amity_opening.more)] == [
+        "programs_here",
+        "starting_fees",
+        "placement_support",
+        "reviews",
+        "approvals",
+        "why_choose",
+        "compare_others",
+        "counsellor",
+        "average_rating",
+    ]
+    assert "specializations" not in {chip.id for chip in course_opening.top}
+
+
+def test_v3_followup_chips_remove_unanswerable_specialization_actions(
+    v3_catalog: CatalogStore,
+) -> None:
+    specialization = v3_catalog.get_entity("spec-nmims-mca-cloud-computing")
+    result = ChipEngine(ChipMapStore(auto_reload=False)).lookup(
+        page_type="specialization",
+        card_type="specialization",
+        interaction_count=1,
+        entity_context=catalog_chip_context(specialization, v3_catalog),
+    )
+
+    chip_ids = [chip.id for chip in result.chips]
+    assert chip_ids == ["careers", "fees_emi", "eligibility", "apply_now"]
+    assert "reviews" not in chip_ids
+    assert "syllabus" not in chip_ids
 
 
 def test_program_picker_deduplicates_by_program_not_v3_discipline(

@@ -107,6 +107,26 @@ def _resolve_many(config: ChipMapConfig, chip_ids: Sequence[str]) -> tuple[Resol
     return tuple(_resolved(chip_id, config.chips[chip_id]) for chip_id in chip_ids)
 
 
+def _available_chips(
+    chips: Sequence[ResolvedChip],
+    *,
+    config: ChipMapConfig,
+    entity_context: Mapping[str, Any] | None,
+) -> tuple[ResolvedChip, ...]:
+    """Filter declared catalog capabilities when an entity context is available."""
+
+    if entity_context is None:
+        return tuple(chips)
+    return tuple(
+        chip
+        for chip in chips
+        if all(
+            bool(entity_context.get(requirement))
+            for requirement in config.chips[chip.id].requires
+        )
+    )
+
+
 def _state_value(state: Any, name: str) -> Any:
     if state is None:
         return None
@@ -232,7 +252,12 @@ class JourneyEngine:
     def __init__(self, store: ChipMapStore) -> None:
         self.store = store
 
-    def opening(self, page_type: str) -> OpeningChipSet:
+    def opening(
+        self,
+        page_type: str,
+        *,
+        entity_context: Mapping[str, Any] | None = None,
+    ) -> OpeningChipSet:
         config = self.store.snapshot()
         surface_key = _page_surface(page_type)
         surface = config.surfaces.get(surface_key)
@@ -248,8 +273,16 @@ class JourneyEngine:
             )
         return OpeningChipSet(
             surface=surface_key,
-            top=_resolve_many(config, surface.top),
-            more=_resolve_many(config, surface.more),
+            top=_available_chips(
+                _resolve_many(config, surface.top),
+                config=config,
+                entity_context=entity_context,
+            ),
+            more=_available_chips(
+                _resolve_many(config, surface.more),
+                config=config,
+                entity_context=entity_context,
+            ),
             config_version=config.version,
         )
 
@@ -289,9 +322,7 @@ class ChipEngine:
         state: Any = None,
         entity_context: Mapping[str, Any] | None = None,
     ) -> FollowupChipSet:
-        """Look up one follow surface; entity context is reserved for declared fills."""
-
-        del entity_context  # fill metadata is preserved but intentionally not executed yet.
+        """Look up one follow surface and remove unavailable catalog actions."""
         config = self.store.snapshot()
         surface_key = self._surface_key(
             page_type=page_type,
@@ -311,7 +342,11 @@ class ChipEngine:
         else:
             assert surface is not None
             stage = surface.funnel_stage
-            base = _resolve_many(config, surface.follow)
+            base = _available_chips(
+                _resolve_many(config, surface.follow),
+                config=config,
+                entity_context=entity_context,
+            )
 
         page_surface = config.surfaces.get(_page_surface(page_type))
         state_navigation = _state_value(state, "navigation")

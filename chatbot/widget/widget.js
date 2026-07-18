@@ -15,8 +15,9 @@
   const documentData = document.documentElement.dataset;
 
   function cleanPageType(value) {
-    const normalized = String(value || "").trim().toLowerCase();
-    return ["university", "course", "specialization"].includes(normalized)
+    const normalized = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+    if (["discipline", "discipline_hub", "pillar_page"].includes(normalized)) return "pillar";
+    return ["pillar", "university", "course", "specialization"].includes(normalized)
       ? normalized
       : "homepage";
   }
@@ -46,7 +47,7 @@
   widgetNamespace.loading[siteKey] = true;
 
   const GUIDED_THINKING_MS = 650;
-  const GUIDED_VISIBLE_ACTIONS = 4;
+  const responsiveActionLayouts = new Set();
   const NavigationStep = Object.freeze({
     HOMEPAGE: "HOMEPAGE",
     UNIVERSITY_PICKER: "UNIVERSITY_PICKER",
@@ -84,6 +85,9 @@
     accreditation: NavigationStep.APPROVALS,
     accreditations: NavigationStep.APPROVALS,
     reviews: NavigationStep.REVIEWS,
+    rating: NavigationStep.REVIEWS,
+    placement: NavigationStep.CAREERS,
+    overview: NavigationStep.UNIVERSITY_CARD,
     syllabus: NavigationStep.SYLLABUS,
     admission_process: NavigationStep.ADMISSIONS,
     admission_steps: NavigationStep.ADMISSIONS,
@@ -97,9 +101,14 @@
   const CHIP_GUIDE_ACTIONS = Object.freeze({
     browse_universities: "browse_universities",
     browse_programs: "browse_programs",
+    list_providers: "browse_universities",
+    eligible_programs: "finder",
     programs_here: "programs_here",
     approvals: "accreditations",
     reviews: "reviews",
+    average_rating: "rating",
+    placement_support: "placement",
+    why_choose: "overview",
     fees_emi: "fees",
     fees_across: "fees",
     starting_fees: "fees",
@@ -120,11 +129,15 @@
     compare_top: "compare",
     compare_others: "compare",
     compare_universities: "compare",
+    compare_program: "compare",
+    compare_specializations: "compare",
     apply_now: "lead",
     counsellor: "lead",
   });
   const HANDLER_GUIDE_ACTIONS = Object.freeze({
     list_universities: "browse_universities",
+    list_providers: "browse_universities",
+    get_eligible_programs: "finder",
     get_fees: "fees",
     get_eligibility: "eligibility",
     get_specializations: "specializations",
@@ -132,7 +145,10 @@
     get_careers: "career",
     get_syllabus: "syllabus",
     get_reviews: "reviews",
+    get_average_rating: "rating",
     get_approvals: "accreditations",
+    get_overview: "overview",
+    get_placement_support: "placement",
     get_admission_steps: "admissions",
     compare: "compare",
     cta_apply: "lead",
@@ -375,7 +391,7 @@
   function applyActiveFlow(flow) {
     const restorePageStep = () => {
       const type = currentGuidePageType();
-      transitionNavigation(type === "homepage" ? "reset" : `${type}_card`);
+      transitionNavigation(["homepage", "pillar"].includes(type) ? "reset" : `${type}_card`);
     };
     if (!flow || typeof flow !== "object") {
       state.activeFlow = null;
@@ -556,6 +572,105 @@
     const normalized = normalizedAction(action);
     if (!normalized || !normalized.label) return null;
     return createButton(normalized.label, className, () => handleAction(normalized));
+  }
+
+  function refreshResponsiveActionLayouts() {
+    window.requestAnimationFrame(() => {
+      responsiveActionLayouts.forEach((layout) => layout.fit());
+    });
+  }
+
+  window.addEventListener("resize", refreshResponsiveActionLayouts, { passive: true });
+
+  function responsiveActionGrid(actions, buttons, options = {}) {
+    const row = element(
+      "div",
+      options.className || "db-widget__quick-actions db-widget__follow-up-actions",
+    );
+    row.style.visibility = "hidden";
+    const usableActions = actions.slice(0, buttons.length);
+    const usableButtons = buttons.slice(0, usableActions.length);
+    usableButtons.forEach((button) => row.appendChild(button));
+    let expanded = false;
+    let mounted = false;
+    let visibleCount = usableActions.length;
+    const toggle = createButton("More", "db-widget__more-toggle", () => {
+      if (expanded) {
+        expanded = false;
+        layout.fit();
+        return;
+      }
+      expanded = true;
+      usableButtons.forEach((button) => { button.hidden = false; });
+      visibleCount = usableActions.length;
+      toggle.textContent = "Less";
+      toggle.setAttribute("aria-expanded", "true");
+      if (!toggle.isConnected) row.appendChild(toggle);
+      if (typeof options.onVisible === "function") options.onVisible(usableActions);
+    });
+    toggle.setAttribute("aria-expanded", "false");
+
+    function setVisibleCount(count) {
+      visibleCount = Math.max(0, Math.min(count, usableButtons.length));
+      usableButtons.forEach((button, index) => { button.hidden = index >= visibleCount; });
+    }
+
+    function gridColumns() {
+      const columns = window.getComputedStyle(row).gridTemplateColumns
+        .split(/\s+/)
+        .filter(Boolean).length;
+      return Math.max(1, columns || 1);
+    }
+
+    function fitsViewport() {
+      if (!state.messages || !row.isConnected) return true;
+      const messagesRect = state.messages.getBoundingClientRect();
+      const messagesStyle = window.getComputedStyle(state.messages);
+      const bottomPadding = Number.parseFloat(messagesStyle.paddingBottom) || 0;
+      return row.getBoundingClientRect().bottom <= messagesRect.bottom - bottomPadding + 1;
+    }
+
+    const layout = {
+      fit() {
+        if (!row.isConnected) {
+          if (mounted) responsiveActionLayouts.delete(layout);
+          return;
+        }
+        mounted = true;
+        if (expanded) return;
+        toggle.remove();
+        setVisibleCount(usableActions.length);
+        if (fitsViewport()) {
+          row.style.visibility = "";
+          if (typeof options.onVisible === "function") options.onVisible(usableActions);
+          return;
+        }
+
+        row.appendChild(toggle);
+        toggle.textContent = "More";
+        toggle.setAttribute("aria-expanded", "false");
+        const columns = gridColumns();
+        const largestCollapsibleRow = Math.floor((usableActions.length - 1) / columns);
+        let fittingCount = Math.min(usableActions.length, columns);
+        for (let rows = largestCollapsibleRow; rows >= 1; rows -= 1) {
+          const candidateCount = rows * columns;
+          setVisibleCount(candidateCount);
+          if (fitsViewport()) {
+            fittingCount = candidateCount;
+            break;
+          }
+        }
+        setVisibleCount(fittingCount);
+        if (visibleCount >= usableActions.length) toggle.remove();
+        row.style.visibility = "";
+        if (typeof options.onVisible === "function") {
+          options.onVisible(usableActions.slice(0, visibleCount));
+        }
+      },
+    };
+    responsiveActionLayouts.add(layout);
+    window.requestAnimationFrame(() => layout.fit());
+    return row;
   }
 
   function handleAction(rawAction) {
@@ -936,30 +1051,11 @@
   }
 
   function renderQuickActions(actions) {
-    const row = element("div", "db-widget__quick-actions db-widget__follow-up-actions");
     const available = (actions || []).map(normalizedAction).filter((action) => action && action.label);
-    const renderPage = (offset = 0) => {
-      row.replaceChildren();
-      const visible = offset === 0
-        ? available.slice(0, 3)
-        : available.slice(offset, offset + 2);
-      if (offset > 0) {
-        row.appendChild(createButton("Back", "db-widget__more-toggle", () => {
-          renderPage(offset <= GUIDED_VISIBLE_ACTIONS ? 0 : offset - 2);
-        }));
-      }
-      visible.forEach((action) => {
-        const button = actionButton(action);
-        if (button) row.appendChild(button);
-      });
-      emitChipShown(visible);
-      const nextOffset = offset === 0 ? 3 : offset + 2;
-      if (nextOffset < available.length) {
-        row.appendChild(createButton("More", "db-widget__more-toggle", () => renderPage(nextOffset)));
-      }
-    };
-    renderPage();
-    return row;
+    const rendered = available
+      .map((action) => actionButton(action))
+      .filter(Boolean);
+    return responsiveActionGrid(available, rendered, { onVisible: emitChipShown });
   }
 
   function renderComponent(component) {
@@ -1223,6 +1319,9 @@
     const label = context && (context.label || contextValues(context).join(" • "));
     const messages = {
       homepage: "Explore universities and online programs. Where would you like to start?",
+      pillar: label
+        ? `Explore ${label} programs across universities. What would you like to compare first?`
+        : "Explore universities, fees, specializations, and eligibility for this discipline.",
       university: label
         ? `You're viewing ${label}. What would you like to explore?`
         : "Explore programs, reviews, accreditations, or comparisons for this university.",
@@ -1249,48 +1348,32 @@
   }
 
   function renderGuidedActions(actions) {
-    const row = element("div", "db-widget__quick-actions db-widget__follow-up-actions");
-    row.dataset.guideActions = "true";
     const available = (actions || []).map(normalizedAction).filter((action) => (
       action && action.label && (
         action.repeat === true ||
         !state.viewedActions.has(action.chip_id || action.action || action.guide)
       )
     ));
-    const renderPage = (offset = 0) => {
-      row.replaceChildren();
-      const pageSize = offset === 0 ? GUIDED_VISIBLE_ACTIONS : 2;
-      if (offset > 0) {
-        row.appendChild(createButton("Back", "db-widget__more-toggle", () => {
-          renderPage(offset <= GUIDED_VISIBLE_ACTIONS ? 0 : offset - 2);
-        }));
-      }
-      const visible = available.slice(offset, offset + pageSize);
-      visible.forEach((action) => {
-        const guideAction = guideActionFor(action) || action.action;
-        const className = guideAction === "lead"
-          ? "db-widget__action db-widget__action--lead"
-          : "db-widget__action";
-        row.appendChild(createButton(action.label, className, () => {
-          row.remove();
-          if (typeof action.onSelect === "function") {
-            recordChipTap(action);
-            action.onSelect();
-          } else if (action.chip_id || action.chip_handler || action.guide) {
-            handleAction(action);
-          } else {
-            executeGuidedAction(action.action, action.label, action.options || {});
-          }
-        }));
+    let row;
+    const buttons = available.map((action) => {
+      const guideAction = guideActionFor(action) || action.action;
+      const className = guideAction === "lead"
+        ? "db-widget__action db-widget__action--lead"
+        : "db-widget__action";
+      return createButton(action.label, className, () => {
+        row.remove();
+        if (typeof action.onSelect === "function") {
+          recordChipTap(action);
+          action.onSelect();
+        } else if (action.chip_id || action.chip_handler || action.guide) {
+          handleAction(action);
+        } else {
+          executeGuidedAction(action.action, action.label, action.options || {});
+        }
       });
-      emitChipShown(visible);
-      if (offset + pageSize < available.length) {
-        row.appendChild(createButton("More", "db-widget__more-toggle", () => {
-          renderPage(offset + pageSize);
-        }));
-      }
-    };
-    renderPage();
+    });
+    row = responsiveActionGrid(available, buttons, { onVisible: emitChipShown });
+    row.dataset.guideActions = "true";
     return row;
   }
 
@@ -1552,6 +1635,11 @@
   function renderReviewsCard(data) {
     const card = element("article", "db-widget__reviews");
     const rating = String(data.rating || "").trim();
+    const reviewCount = Number(data.review_count);
+    const scopeLabel = String(data.scope_label || "").trim();
+    if (scopeLabel) {
+      card.appendChild(element("p", "db-widget__reviews-scope", scopeLabel));
+    }
     const breakdown = Array.isArray(data.breakdown) ? data.breakdown.filter(Boolean) : [];
     if (rating || breakdown.length) {
       const summary = element("div", "db-widget__reviews-summary");
@@ -1559,8 +1647,15 @@
       score.appendChild(element("div", "db-widget__rating-big", rating || "—"));
       const numericRating = Number.parseFloat(rating);
       if (Number.isFinite(numericRating)) {
-        const filled = Math.max(0, Math.min(5, Math.round(numericRating)));
+        const filled = Math.max(0, Math.min(5, Math.floor(numericRating)));
         score.appendChild(element("div", "db-widget__rating-stars", `${"★".repeat(filled)}${"☆".repeat(5 - filled)}`));
+      }
+      if (Number.isFinite(reviewCount) && reviewCount > 0) {
+        score.appendChild(element(
+          "div",
+          "db-widget__rating-count",
+          `${reviewCount} published review${reviewCount === 1 ? "" : "s"}`,
+        ));
       }
       summary.appendChild(score);
       if (breakdown.length) {
@@ -1573,7 +1668,11 @@
           const fill = element("div", "db-widget__bar-fill");
           fill.style.width = `${reviewPercentage(value)}%`;
           track.appendChild(fill);
-          row.append(element("span", "db-widget__bar-label", label), track);
+          row.append(
+            element("span", "db-widget__bar-label", label),
+            track,
+            element("span", "db-widget__bar-value", value),
+          );
           bars.appendChild(row);
         });
         summary.appendChild(bars);
@@ -1583,7 +1682,21 @@
     const testimonials = Array.isArray(data.testimonials) ? data.testimonials.filter(Boolean) : [];
     if (testimonials.length) {
       const quotes = element("div", "db-widget__reviews-quotes");
+      const preview = [];
+      const representedPrograms = new Set();
       testimonials.forEach((testimonial) => {
+        if (preview.length >= 3) return;
+        const program = testimonial && typeof testimonial === "object"
+          ? String(testimonial.reviewer_label || "").trim()
+          : "";
+        if (program && representedPrograms.has(program)) return;
+        if (program) representedPrograms.add(program);
+        preview.push(testimonial);
+      });
+      testimonials.forEach((testimonial) => {
+        if (preview.length < 3 && !preview.includes(testimonial)) preview.push(testimonial);
+      });
+      preview.forEach((testimonial) => {
         const quote = element("blockquote", "db-widget__quote");
         const text = typeof testimonial === "object" ? testimonial.text || testimonial.description : testimonial;
         quote.appendChild(element("p", "db-widget__quote-text", publishedValue(text)));
@@ -1729,15 +1842,18 @@
     const bundle = state.guideBundle || {};
     const info = bundle.info || {};
     const entity = bundle.entity || {};
-    const data = info[kind] || {};
+    const data = kind === "rating" ? info.reviews || {} : info[kind] || {};
     const titles = {
       fees: ["Fees", "Fees & EMI"],
       eligibility: ["Admissions", "Eligibility"],
       career: ["Outcomes", "Career & Salary"],
       syllabus: ["Curriculum", "Syllabus"],
       reviews: ["Student voice", "Student Reviews"],
+      rating: ["Student voice", "Average rating"],
       accreditations: ["Recognition", "Accreditations"],
       admissions: ["Next steps", "Admission process"],
+      placement: ["Career support", "Placement support"],
+      overview: ["University fit", "Why choose this university"],
     };
     const [eyebrow, title] = titles[kind] || ["Details", "Published information"];
     const richRenderers = {
@@ -1746,6 +1862,12 @@
       career: () => renderCareerCard(data, entity),
       syllabus: () => renderSyllabusCard(data, entity),
       reviews: () => renderReviewsCard(data),
+      rating: () => renderReviewsCard({
+        rating: data.rating,
+        review_count: data.review_count,
+        breakdown: [],
+        testimonials: [],
+      }),
     };
     if (richRenderers[kind]) {
       const stack = element("div", "db-widget__rich-card-stack");
@@ -1771,6 +1893,22 @@
         "Admission-process details haven't been published yet.",
       );
       if (data.fee_note) guideSection(card, "Fee note", data.fee_note, "");
+    } else if (kind === "placement") {
+      guideSection(
+        card,
+        "Published placement support",
+        data.content,
+        "Placement-support details haven't been published yet.",
+      );
+      if (data.supported) guideSection(card, "Support status", "Available", "");
+      if (data.industry_projects) guideSection(card, "Industry projects", "Available", "");
+    } else if (kind === "overview") {
+      guideSection(
+        card,
+        "Why students consider it",
+        data.why_choose || data.description,
+        "A university overview hasn't been published yet.",
+      );
     }
     return { card, title };
   }
@@ -1786,6 +1924,16 @@
     if (!bundle.entity) {
       state.pendingGuidedInfo = { kind, chip };
       transitionNavigation("course_picker");
+      const context = bundle.context || {};
+      if (currentGuidePageType() === "pillar" && context.course) {
+        await openPicker("course", {
+          title: `Choose a University for ${context.course}`,
+          display: "university",
+          filters: { course: context.course },
+          onSelect: selectGuidedEntity,
+        });
+        return;
+      }
       await showProgramOptions();
       return;
     }
@@ -1797,8 +1945,11 @@
       career: "careers",
       syllabus: "syllabus",
       reviews: "reviews",
+      rating: "average_rating",
       accreditations: "approvals",
       admissions: "admissions",
+      placement: "placement",
+      overview: "overview",
     };
     const followups = await loadFollowupChips({
       answerState: answerStates[kind] || kind,
@@ -1810,7 +1961,10 @@
         id: String(bundle.entity.id || bundle.context && bundle.context.entity_id || kind),
       },
     });
-    const intro = Boolean(bundle.info && bundle.info[kind] && bundle.info[kind].available)
+    const publishedInfo = kind === "rating"
+      ? bundle.info && bundle.info.reviews
+      : bundle.info && bundle.info[kind];
+    const intro = Boolean(publishedInfo && publishedInfo.available)
       ? `Here's the confirmed ${result.title.toLowerCase()} information for ${currentGuideLabel()}.`
       : `${result.title} details haven't been published for ${currentGuideLabel()} yet.`;
     presentGuidedCard(
@@ -2026,7 +2180,13 @@
     runGuidedResponse(async () => {
       if (action === "browse_universities") {
         transitionNavigation("university_picker");
-        await openPicker("university", { onSelect: selectGuidedEntity });
+        const context = currentGuideContext() || {};
+        await openPicker("university", {
+          onSelect: selectGuidedEntity,
+          filters: currentGuidePageType() === "pillar" && context.course
+            ? { course: context.course }
+            : {},
+        });
       } else if (action === "browse_programs") {
         transitionNavigation("course_picker");
         await showProgramOptions();
@@ -2040,7 +2200,7 @@
         transitionNavigation("specialization_picker");
         if (currentGuideEntity()) await showCourseSpecializations(chip);
         else await openPicker("specialization", { onSelect: selectGuidedEntity });
-      } else if (["fees", "eligibility", "career", "syllabus", "reviews", "accreditations", "admissions"].includes(action)) {
+      } else if (["fees", "eligibility", "career", "syllabus", "reviews", "rating", "accreditations", "admissions", "placement", "overview"].includes(action)) {
         await showGuidedInfo(action, chip);
       } else if (action === "compare") {
         await beginGuidedComparison(null, chip);
@@ -2275,8 +2435,12 @@
   async function loadGuideContext(entityReference = "", logicalType = "homepage") {
     const generation = ++state.guideGeneration;
     const query = new URLSearchParams();
-    if (entityReference) query.set("entity_id", entityReference);
-    else query.set("page_type", cleanPageType(logicalType));
+    const normalizedType = cleanPageType(logicalType);
+    if (normalizedType === "pillar") {
+      query.set("page_type", "pillar");
+      if (entityReference) query.set("course", entityReference);
+    } else if (entityReference) query.set("entity_id", entityReference);
+    else query.set("page_type", normalizedType);
     if (state.sessionId) query.set("session_id", state.sessionId);
     const payload = await fetchJson(`/api/widget/guide/context?${query.toString()}`);
     if (generation !== state.guideGeneration) return null;
@@ -2389,55 +2553,28 @@
 
   function renderStarterBank(type) {
     const opening = state.openingChips;
-    const top = opening && Array.isArray(opening.top) && opening.top.length
-      ? opening.top
+    const configured = opening
+      ? [
+          ...(Array.isArray(opening.top) ? opening.top : []),
+          ...(Array.isArray(opening.more) ? opening.more : []),
+        ]
       : safeFallbackActions();
-    const more = opening && Array.isArray(opening.more) ? opening.more : [];
-    const primary = top.filter(
+    const available = configured.filter(
       (action) => !state.viewedActions.has(action.chip_id || action.guide || action.action),
     );
-    const secondary = more.filter(
-      (action) => !state.viewedActions.has(action.chip_id || action.guide || action.action),
-    );
-    state.starterVisibleActions = primary;
 
     state.starterGrid.replaceChildren();
-
-    const primaryGrid = element("div", "db-widget__starter-grid");
-
-    primary.forEach((action) => {
-      const button = actionButton(action, "db-widget__starter-action");
-      if (button) primaryGrid.appendChild(button);
+    const buttons = available
+      .map((action) => actionButton(action, "db-widget__starter-action"))
+      .filter(Boolean);
+    const grid = responsiveActionGrid(available, buttons, {
+      className: "db-widget__starter-grid",
+      onVisible(visible) {
+        state.starterVisibleActions = visible;
+        emitStarterImpressions();
+      },
     });
-    state.starterGrid.appendChild(primaryGrid);
-    emitStarterImpressions();
-
-    if (secondary.length) {
-      const secondaryGrid = element("div", "db-widget__starter-grid");
-      secondaryGrid.style.display = "none";
-      secondaryGrid.style.marginTop = "8px";
-
-      secondary.forEach((action) => {
-        const button = actionButton(action, "db-widget__starter-action");
-        if (button) secondaryGrid.appendChild(button);
-      });
-      state.starterGrid.appendChild(secondaryGrid);
-
-      const toggle = createButton(
-        "More",
-        "db-widget__more-action db-widget__more-toggle",
-        () => {
-          const isHidden = secondaryGrid.style.display === "none";
-          secondaryGrid.style.display = isHidden ? "grid" : "none";
-          toggle.textContent = isHidden ? "Less" : "More";
-          toggle.setAttribute("aria-expanded", String(isHidden));
-          toggle.classList.toggle("db-widget__more-toggle--less", !isHidden);
-          if (isHidden && state.open && !state.starter.hidden) emitChipShown(secondary);
-        }
-      );
-      toggle.setAttribute("aria-expanded", "false");
-      state.starterGrid.appendChild(toggle);
-    }
+    state.starterGrid.appendChild(grid);
   }
 
   function emitStarterImpressions() {
@@ -3257,7 +3394,7 @@
       : '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-8.5 8.5 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5.6A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>';
     if (state.open) {
       state.input.blur();
-      emitStarterImpressions();
+      refreshResponsiveActionLayouts();
     }
     else closeOverlay();
   }

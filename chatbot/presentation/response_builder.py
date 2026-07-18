@@ -39,7 +39,7 @@ from .cards import (
     build_comparison_card_from_text,
     build_entity_card,
 )
-from .chips import chip_actions
+from .chips import catalog_chip_context, chip_actions
 from .experience import context_from_state, quick_actions_for_response
 from .formatter import advisor_message
 
@@ -475,6 +475,7 @@ def enrich_response(
                 answer_state="tool_reveal",
                 interaction_count=interaction_count,
                 state=state,
+                entity_context=catalog_chip_context(resolved_entity, catalog),
             )
             quick_actions = chip_actions(
                 followup.chips,
@@ -536,6 +537,7 @@ def enrich_response(
             answer_state=answer_state,
             interaction_count=interaction_count,
             state=state,
+            entity_context=catalog_chip_context(resolved_entity, catalog),
         )
         quick_actions = chip_actions(
             followup.chips,

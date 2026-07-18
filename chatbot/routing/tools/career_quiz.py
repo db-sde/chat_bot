@@ -47,6 +47,18 @@ def score_career_quiz(
         return unavailable_result("career_quiz", "Career discipline mappings are not configured.")
     highest = max(weights.values())
     winners = sorted(discipline for discipline, score in weights.items() if score == highest)
+    if len(winners) != 1 and definition.tie_break == "last_answer":
+        for step in reversed(definition.steps):
+            selected = _selected_option(step.choices, answers.get(step.id))
+            if selected is None:
+                continue
+            winner = next(
+                (discipline for discipline in selected.weights if discipline in winners),
+                None,
+            )
+            if winner is not None:
+                winners = [winner]
+                break
     if len(winners) != 1:
         return ToolResult(
             status="cannot_compute",
@@ -69,12 +81,20 @@ def score_career_quiz(
             "career_quiz",
             f"No published program mapping is configured for {discipline}.",
         )
+    job_profile = definition.job_profiles.get(discipline) or definition.job_profiles.get("default")
+    partial_template = definition.partial_reveal_template or (
+        "Your strongest configured match is {discipline}."
+    )
+    full_template = definition.full_reveal_template or (
+        "Your highest weighted career-quiz discipline is {discipline}."
+    )
     return ToolResult(
-        partial={"headline": f"Your strongest configured match is {discipline}."},
+        partial={"headline": partial_template.format(discipline=discipline, area=discipline)},
         full={
-            "message": f"Your highest weighted career-quiz discipline is {discipline}.",
+            "message": full_template.format(discipline=discipline, area=discipline),
             "top_discipline": discipline,
             "weights": dict(sorted(weights.items())),
+            **({"job_profile": job_profile} if job_profile else {}),
         },
         cta_program_ids=program_ids,
         lead_tags={"tool": "career_quiz", "top_discipline": discipline},

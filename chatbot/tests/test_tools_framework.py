@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from routing.tools import (
+    DEFAULT_TOOLS_CONTENT_PATH,
     EscapeSignals,
     ToolDefinition,
     ToolEngine,
@@ -399,3 +400,56 @@ def test_scholarship_counts_configured_answers_and_selects_band() -> None:
     assert result.full["correct_count"] == 6
     assert result.full["reward_band"] == "Band 3"
     assert result.cta_program_ids == ["course-mba"]
+
+
+def test_approved_v1_tool_content_runs_all_three_tool_frameworks() -> None:
+    store = ToolsContentStore(DEFAULT_TOOLS_CONTENT_PATH, auto_reload=False)
+    assert store.version == "2026-07-18-v1"
+
+    catalog = {
+        "course-mba": {
+            "id": "course-mba",
+            "program_name": "MBA",
+            "discipline": "management",
+            "fee_numeric": 171000,
+        }
+    }
+    engine = ToolEngine(
+        store,
+        catalog=catalog,
+        program_lookup=lambda discipline: [f"program-{discipline}-{index}" for index in range(3)],
+    )
+
+    roi_state = ConversationState(session_id="approved-roi")
+    roi_turn = engine.enter(roi_state, "roi")
+    roi_turn = engine.dispatch(roi_state, roi_turn.response.quick_actions[0].message)
+    assert roi_turn is not None
+    roi_turn = engine.dispatch(roi_state, roi_turn.response.quick_actions[0].message)
+    assert roi_turn is not None and roi_turn.result is not None
+    assert roi_turn.lifecycle == "partial_reveal"
+    assert roi_turn.result.full["payback_months"] == 7
+    assert roi_turn.result.lead_tags["model"] == "v1_salary_band"
+
+    career_state = ConversationState(session_id="approved-career")
+    career_turn = engine.enter(career_state, "career_quiz")
+    for _ in range(5):
+        career_turn = engine.dispatch(
+            career_state,
+            career_turn.response.quick_actions[0].message,
+        )
+        assert career_turn is not None
+    assert career_turn.result is not None
+    assert career_turn.result.full["top_discipline"] == "Business Analytics"
+    assert "job_profile" in career_turn.result.full
+
+    scholarship_state = ConversationState(session_id="approved-scholarship")
+    scholarship_turn = engine.enter(scholarship_state, "scholarship")
+    for _ in range(7):
+        scholarship_turn = engine.dispatch(
+            scholarship_state,
+            scholarship_turn.response.quick_actions[0].message,
+        )
+        assert scholarship_turn is not None
+    assert scholarship_turn.result is not None
+    assert scholarship_turn.result.full["waiver_amount"] == 31000
+    assert scholarship_turn.result.full["reward_band"] == "Strong waiver unlocked"

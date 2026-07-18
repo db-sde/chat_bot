@@ -15,6 +15,7 @@ from .career_quiz import score_career_quiz
 from .content import (
     DEFAULT_TOOLS_CONTENT_PATH,
     RewardBand,
+    RoiBucket,
     ToolDefinition,
     ToolOption,
     ToolsContentDocument,
@@ -29,6 +30,7 @@ __all__ = [
     "DEFAULT_TOOLS_CONTENT_PATH",
     "EscapeSignals",
     "RewardBand",
+    "RoiBucket",
     "ToolDefinition",
     "ToolEngine",
     "ToolOption",

@@ -27,11 +27,14 @@ DEFAULT_HANDLER_REGISTRY = frozenset(
         "cta_apply",
         "cta_callback",
         "get_admission_steps",
+        "get_average_rating",
         "get_approvals",
         "get_careers",
         "get_eligibility",
         "get_eligible_programs",
         "get_fees",
+        "get_overview",
+        "get_placement_support",
         "get_reviews",
         "get_specializations",
         "get_syllabus",
@@ -71,6 +74,7 @@ class ChipDefinition(_FrozenModel):
     tool: str | None = Field(default=None, min_length=1, max_length=80)
     funnel_stage: FunnelStage
     fill: dict[str, str] | None = None
+    requires: tuple[str, ...] = ()
     ab: tuple[ABVariant, ...] = ()
 
     @model_validator(mode="after")

@@ -108,14 +108,15 @@ def test_guided_responses_are_paced_and_filter_completed_actions() -> None:
     assert re.search(r"viewedActions\.(?:has|forEach)\(", source)
 
     quick_actions = _function_source(source, "renderQuickActions")
-    assert re.search(r"slice\(0,\s*3\)", quick_actions)
-    assert '"More' in quick_actions
+    assert "responsiveActionGrid" in quick_actions
+    assert not re.search(r"slice\(0,\s*3\)", quick_actions)
 
 
-def test_typing_and_all_guided_choice_surfaces_respect_the_visible_cap() -> None:
+def test_typing_and_all_guided_choice_surfaces_use_measured_row_capacity() -> None:
     source = _source("widget.js")
     show_typing = _function_source(source, "showTyping")
     starter_bank = _function_source(source, "renderStarterBank")
+    responsive_grid = _function_source(source, "responsiveActionGrid")
     finder_step = _function_source(source, "renderFinderStep")
 
     assert "state.messages.appendChild(state.typing)" in show_typing
@@ -123,7 +124,13 @@ def test_typing_and_all_guided_choice_surfaces_respect_the_visible_cap() -> None
     assert "opening.top" in starter_bank
     assert "opening.more" in starter_bank
     assert "emitStarterImpressions()" in starter_bank
-    assert '"More"' in starter_bank
+    assert "responsiveActionGrid" in starter_bank
+    assert "getBoundingClientRect" in responsive_grid
+    assert "gridTemplateColumns" in responsive_grid
+    assert "largestCollapsibleRow" in responsive_grid
+    assert 'toggle.textContent = "Less"' in responsive_grid
+    assert 'toggle.textContent = "More"' in responsive_grid
+    assert "GUIDED_VISIBLE_ACTIONS" not in source
     assert "renderOptionPage" in finder_step
     assert "const pageSize" in finder_step
     assert "current.options.forEach" not in finder_step
@@ -170,8 +177,8 @@ def test_demo_switches_all_scenarios_and_loads_only_the_real_widget() -> None:
     assert 'pageType: "specialization"' in source
     assert 'pageUniversitySlug: "nmims"' in source
     assert 'pageEntitySlug: "nmims-online"' in source
-    assert 'pageEntitySlug: "nmims-online-mba"' in source
-    assert 'pageEntitySlug: "nmims-mba-analytics"' in source
+    assert 'pageEntitySlug: "nmims-mca"' in source
+    assert 'pageEntitySlug: "nmims-mca-cloud-computing"' in source
     assert re.search(r"location\.(?:assign|replace|href|search)", source)
 
 
@@ -274,7 +281,7 @@ def test_widget_uses_degreebaba_tokens_and_exposes_accessible_ui_state() -> None
     source = _source("widget.js")
     styles = _source("widget.css")
     show_typing = _function_source(source, "showTyping")
-    starter_bank = _function_source(source, "renderStarterBank")
+    responsive_grid = _function_source(source, "responsiveActionGrid")
     build_widget = _function_source(source, "buildWidget")
 
     canonical_tokens = {
@@ -294,7 +301,7 @@ def test_widget_uses_degreebaba_tokens_and_exposes_accessible_ui_state() -> None
     assert "backdrop-filter: blur" not in styles
     assert '"#E84010"' in source
     assert 'setAttribute("aria-busy"' in show_typing
-    assert 'setAttribute("aria-expanded"' in starter_bank
+    assert 'setAttribute("aria-expanded"' in responsive_grid
     assert 'setAttribute("aria-labelledby"' in build_widget
 
 
@@ -389,6 +396,22 @@ def test_admission_chip_uses_grounded_guided_info_instead_of_generic_chat() -> N
     assert "Admission-process details haven't been published yet." in guided_card
 
 
+def test_catalog_v3_chip_handlers_use_grounded_guided_cards() -> None:
+    source = _source("widget.js")
+    guided_card = _function_source(source, "guidedInfoCard")
+    executor = _function_source(source, "executeGuidedAction")
+
+    assert 'get_average_rating: "rating"' in source
+    assert 'get_placement_support: "placement"' in source
+    assert 'get_overview: "overview"' in source
+    assert 'compare_program: "compare"' in source
+    assert 'compare_specializations: "compare"' in source
+    assert 'rating: ["Student voice", "Average rating"]' in guided_card
+    assert 'placement: ["Career support", "Placement support"]' in guided_card
+    assert 'overview: ["University fit", "Why choose this university"]' in guided_card
+    assert '"placement", "overview"' in executor
+
+
 def test_eligibility_summary_is_not_repeated_as_a_missing_checklist() -> None:
     source = _source("widget.js")
     renderer = _function_source(source, "renderEligibilityCard")
@@ -400,7 +423,7 @@ def test_guided_info_does_not_claim_unpublished_data_is_confirmed() -> None:
     source = _source("widget.js")
     guided_info = _function_source(source, "showGuidedInfo")
 
-    assert "bundle.info[kind].available" in guided_info
+    assert "publishedInfo && publishedInfo.available" in guided_info
     assert "details haven't been published" in guided_info
 
 
@@ -421,7 +444,8 @@ def test_first_send_waits_for_context_and_starter_impressions_require_visibility
     assert "!state.open" in impressions
     assert "state.starter.hidden" in impressions
     assert "state.starterImpressionKey" in impressions
-    assert "emitStarterImpressions()" in set_open
+    assert "refreshResponsiveActionLayouts()" in set_open
+    assert "emitStarterImpressions()" in _function_source(source, "renderStarterBank")
 
 
 def test_response_action_metadata_is_applied_before_cards_and_propagated() -> None:

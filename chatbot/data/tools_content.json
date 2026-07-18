@@ -1,29 +1,226 @@
 {
-  "version": "unconfigured-2026-07-17",
+  "version": "2026-07-18-v1",
   "tools": {
     "roi": {
-      "enabled": false,
-      "entry_copy": "",
-      "unavailable_reason": "ROI is unavailable until normalized fee_numeric and salary_numeric catalog fields are supplied.",
-      "steps": [],
+      "enabled": true,
+      "entry_copy": "See how fast this program pays for itself. 2 quick questions.",
+      "steps": [
+        {
+          "id": "program",
+          "prompt": "Which program are you considering?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "Online MBA", "value": "MBA"},
+            {"id": "b", "label": "Online MCA", "value": "MCA"},
+            {"id": "c", "label": "Online BBA", "value": "BBA"},
+            {"id": "d", "label": "Online MSc", "value": "MSc"}
+          ]
+        },
+        {
+          "id": "current_salary",
+          "prompt": "What do you earn right now?",
+          "type": "bucket",
+          "buckets": [
+            {"id": "a", "label": "Under ₹3L", "value": "Under ₹3L"},
+            {"id": "b", "label": "₹3–6L", "value": "₹3–6L"},
+            {"id": "c", "label": "₹6–10L", "value": "₹6–10L"},
+            {"id": "d", "label": "₹10L+", "value": "₹10L+"}
+          ]
+        }
+      ],
+      "roi_buckets": [
+        {
+          "option_id": "a",
+          "payback_months": 7,
+          "headline": "Your payback period is excellent — under a year."
+        },
+        {
+          "option_id": "b",
+          "payback_months": 9,
+          "headline": "Your payback period is excellent — under a year."
+        },
+        {
+          "option_id": "c",
+          "payback_months": 11,
+          "headline": "Your payback period is strong — just over a year."
+        },
+        {
+          "option_id": "d",
+          "payback_months": 14,
+          "headline": "Your payback period is strong — just over a year."
+        }
+      ],
       "question_bank": {},
       "reward_bands": []
     },
     "career_quiz": {
-      "enabled": false,
-      "entry_copy": "",
-      "unavailable_reason": "The career quiz is unavailable until the complete question and discipline-weight mapping is supplied.",
-      "steps": [],
+      "enabled": true,
+      "entry_copy": "Answer 5 quick questions and we’ll point you to your best-fit field.",
+      "steps": [
+        {
+          "id": "q1",
+          "prompt": "What kind of work energises you most?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "Working with numbers & data", "weights": {"Business Analytics": 1}},
+            {"id": "b", "label": "Persuading & connecting with people", "weights": {"Marketing": 1}},
+            {"id": "c", "label": "Building & streamlining systems", "weights": {"Operations": 1}},
+            {"id": "d", "label": "Leading and developing people", "weights": {"HR": 1}}
+          ]
+        },
+        {
+          "id": "q2",
+          "prompt": "Pick a project you’d enjoy:",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "Analysing a sales dataset", "weights": {"Business Analytics": 1}},
+            {"id": "b", "label": "Launching a campaign", "weights": {"Marketing": 1}},
+            {"id": "c", "label": "Fixing a supply bottleneck", "weights": {"Operations": 1}},
+            {"id": "d", "label": "Building a hiring plan", "weights": {"HR": 1}}
+          ]
+        },
+        {
+          "id": "q3",
+          "prompt": "What matters most to you in a role?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "Sharp problem-solving", "weights": {"Business Analytics": 1}},
+            {"id": "b", "label": "Creativity & visibility", "weights": {"Marketing": 1}},
+            {"id": "c", "label": "Structure & efficiency", "weights": {"Operations": 1}},
+            {"id": "d", "label": "Impact on people", "weights": {"HR": 1}}
+          ]
+        },
+        {
+          "id": "q4",
+          "prompt": "How do you like to spend a workday?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "With dashboards & tools", "weights": {"Business Analytics": 1}},
+            {"id": "b", "label": "With clients & pitches", "weights": {"Marketing": 1}},
+            {"id": "c", "label": "With processes & plans", "weights": {"Operations": 1}},
+            {"id": "d", "label": "With teams & 1:1s", "weights": {"HR": 1}}
+          ]
+        },
+        {
+          "id": "q5",
+          "prompt": "Where do you want to be in 5 years?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "Analytics lead", "weights": {"Business Analytics": 1}},
+            {"id": "b", "label": "Marketing head", "weights": {"Marketing": 1}},
+            {"id": "c", "label": "Operations director", "weights": {"Operations": 1}},
+            {"id": "d", "label": "HR business partner", "weights": {"HR": 1}}
+          ]
+        }
+      ],
+      "tie_break": "last_answer",
+      "partial_reveal_template": "Your best-fit area looks like {area}.",
+      "full_reveal_template": "Based on your answers, {area} is your strongest fit. Three programs to explore:",
+      "job_profiles": {
+        "Finance": "💼 Financial Analyst · ₹7.2 LPA avg",
+        "Marketing": "💼 Brand Manager · ₹8.0 LPA avg",
+        "Business Analytics": "💼 Data Analyst · ₹6.5 LPA avg",
+        "HR": "💼 HR Manager · ₹6.8 LPA avg",
+        "Operations": "💼 Operations Manager · ₹7.5 LPA avg",
+        "International Business": "💼 Trade Manager · ₹7.4 LPA avg",
+        "default": "💼 Manager · ₹7.0 LPA avg"
+      },
       "question_bank": {},
       "reward_bands": []
     },
     "scholarship": {
-      "enabled": false,
-      "entry_copy": "",
-      "unavailable_reason": "The scholarship checker is unavailable until program question banks and approved reward bands are supplied.",
-      "steps": [],
+      "enabled": true,
+      "entry_copy": "Check which fee waivers you qualify for — takes under a minute. 7 quick questions.",
+      "steps": [
+        {
+          "id": "q1",
+          "prompt": "Your highest qualification?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "12th pass"},
+            {"id": "b", "label": "Graduate"},
+            {"id": "c", "label": "Postgraduate"}
+          ]
+        },
+        {
+          "id": "q2",
+          "prompt": "Your graduation aggregate?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "Below 50%"},
+            {"id": "b", "label": "50–60%"},
+            {"id": "c", "label": "60–75%", "bonus": 5000, "reason_label": "Merit — 60–75% aggregate"},
+            {"id": "d", "label": "Above 75%", "bonus": 12000, "reason_label": "Merit — 75%+ aggregate"}
+          ]
+        },
+        {
+          "id": "q3",
+          "prompt": "Work experience so far?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "None"},
+            {"id": "b", "label": "0–2 yrs"},
+            {"id": "c", "label": "2–5 yrs"},
+            {"id": "d", "label": "5+ yrs"}
+          ]
+        },
+        {
+          "id": "q4",
+          "prompt": "Which category do you belong to?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "General"},
+            {"id": "b", "label": "OBC", "bonus": 10000, "reason_label": "Reserved-category benefit"},
+            {"id": "c", "label": "SC / ST", "bonus": 10000, "reason_label": "Reserved-category benefit"},
+            {"id": "d", "label": "EWS", "bonus": 10000, "reason_label": "Reserved-category benefit"}
+          ]
+        },
+        {
+          "id": "q5",
+          "prompt": "Are you a woman applicant?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "Yes", "bonus": 6000, "reason_label": "Women applicant grant"},
+            {"id": "b", "label": "No"}
+          ]
+        },
+        {
+          "id": "q6",
+          "prompt": "From a defence / ex-servicemen family?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "Yes", "bonus": 10000, "reason_label": "Defence-family concession"},
+            {"id": "b", "label": "No"}
+          ]
+        },
+        {
+          "id": "q7",
+          "prompt": "When do you want to start?",
+          "type": "choice",
+          "options": [
+            {"id": "a", "label": "This month", "bonus": 5000, "reason_label": "Early-bird — joining this month"},
+            {"id": "b", "label": "Next 3 months"},
+            {"id": "c", "label": "Later"}
+          ]
+        }
+      ],
+      "base_waiver": 10000,
+      "max_waiver": 43000,
+      "standard_fee": 171000,
+      "partial_reveal_template": "You've qualified for a fee waiver!",
+      "claim_steps": [
+        "A counsellor verifies your details on a quick call",
+        "Submit your marksheet & photo ID",
+        "Waiver applied to your first-semester fee"
+      ],
       "question_bank": {},
-      "reward_bands": []
+      "reward_bands": [
+        {"min_waiver": 10000, "max_waiver": 14999, "label": "Base waiver unlocked"},
+        {"min_waiver": 15000, "max_waiver": 19999, "label": "Merit waiver unlocked"},
+        {"min_waiver": 20000, "max_waiver": 27999, "label": "Merit waiver unlocked"},
+        {"min_waiver": 28000, "max_waiver": 34999, "label": "Strong waiver unlocked"},
+        {"min_waiver": 35000, "max_waiver": 43000, "label": "Maximum waiver unlocked"}
+      ]
     }
   }
 }
