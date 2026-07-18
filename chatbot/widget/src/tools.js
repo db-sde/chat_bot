@@ -390,9 +390,11 @@
       forgetRoiPage();
       widget.mode = "error";
     }
-    widget.collapsed = false;
+    const revealToEndScreen = step === "reveal" && widget.mode === "complete";
+    widget.collapsed = revealToEndScreen;
     renderRoiWidget();
     anchorBotMessage(widget.row);
+    if (revealToEndScreen) openEndScreen("roi", rawFlow, widget.components);
     if (step === "await_lead" && widget.detailRequested) {
       widget.detailRequested = false;
       openLeadPanel({
@@ -843,9 +845,9 @@
     const view = state.finderView;
     view.bubble.remove();
     Array.from(view.content.querySelectorAll(".db-widget__component-stack")).forEach((node) => node.remove());
-    const panel = element("section", "db-widget__finder db-finder-widget");
+    const panel = element("div", "db-widget__finder db-finder-widget");
     const header = element("div", "db-widget__finder-header db-finder-title-row");
-    header.appendChild(element("h3", "db-widget__finder-title db-finder-title", "Help me choose"));
+    header.appendChild(element("div", "db-widget__finder-title db-finder-title", "Help me choose"));
     const progress = element("div", "db-widget__finder-progress db-tool-progress");
     const track = element("div", "db-widget__progress-track db-progress-track");
     const fill = element("div", "db-widget__finder-progress-fill db-progress-fill");
@@ -855,7 +857,7 @@
       track,
       element("span", "db-widget__finder-step db-progress-label", `${state.finder.step + 1} of 4`),
     );
-    const question = element("h3", "db-widget__finder-question db-finder-question", current.question);
+    const question = element("div", "db-widget__finder-question db-finder-question", current.question);
     const options = element("div", "db-widget__finder-options db-finder-opts");
     const selectChoice = (choice) => {
       if (choice === "Show all") {
@@ -898,7 +900,7 @@
     const skip = createButton("Skip → show results now", "db-widget__finder-skip db-finder-skip", submitFinder);
     panel.append(header, progress);
     if (state.finder.prefilled) {
-      panel.appendChild(element("p", "db-widget__finder-prefill db-prefill-note", "Program pre-filled from this page ✓"));
+      panel.appendChild(element("div", "db-widget__finder-prefill db-prefill-note", "Program pre-filled from this page ✓"));
     }
     panel.append(question, options, skip);
     const stack = element("div", "db-widget__component-stack");

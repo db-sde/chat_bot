@@ -656,6 +656,7 @@ def _reveal(state: Any, flow: ActiveFlow) -> ToolTurn:
                     "version": flow.version,
                     "cta_program_ids": result.cta_program_ids,
                     "lead_tags": result.lead_tags,
+                    "result": dict(result.full),
                 }
             },
         ),

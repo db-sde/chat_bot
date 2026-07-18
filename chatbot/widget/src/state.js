@@ -137,6 +137,9 @@
     pendingCompletedChipId: null,
     pendingGuidedInfo: null,
     lastMessage: "",
+    endScreen: null,
+    endScreenEl: null,
+    lastLead: null,
   };
 
   function transitionNavigation(event, navigation = null) {

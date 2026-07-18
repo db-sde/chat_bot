@@ -357,9 +357,9 @@
   function renderInlineLeadCard(kind, options = {}) {
     const isApplication = kind === "application" || /apply/i.test(String(options.label || ""));
     const actionMeta = normalizedAction(options.chip) || {};
-    const card = element("section", "db-widget__inline-lead db-lead");
+    const card = element("div", "db-widget__inline-lead db-lead");
     card.appendChild(element(
-      "p",
+      "div",
       "db-widget__inline-lead-text db-lead-text",
       isApplication
         ? "Ready to apply? Share your number and a DegreeBaba admissions counsellor will help with the next step."
@@ -369,8 +369,8 @@
           ? "Want a counsellor to verify your eligibility? Share your number for one callback."
           : "Happy to connect you. Share your number for one admissions callback — no spam.",
     ));
-    const form = element("form", "db-widget__inline-lead-form db-lead-form");
-    const phoneWrapper = element("label", "db-widget__inline-phone-wrapper db-phone-wrapper");
+    const form = element("div", "db-widget__inline-lead-form db-lead-form");
+    const phoneWrapper = element("div", "db-widget__inline-phone-wrapper db-phone-wrapper");
     phoneWrapper.appendChild(element("span", "db-widget__inline-phone-prefix db-phone-prefix", "+91"));
     const phone = document.createElement("input");
     phone.className = "db-widget__inline-phone-input db-phone-input";
@@ -381,12 +381,11 @@
     phone.setAttribute("aria-label", "10-digit mobile number");
     phoneWrapper.appendChild(phone);
     const submit = element("button", "db-widget__inline-lead-send db-lead-send", "Send");
-    submit.type = "submit";
-    const status = element("p", "db-widget__inline-lead-note db-lead-note", "No spam. One call about your admission query.");
+    submit.type = "button";
+    const status = element("div", "db-widget__inline-lead-note db-lead-note", "No spam. One call about your admission query.");
     form.append(phoneWrapper, submit);
     card.append(form, status);
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
+    const submitLead = async () => {
       const normalized = phone.value.replace(/\D/g, "").replace(/^91(?=\d{10}$)/, "");
       if (!/^[6-9]\d{9}$/.test(normalized)) {
         phone.setAttribute("aria-invalid", "true");
@@ -426,13 +425,17 @@
         const done = element("div", "db-widget__inline-lead-done db-lead-done");
         done.append(
           richCardIcon("db-widget__inline-lead-done-icon db-lead-done-icon", RICH_CARD_ICONS.checkGreen),
-          element("p", "db-widget__inline-lead-done-text db-lead-done-text", response.message || "Thanks — a DegreeBaba counsellor can contact you shortly."),
+          element("div", "db-widget__inline-lead-done-text db-lead-done-text", response.message || "Thanks — a DegreeBaba counsellor can contact you shortly."),
         );
         card.appendChild(done);
       } catch (error) {
         submit.disabled = false;
         status.textContent = error.message || "We couldn't save that request. Please try again.";
       }
+    };
+    submit.addEventListener("click", submitLead);
+    phone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") { event.preventDefault(); submitLead(); }
     });
     return card;
   }
@@ -1335,6 +1338,7 @@
           state.sessionId = response.session_id;
           rememberSessionId(state.sessionId);
         }
+        state.lastLead = { name: normalizedName, phone: normalized };
         form.replaceChildren(element(
           "p",
           "db-widget__state-copy",
