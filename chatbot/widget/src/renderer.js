@@ -42,9 +42,9 @@
   }
 
   function cardPills(values) {
-    const row = element("div", "db-widget__pills-row");
+    const row = element("div", "db-widget__pills-row db-pills-row");
     values.filter((value) => value !== null && value !== undefined && String(value).trim()).slice(0, 3)
-      .forEach((value) => row.appendChild(element("span", "db-widget__pill", String(value))));
+      .forEach((value) => row.appendChild(element("span", "db-widget__pill db-pill", String(value))));
     return row;
   }
 
@@ -105,13 +105,13 @@
   }
 
   function cardActions(component, detailsLabel = "Details") {
-    const actions = element("div", "db-widget__card-actions");
-    const details = createButton(detailsLabel, "db-widget__card-button db-widget__card-action--primary", () => {
+    const actions = element("div", "db-widget__card-actions db-card-actions");
+    const details = createButton(detailsLabel, "db-widget__card-button db-widget__card-action--primary db-btn-primary", () => {
       if (hasDetails(component)) openDetails(component);
       else if (component.guided === true) executeGuidedAction("fees", "View fees");
       else sendMessage(`Tell me about ${cardReference(component).label}`);
     });
-    const compare = createButton("+ Compare", "db-widget__card-button db-widget__card-action", () => {
+    const compare = createButton("+ Compare", "db-widget__card-button db-widget__card-action db-btn-compare", () => {
       beginGuidedComparison(component);
     });
     actions.append(details, compare);
@@ -119,17 +119,18 @@
   }
 
   function renderUniversityCard(component) {
-    const card = element("article", "db-widget__card db-widget__university-card");
-    const header = element("div", "db-widget__card-header");
-    const mark = element("span", "db-widget__card-mark", initials(component.name));
+    const card = element("article", "db-widget__card db-widget__university-card db-card");
+    const header = element("div", "db-widget__card-header db-card-head");
+    const mark = element("span", "db-widget__card-mark db-card-mono", initials(component.name));
+    mark.dataset.tone = pickerTone(component.name);
     const title = element("div", "db-widget__card-heading");
-    title.appendChild(element("h3", "", component.name));
+    title.appendChild(element("h3", "db-card-title", component.name));
     const ugc = component.ugc_status || findFact(component, ["ugc", "approval"]);
     const naacRaw = component.naac_grade || findFact(component, ["naac"]);
     const naac = naacRaw && !String(naacRaw).toLowerCase().includes("naac") ? `NAAC ${naacRaw}` : naacRaw;
     const trust = trustRow([ugc, naac]);
     if (trust) {
-      trust.classList.add("db-widget__card-trust");
+      trust.classList.add("db-widget__card-trust", "db-card-trust");
       title.appendChild(trust);
     }
     header.append(mark, title);
@@ -165,7 +166,7 @@
   }
 
   function renderProgramCard(component) {
-    const card = element("article", "db-widget__card db-widget__program-card");
+    const card = element("article", "db-widget__card db-widget__program-card db-card");
     const isSpecialization = component.kind === "specialization" || component.type === "specialization_card";
     const provider = component.university_name || "";
     const category = String(component.category || "").trim().toUpperCase();
@@ -175,10 +176,11 @@
       : provider && !String(component.name).toLowerCase().includes(provider.toLowerCase())
         ? `${provider} ${component.name}`
         : component.name;
-    const header = element("div", "db-widget__card-header");
-    const mark = element("span", "db-widget__card-mark", initials(provider || baseHeading));
+    const header = element("div", "db-widget__card-header db-card-head");
+    const mark = element("span", "db-widget__card-mark db-card-mono", initials(provider || baseHeading));
+    mark.dataset.tone = pickerTone(provider || baseHeading);
     const title = element("div", "db-widget__card-heading");
-    title.appendChild(element("h3", "", baseHeading));
+    title.appendChild(element("h3", "db-card-title", baseHeading));
 
     const ugc = component.ugc_status || findFact(component, ["ugc", "approval"]);
     const naacRaw = component.naac_grade || findFact(component, ["naac"]);
@@ -188,7 +190,7 @@
       : "";
     const trust = trustRow([ugc, naac, rating]);
     if (trust) {
-      trust.classList.add("db-widget__card-trust");
+      trust.classList.add("db-widget__card-trust", "db-card-trust");
       title.appendChild(trust);
     }
     header.append(mark, title);
@@ -207,22 +209,29 @@
           : component.mode,
     ]);
     if (pills.childElementCount) card.appendChild(pills);
-    if (component.emi) card.appendChild(element("div", "db-widget__card-emi", displayCurrency(component.emi)));
+    if (component.emi) card.appendChild(element("div", "db-widget__card-emi db-card-emi", displayCurrency(component.emi)));
     const career = firstCareer(component);
-    if (career) card.appendChild(element("div", "db-widget__card-job", `💼 ${displayCurrency(career)}`));
+    if (career) card.appendChild(element("div", "db-widget__card-job db-card-job", `💼 ${displayCurrency(career)}`));
     card.appendChild(cardActions(component, "View details"));
     recordCardShown(component, isSpecialization ? "specialization" : "course");
     return card;
   }
 
   function renderComparisonCard(component) {
-    const card = element("article", "db-widget__card db-widget__comparison-card");
-    const heading = element("div", "db-widget__comparison-heading");
-    heading.appendChild(element("span", "db-widget__eyebrow", "Comparison"));
-    heading.appendChild(element("h3", "", component.title || "Published comparison"));
-    card.appendChild(heading);
+    const card = element("article", "db-widget__card db-widget__comparison-card db-compare");
+    card.setAttribute("aria-label", component.title || "Published comparison");
+    const items = (component.items || []).slice(0, 2);
+    const head = element("div", "db-widget__comparison-head db-compare-head");
+    head.appendChild(element("div", "db-widget__comparison-head-empty db-compare-head-empty"));
+    items.forEach((item) => {
+      head.appendChild(element(
+        "div",
+        "db-widget__comparison-head-cell db-compare-head-cell",
+        item.subtitle ? `${item.subtitle} — ${item.name}` : item.name,
+      ));
+    });
+    card.appendChild(head);
 
-    const items = (component.items || []).slice(0, 3);
     const labels = new Map();
     items.forEach((item) => (item.facts || []).forEach((fact) => {
       const key = String(fact.label || "").trim().toLowerCase();
@@ -235,24 +244,22 @@
     }).slice(0, 8);
     const rows = element("div", "db-widget__comparison-rows");
     ordered.forEach((key) => {
-      const row = element("section", "db-widget__comparison-row");
-      row.appendChild(element("span", "db-widget__comparison-label", labels.get(key)));
-      const values = element("div", "db-widget__comparison-values");
+      const row = element("section", "db-widget__comparison-row db-compare-row");
+      row.appendChild(element("span", "db-widget__comparison-label db-compare-key", labels.get(key)));
       items.forEach((item) => {
         const fact = (item.facts || []).find((candidate) => String(candidate.label || "").trim().toLowerCase() === key);
-        const value = element("div", "db-widget__comparison-value");
-        const itemLabel = item.subtitle ? `${item.subtitle} — ${item.name}` : item.name;
-        value.appendChild(element("strong", "", `${itemLabel}: `));
-        value.appendChild(document.createTextNode(fact && fact.value ? String(fact.value) : "Not published"));
-        values.appendChild(value);
+        row.appendChild(element(
+          "div",
+          "db-widget__comparison-value db-compare-val",
+          fact && fact.value ? String(fact.value) : "Not published",
+        ));
       });
-      row.appendChild(values);
       rows.appendChild(row);
     });
     card.appendChild(rows);
     if (component.verdict) {
-      const verdict = element("div", "db-widget__comparison-verdict");
-      verdict.appendChild(element("strong", "", "Honest verdict"));
+      const verdict = element("div", "db-widget__comparison-verdict db-compare-verdict");
+      verdict.appendChild(element("strong", "db-verdict-label", "Verdict "));
       verdict.appendChild(document.createTextNode(String(component.verdict)));
       card.appendChild(verdict);
     }
@@ -425,8 +432,8 @@
     const buttons = available.map((action) => {
       const guideAction = guideActionFor(action) || action.action;
       const className = guideAction === "lead"
-        ? "db-widget__action db-widget__action--lead"
-        : "db-widget__action";
+        ? "db-widget__action db-widget__action--lead db-chip"
+        : "db-widget__action db-chip";
       return createButton(action.label, className, () => {
         row.remove();
         if (typeof action.onSelect === "function") {
@@ -549,17 +556,17 @@
   }
 
   function renderFeesCard(data, entity) {
-    const card = element("article", "db-widget__fees");
-    const hero = element("div", "db-widget__fees-hero");
+    const card = element("article", "db-widget__fees db-fees");
+    const hero = element("div", "db-widget__fees-hero db-fees-hero");
     const total = element("div");
     total.append(
-      element("div", "db-widget__fees-total-label", "Total programme fee"),
-      element("div", "db-widget__fees-total-value", displayCurrency(data.total_fee || entity.fee)),
+      element("div", "db-widget__fees-total-label db-fees-total-label", "Total programme fee"),
+      element("div", "db-widget__fees-total-value db-fees-total-value", displayCurrency(data.total_fee || entity.fee)),
     );
     const semester = element("div");
     semester.append(
-      element("div", "db-widget__fees-sem-label", "Per semester"),
-      element("div", "db-widget__fees-sem-value", displayCurrency(data.semester_fee)),
+      element("div", "db-widget__fees-sem-label db-fees-sem-label", "Per semester"),
+      element("div", "db-widget__fees-sem-value db-fees-sem-value", displayCurrency(data.semester_fee)),
     );
     hero.append(total, semester);
     card.appendChild(hero);
@@ -575,21 +582,24 @@
 
     const plans = Array.isArray(data.plans) ? data.plans.filter(Boolean) : [];
     if (plans.length) {
-      const planList = element("div", "db-widget__fees-plans");
+      const planList = element("div", "db-widget__fees-plans db-fees-plans");
       plans.forEach((plan) => {
-        const row = element("div", "db-widget__fees-plan-row");
+        const row = element("div", "db-widget__fees-plan-row db-fees-plan-row");
         const copy = element("div");
         copy.appendChild(element(
           "div",
-          "db-widget__fees-plan-label",
+          "db-widget__fees-plan-label db-fees-plan-label",
           publishedValue(plan.name || plan.label || plan.title, "Payment plan"),
         ));
-        if (plan.total && plan.total !== plan.amount) {
-          copy.appendChild(element("div", "db-widget__fees-plan-note", `Total ${displayCurrency(plan.total)}`));
+        const planNote = plan.note || (
+          plan.total && plan.total !== plan.amount ? `Total ${displayCurrency(plan.total)}` : ""
+        );
+        if (planNote) {
+          copy.appendChild(element("div", "db-widget__fees-plan-note db-fees-plan-note", planNote));
         }
         row.append(
           copy,
-          element("div", "db-widget__fees-plan-value", displayCurrency(plan.amount || plan.value || plan.total)),
+          element("div", "db-widget__fees-plan-value db-fees-plan-value", displayCurrency(plan.amount || plan.value || plan.total)),
         );
         planList.appendChild(row);
       });
@@ -603,7 +613,7 @@
     }
     const emi = String(data.emi || entity.emi || "").trim();
     if (emi) {
-      const note = element("div", "db-widget__fees-emi");
+      const note = element("div", "db-widget__fees-emi db-fees-emi");
       note.append(richCardIcon("", RICH_CARD_ICONS.dollar), element("span", "", displayCurrency(emi)));
       card.appendChild(note);
     }
@@ -611,16 +621,16 @@
   }
 
   function renderEligibilityCard(data, entity) {
-    const card = element("article", "db-widget__elig");
+    const card = element("article", "db-widget__elig db-elig");
     const summary = String(data.summary || entity.eligibility || "").trim();
-    const hero = element("div", "db-widget__elig-hero");
+    const hero = element("div", "db-widget__elig-hero db-elig-hero");
     hero.append(
-      richCardIcon("db-widget__elig-check", RICH_CARD_ICONS.checkWhite),
+      richCardIcon("db-widget__elig-check db-elig-check", RICH_CARD_ICONS.checkWhite),
       (() => {
         const copy = element("div");
         copy.append(
-          element("div", "db-widget__elig-verdict", "Published requirements"),
-          element("div", "db-widget__elig-sub", summary || "Review the criteria below"),
+          element("div", "db-widget__elig-verdict db-elig-verdict", "Published requirements"),
+          element("div", "db-widget__elig-sub db-elig-sub", summary || "Review the criteria below"),
         );
         return copy;
       })(),
@@ -628,14 +638,19 @@
     card.appendChild(hero);
     const requirements = Array.isArray(data.requirements) ? data.requirements.filter(Boolean) : [];
     if (requirements.length) {
-      const list = element("div", "db-widget__elig-list");
+      const list = element("div", "db-widget__elig-list db-elig-list");
       requirements.forEach((requirement) => {
-        const row = element("div", "db-widget__elig-row");
+        const row = element("div", "db-widget__elig-row db-elig-row");
+        const copy = element("div");
+        copy.appendChild(element("div", "db-widget__elig-req-title db-elig-req-title", typeof requirement === "object"
+          ? publishedValue(requirement.title || requirement.label || requirement.text)
+          : requirement));
+        if (requirement && typeof requirement === "object" && requirement.note) {
+          copy.appendChild(element("div", "db-widget__elig-req-note db-elig-req-note", requirement.note));
+        }
         row.append(
-          richCardIcon("db-widget__elig-icon db-widget__elig-icon--ok", RICH_CARD_ICONS.checkGreen),
-          element("div", "db-widget__elig-req-title", typeof requirement === "object"
-            ? publishedValue(requirement.title || requirement.label || requirement.text)
-            : requirement),
+          richCardIcon("db-widget__elig-icon db-widget__elig-icon--ok db-elig-icon ok", RICH_CARD_ICONS.checkGreen),
+          copy,
         );
         list.appendChild(row);
       });
@@ -651,26 +666,26 @@
   }
 
   function renderCareerCard(data, entity) {
-    const card = element("article", "db-widget__career");
+    const card = element("article", "db-widget__career db-career");
     const averageSalary = String(data.average_salary || entity.average_salary || "").trim();
     if (averageSalary) {
-      const hero = element("div", "db-widget__career-hero");
+      const hero = element("div", "db-widget__career-hero db-career-hero");
       hero.append(
-        element("div", "db-widget__career-label", "Average starting salary"),
-        element("div", "db-widget__career-avg", averageSalary),
+        element("div", "db-widget__career-label db-career-label", "Average starting salary"),
+        element("div", "db-widget__career-avg db-career-avg", averageSalary),
       );
       card.appendChild(hero);
     }
     const roles = Array.isArray(data.job_roles) ? data.job_roles.filter(Boolean) : [];
-    const rolesSection = element("div", "db-widget__career-roles");
-    rolesSection.appendChild(element("div", "db-widget__career-roles-label", "Roles you can target"));
+    const rolesSection = element("div", "db-widget__career-roles db-career-roles");
+    rolesSection.appendChild(element("div", "db-widget__career-roles-label db-career-roles-label", "Roles you can target"));
     if (roles.length) {
       roles.forEach((role) => {
-        const row = element("div", "db-widget__career-role-row");
+        const row = element("div", "db-widget__career-role-row db-career-role-row");
         const roleTitle = typeof role === "object" ? role.title || role.name || role.label : role;
         const salary = typeof role === "object" ? role.salary || role.value : "";
-        row.appendChild(element("div", "db-widget__career-role-title", publishedValue(roleTitle)));
-        if (salary) row.appendChild(element("div", "db-widget__career-role-salary", salary));
+        row.appendChild(element("div", "db-widget__career-role-title db-career-role-title", publishedValue(roleTitle)));
+        if (salary) row.appendChild(element("div", "db-widget__career-role-salary db-career-role-salary", salary));
         rolesSection.appendChild(row);
       });
     } else {
@@ -679,12 +694,12 @@
     card.appendChild(rolesSection);
     const recruiters = Array.isArray(data.recruiters) ? data.recruiters.filter(Boolean) : [];
     if (recruiters.length) {
-      const recruiterSection = element("div", "db-widget__career-recruiters");
-      recruiterSection.appendChild(element("div", "db-widget__career-recruiters-label", "Top recruiters"));
-      const tags = element("div", "db-widget__recruiter-tags");
+      const recruiterSection = element("div", "db-widget__career-recruiters db-career-recruiters");
+      recruiterSection.appendChild(element("div", "db-widget__career-recruiters-label db-career-recruiters-label", "Top recruiters"));
+      const tags = element("div", "db-widget__recruiter-tags db-recruiter-tags");
       recruiters.forEach((recruiter) => tags.appendChild(element(
         "span",
-        "db-widget__recruiter-tag",
+        "db-widget__recruiter-tag db-recruiter-tag",
         typeof recruiter === "object" ? publishedValue(recruiter.name || recruiter.label) : recruiter,
       )));
       recruiterSection.appendChild(tags);
@@ -700,7 +715,7 @@
   }
 
   function renderReviewsCard(data) {
-    const card = element("article", "db-widget__reviews");
+    const card = element("article", "db-widget__reviews db-reviews");
     const rating = String(data.rating || "").trim();
     const reviewCount = Number(data.review_count);
     const scopeLabel = String(data.scope_label || "").trim();
@@ -709,34 +724,34 @@
     }
     const breakdown = Array.isArray(data.breakdown) ? data.breakdown.filter(Boolean) : [];
     if (rating || breakdown.length) {
-      const summary = element("div", "db-widget__reviews-summary");
+      const summary = element("div", "db-widget__reviews-summary db-reviews-summary");
       const score = element("div");
-      score.appendChild(element("div", "db-widget__rating-big", rating || "—"));
+      score.appendChild(element("div", "db-widget__rating-big db-rating-big", rating || "—"));
       const numericRating = Number.parseFloat(rating);
       if (Number.isFinite(numericRating)) {
         const filled = Math.max(0, Math.min(5, Math.floor(numericRating)));
-        score.appendChild(element("div", "db-widget__rating-stars", `${"★".repeat(filled)}${"☆".repeat(5 - filled)}`));
+        score.appendChild(element("div", "db-widget__rating-stars db-rating-stars", `${"★".repeat(filled)}${"☆".repeat(5 - filled)}`));
       }
       if (Number.isFinite(reviewCount) && reviewCount > 0) {
         score.appendChild(element(
           "div",
-          "db-widget__rating-count",
+          "db-widget__rating-count db-rating-count",
           `${reviewCount} published review${reviewCount === 1 ? "" : "s"}`,
         ));
       }
       summary.appendChild(score);
       if (breakdown.length) {
-        const bars = element("div", "db-widget__rating-bars");
+        const bars = element("div", "db-widget__rating-bars db-rating-bars");
         breakdown.forEach((item) => {
-          const row = element("div", "db-widget__bar-row");
+          const row = element("div", "db-widget__bar-row db-bar-row");
           const label = typeof item === "object" ? item.label || item.name || "" : "";
           const value = typeof item === "object" ? item.value || item.score || "" : item;
-          const track = element("div", "db-widget__bar-track");
-          const fill = element("div", "db-widget__bar-fill");
+          const track = element("div", "db-widget__bar-track db-bar-track");
+          const fill = element("div", "db-widget__bar-fill db-bar-fill");
           fill.style.width = `${reviewPercentage(value)}%`;
           track.appendChild(fill);
           row.append(
-            element("span", "db-widget__bar-label", label),
+            element("span", "db-widget__bar-label db-bar-label", label),
             track,
             element("span", "db-widget__bar-value", value),
           );
@@ -748,7 +763,7 @@
     }
     const testimonials = Array.isArray(data.testimonials) ? data.testimonials.filter(Boolean) : [];
     if (testimonials.length) {
-      const quotes = element("div", "db-widget__reviews-quotes");
+      const quotes = element("div", "db-widget__reviews-quotes db-reviews-quotes");
       const preview = [];
       const representedPrograms = new Set();
       testimonials.forEach((testimonial) => {
@@ -764,9 +779,9 @@
         if (preview.length < 3 && !preview.includes(testimonial)) preview.push(testimonial);
       });
       preview.forEach((testimonial) => {
-        const quote = element("blockquote", "db-widget__quote");
+        const quote = element("blockquote", "db-widget__quote db-quote");
         const text = typeof testimonial === "object" ? testimonial.text || testimonial.description : testimonial;
-        quote.appendChild(element("p", "db-widget__quote-text", publishedValue(text)));
+        quote.appendChild(element("p", "db-widget__quote-text db-quote-text", publishedValue(text)));
         if (testimonial && typeof testimonial === "object") {
           const attribution = [
             testimonial.reviewer_name,
@@ -774,7 +789,7 @@
             testimonial.theme,
             testimonial.reviewer_label,
           ].filter(Boolean).join(" · ");
-          if (attribution) quote.appendChild(element("footer", "db-widget__quote-name", attribution));
+          if (attribution) quote.appendChild(element("footer", "db-widget__quote-name db-quote-name", attribution));
         }
         quotes.appendChild(quote);
       });
@@ -787,12 +802,12 @@
   }
 
   function renderSyllabusCard(data, entity) {
-    const card = element("article", "db-widget__syllabus");
+    const card = element("article", "db-widget__syllabus db-syllabus");
     const semesters = Array.isArray(data.semesters) ? data.semesters.filter(Boolean) : [];
-    const head = element("div", "db-widget__syllabus-head");
+    const head = element("div", "db-widget__syllabus-head db-syllabus-head");
     head.append(
-      element("div", "db-widget__syllabus-title", `${entity.name || entity.category || "Program"} · Syllabus`),
-      element("div", "db-widget__syllabus-meta", semesters.length ? `${semesters.length} semesters` : "Published curriculum"),
+      element("div", "db-widget__syllabus-title db-syllabus-title", `${entity.name || entity.category || "Program"} · Syllabus`),
+      element("div", "db-widget__syllabus-meta db-syllabus-meta", semesters.length ? `${semesters.length} semesters` : "Published curriculum"),
     );
     card.appendChild(head);
     if (!semesters.length) {
@@ -800,20 +815,20 @@
       return card;
     }
     semesters.forEach((semester, index) => {
-      const details = element("details", "db-widget__sem-item");
+      const details = element("details", "db-widget__sem-item db-sem-item");
       if (index === 0) details.open = true;
-      const summary = element("summary", "db-widget__sem-toggle");
-      const label = element("span", "db-widget__sem-toggle-inner");
+      const summary = element("summary", "db-widget__sem-toggle db-sem-toggle");
+      const label = element("span", "db-widget__sem-toggle-inner db-sem-toggle-inner");
       label.append(
-        element("span", "db-widget__sem-num", String(index + 1)),
-        element("span", "db-widget__sem-title", semester.title || `Semester ${index + 1}`),
+        element("span", "db-widget__sem-num db-sem-num", `S${index + 1}`),
+        element("span", "db-widget__sem-title db-sem-title", semester.title || `Semester ${index + 1}`),
       );
-      summary.append(label, richCardIcon("db-widget__sem-chevron", RICH_CARD_ICONS.chevron));
+      summary.append(label, richCardIcon("db-widget__sem-chevron db-sem-chevron", RICH_CARD_ICONS.chevron));
       details.appendChild(summary);
-      const subjects = element("div", "db-widget__sem-subs");
+      const subjects = element("div", "db-widget__sem-subs db-sem-subs");
       (semester.items || []).filter(Boolean).forEach((subject) => {
-        const item = element("div", "db-widget__sem-sub");
-        item.append(element("span", "db-widget__sub-dot"), document.createTextNode(String(subject)));
+        const item = element("div", "db-widget__sem-sub db-sem-sub");
+        item.append(element("span", "db-widget__sub-dot db-sub-dot"), document.createTextNode(String(subject)));
         subjects.appendChild(item);
       });
       details.appendChild(subjects);
@@ -1038,8 +1053,8 @@
       ? item.university_name || item.name
       : item.name;
     const rowClass = popular
-      ? "db-widget__popular-item db-widget__popular-item--rich"
-      : "db-widget__picker-row db-widget__picker-row--rich";
+      ? "db-widget__popular-item db-widget__popular-item--rich db-picker-row"
+      : "db-widget__picker-row db-widget__picker-row--rich db-picker-row";
     const row = createButton("", rowClass, () => {
       closeOverlay();
       if (typeof options.onSelect === "function") {
@@ -1049,14 +1064,14 @@
       selectGuidedEntity(item, displayName);
     });
     row.dataset.tone = pickerTone(displayName);
-    row.appendChild(element("span", "db-widget__picker-monogram", initials(displayName)));
+    row.appendChild(element("span", "db-widget__picker-monogram db-picker-mono", initials(displayName)));
     const copy = element("span", "db-widget__picker-copy");
-    copy.appendChild(element("span", "db-widget__picker-name", displayName));
+    copy.appendChild(element("span", "db-widget__picker-name db-picker-row-name", displayName));
     const displayMeta = options.display === "university"
       ? [item.name, item.fee, item.duration].filter(Boolean).join(" · ")
       : item.meta;
-    if (displayMeta) copy.appendChild(element("span", "db-widget__picker-meta", displayMeta));
-    row.append(copy, element("span", "db-widget__picker-arrow", "›"));
+    if (displayMeta) copy.appendChild(element("span", "db-widget__picker-meta db-picker-row-meta", displayMeta));
+    row.appendChild(copy);
     return row;
   }
 
@@ -1072,19 +1087,19 @@
     const popular = data.popular.filter((item) => !excludedIds.has(String(item.id)));
     if (!normalizedQuery && popular.length) {
       const section = element("section", "db-widget__picker-section");
-      section.appendChild(element("h3", "db-widget__picker-section-title", "⭐ Popular"));
+      section.appendChild(element("h3", "db-widget__picker-section-title db-picker-section-label", "⭐ Popular"));
       const grid = element("div", "db-widget__picker-popular");
       popular.slice(0, 8).forEach((item) => grid.appendChild(pickerRow(item, kind, true, options)));
       section.appendChild(grid);
       container.appendChild(section);
     }
     if (!filtered.length) {
-      container.appendChild(element("p", "db-widget__picker-empty", "No matching option."));
+      container.appendChild(element("p", "db-widget__picker-empty db-picker-empty", "No matching option."));
       return;
     }
     const allSection = element("section", "db-widget__picker-section db-widget__picker-section--all");
     const sectionLabel = normalizedQuery ? `${filtered.length} Results` : "All";
-    allSection.appendChild(element("h3", "db-widget__picker-section-title", sectionLabel));
+    allSection.appendChild(element("h3", "db-widget__picker-section-title db-picker-section-label", sectionLabel));
     const list = element("div", "db-widget__picker-results");
     filtered.sort((a, b) => {
       const aName = options.display === "university" ? a.university_name || a.name : a.name;
@@ -1097,8 +1112,8 @@
 
   function detailSection(body, title, value) {
     if (!value || Array.isArray(value) && !value.length) return;
-    const section = element("section", "db-widget__detail-section");
-    section.appendChild(element("h3", "", title));
+    const section = element("section", "db-widget__detail-section db-info-card");
+    section.appendChild(element("h3", "db-info-card-title", title));
     const values = Array.isArray(value) ? value : [value];
     values.forEach((item) => {
       if (item && typeof item === "object") {
@@ -1114,12 +1129,38 @@
   }
 
   function openDetails(component) {
-    const body = openOverlay(component.name || "Program details", "db-widget__detail-overlay");
-    const panel = element("section", "db-widget__detail-panel db-widget__details-panel");
+    const body = openOverlay(component.name || "Program details", "db-widget__detail-overlay db-details");
+    state.overlay.style.gridTemplateRows = "minmax(0, 1fr)";
+    const panel = element("section", "db-widget__detail-panel db-widget__details-panel db-details");
     panel.style.height = "100%";
-    panel.style.gridTemplateRows = "minmax(0, 1fr)";
-    const detailBody = element("div", "db-widget__detail-body db-widget__details-body");
+    panel.style.gridTemplateRows = "auto minmax(0, 1fr) auto";
     const details = detailsFor(component);
+    const header = element("header", "db-widget__details-header db-details-header");
+    const back = createButton("‹ Back", "db-widget__details-back db-details-back", closeOverlay);
+    const titleRow = element("div", "db-widget__details-title-row db-details-title-row");
+    const name = component.name || component.title || "Program details";
+    const mark = element("span", "db-widget__details-mono db-details-mono", initials(component.university_name || name));
+    mark.dataset.tone = pickerTone(component.university_name || name);
+    const titleCopy = element("div");
+    titleCopy.appendChild(element("h2", "db-widget__details-name db-details-name", name));
+    const trust = [
+      component.ugc_status || findFact(component, ["ugc", "approval"]),
+      component.naac_grade || findFact(component, ["naac"]),
+    ].filter(Boolean).join(" · ");
+    if (trust) titleCopy.appendChild(element("p", "db-widget__details-trust db-details-trust", trust));
+    titleRow.append(mark, titleCopy);
+    header.append(back, titleRow);
+
+    const detailBody = element("div", "db-widget__detail-body db-widget__details-body db-details-body");
+    const keyDetails = Array.isArray(details.key_details) ? details.key_details.filter(Boolean) : [];
+    if (keyDetails.length) {
+      const pills = element("div", "db-widget__details-pills db-details-pills");
+      keyDetails.slice(0, 3).forEach((item) => {
+        const value = item && typeof item === "object" ? item.value : item;
+        if (value) pills.appendChild(element("span", "db-widget__details-pill db-details-pill", value));
+      });
+      if (pills.childElementCount) detailBody.appendChild(pills);
+    }
     detailSection(detailBody, "Overview", details.description || details.hero_description);
     detailSection(detailBody, "Key details", details.key_details);
     detailSection(detailBody, "Accreditations", details.accreditations);
@@ -1129,7 +1170,9 @@
     if (!detailBody.childElementCount) {
       detailBody.appendChild(element("p", "db-widget__picker-empty", "No additional published detail is available yet."));
     }
-    panel.appendChild(detailBody);
+    const footer = element("footer", "db-widget__details-footer db-details-footer");
+    footer.appendChild(createButton("Ask about fees & EMI", "db-widget__details-cta db-cta-primary", closeOverlay));
+    panel.append(header, detailBody, footer);
     body.appendChild(panel);
   }
 

@@ -86,7 +86,7 @@
   function actionButton(action, className = "db-widget__action") {
     const normalized = normalizedAction(action);
     if (!normalized || !normalized.label) return null;
-    return createButton(normalized.label, className, () => handleAction(normalized));
+    return createButton(normalized.label, `${className} db-chip`, () => handleAction(normalized));
   }
 
   function refreshResponsiveActionLayouts() {
@@ -98,7 +98,7 @@
   function responsiveActionGrid(actions, buttons, options = {}) {
     const row = element(
       "div",
-      options.className || "db-widget__quick-actions db-widget__follow-up-actions",
+      `${options.className || "db-widget__quick-actions db-widget__follow-up-actions"} db-chip-grid`,
     );
     row.style.visibility = "hidden";
     const usableActions = actions.slice(0, buttons.length);
@@ -107,7 +107,7 @@
     let expanded = false;
     let mounted = false;
     let visibleCount = usableActions.length;
-    const toggle = createButton("More", "db-widget__more-toggle", () => {
+    const toggle = createButton("More", "db-widget__more-toggle db-more-btn", () => {
       if (expanded) {
         expanded = false;
         layout.fit();

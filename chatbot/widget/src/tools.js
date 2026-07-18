@@ -33,18 +33,18 @@
     view.row.classList.add("db-widget__message-row--roi");
     view.bubble.remove();
     const stack = element("div", "db-widget__component-stack db-widget__roi-stack");
-    const card = element("section", "db-widget__roi-card");
+    const card = element("section", "db-widget__roi-card db-tool-widget");
     card.setAttribute("aria-label", "ROI Calculator");
 
-    const header = element("header", "db-widget__roi-header");
-    const identity = element("div", "db-widget__roi-identity");
-    const icon = element("span", "db-widget__roi-icon", "🧮");
+    const header = element("header", "db-widget__roi-header db-tool-header");
+    const identity = element("div", "db-widget__roi-identity db-tool-header-left");
+    const icon = element("span", "db-widget__roi-icon db-tool-icon-badge", "🧮");
     icon.setAttribute("aria-hidden", "true");
-    const title = element("div", "db-widget__roi-title");
+    const title = element("div", "db-widget__roi-title db-tool-title");
     const status = element("span", "db-widget__roi-status", "Ready when you are");
     title.append(element("strong", "", "ROI Calculator"), status);
     identity.append(icon, title);
-    const close = createButton("×", "db-widget__roi-close", closeRoiCalculator);
+    const close = createButton("×", "db-widget__roi-close db-tool-close", closeRoiCalculator);
     close.setAttribute("aria-label", "Collapse ROI Calculator");
     header.append(identity, close);
 
@@ -133,22 +133,23 @@
   }
 
   function renderRoiProgress(widget) {
-    const progress = element("div", "db-widget__roi-progress");
+    const progress = element("div", "db-widget__roi-progress db-tool-progress");
     const copy = element("div", "db-widget__roi-progress-copy");
     copy.append(
       element("span", "", `Question ${widget.step}`),
       element("strong", "", `${widget.step} of ${ROI_TOTAL_STEPS}`),
     );
-    const track = element("div", "db-widget__roi-progress-track");
+    const track = element("div", "db-widget__roi-progress-track db-progress-track");
     track.setAttribute("role", "progressbar");
     track.setAttribute("aria-label", "ROI calculator progress");
     track.setAttribute("aria-valuemin", "0");
     track.setAttribute("aria-valuemax", String(ROI_TOTAL_STEPS));
     track.setAttribute("aria-valuenow", String(widget.step));
-    const fill = element("span", "db-widget__roi-progress-fill");
+    const fill = element("span", "db-widget__roi-progress-fill db-progress-fill");
     fill.style.setProperty("--db-roi-progress", `${widget.step / ROI_TOTAL_STEPS * 100}%`);
     track.appendChild(fill);
-    progress.append(copy, track);
+    copy.classList.add("db-progress-label");
+    progress.append(track, copy);
     return progress;
   }
 
@@ -223,10 +224,10 @@
 
   function renderRoiQuestion(widget, content) {
     content.appendChild(renderRoiProgress(widget));
-    content.appendChild(element("h3", "db-widget__roi-question", roiQuestionText(widget.message)));
-    const options = element("div", "db-widget__roi-options");
+    content.appendChild(element("h3", "db-widget__roi-question db-tool-question", roiQuestionText(widget.message)));
+    const options = element("div", "db-widget__roi-options db-tool-opts");
     widget.actions.forEach((action) => {
-      const choice = roiActionButton(action.label, "db-widget__roi-option", () => {
+      const choice = roiActionButton(action.label, "db-widget__roi-option db-tool-opt", () => {
         requestRoiStep(action.message);
       });
       options.appendChild(choice);
@@ -237,7 +238,7 @@
   function renderRoiResult(widget, content) {
     const payback = roiPaybackText(widget.message);
     content.appendChild(element("span", "db-widget__roi-eyebrow", "Estimated ROI"));
-    const outcome = element("div", "db-widget__roi-outcome");
+    const outcome = element("div", "db-widget__roi-outcome db-tool-partial-box");
     const metric = element("div", "db-widget__roi-metric");
     metric.append(
       element("span", "", "Payback period"),
@@ -253,12 +254,12 @@
     const actions = element("div", "db-widget__roi-footer-actions");
     if (widget.mode === "partial") {
       actions.classList.add("db-widget__roi-footer-actions--result");
-      actions.appendChild(roiActionButton("View detailed result", "db-widget__roi-primary", () => {
+      actions.appendChild(roiActionButton("View detailed result", "db-widget__roi-primary db-tool-reveal", () => {
         requestRoiStep("tool:continue", { detail: true });
       }));
     } else if (widget.mode === "gated") {
       actions.classList.add("db-widget__roi-footer-actions--result");
-      actions.appendChild(roiActionButton("Continue to detailed result", "db-widget__roi-primary", () => {
+      actions.appendChild(roiActionButton("Continue to detailed result", "db-widget__roi-primary db-tool-reveal", () => {
         openLeadPanel({
           source: "roi_calculator",
           label: "View detailed result",
@@ -270,12 +271,12 @@
       widget.actions.slice(0, 3).forEach((action, index) => {
         actions.appendChild(roiActionButton(
           action.label,
-          index === 0 ? "db-widget__roi-primary" : "db-widget__roi-secondary",
+          index === 0 ? "db-widget__roi-primary db-tool-reveal" : "db-widget__roi-secondary db-tool-back",
           () => handleAction(action),
         ));
       });
     }
-    actions.appendChild(roiActionButton("Restart", "db-widget__roi-secondary", () => {
+    actions.appendChild(roiActionButton("Restart", "db-widget__roi-secondary db-tool-back", () => {
       widget.mode = "idle";
       widget.step = 0;
       widget.message = "";
@@ -324,7 +325,7 @@
       content.append(
         element("h3", "db-widget__roi-intro", "See how fast this program pays for itself."),
         element("p", "db-widget__roi-supporting", "2 quick questions. Your answers stay inside this calculator."),
-        roiActionButton("Start", "db-widget__roi-primary", () => {
+        roiActionButton("Start", "db-widget__roi-primary db-tool-start", () => {
           requestRoiStep("tool:roi", { chip: widget.chip });
         }),
       );
@@ -336,7 +337,7 @@
       content.append(
         element("h3", "db-widget__roi-intro", "The calculator could not continue."),
         element("p", "db-widget__roi-supporting", widget.message || "Please try again."),
-        roiActionButton("Try again", "db-widget__roi-primary", () => {
+        roiActionButton("Try again", "db-widget__roi-primary db-tool-start", () => {
           requestRoiStep(widget.retryMessage || "tool:roi");
         }),
       );
@@ -441,12 +442,17 @@
     view.row.classList.add("db-widget__message-row--career-quiz");
     view.bubble.remove();
     const stack = element("div", "db-widget__component-stack db-widget__career-quiz-stack");
-    const card = element("section", "db-widget__career-quiz-card");
+    const card = element("section", "db-widget__career-quiz-card db-tool-widget");
     card.setAttribute("aria-label", "Help me choose");
 
-    const header = element("header", "db-widget__career-quiz-header");
-    header.appendChild(element("h2", "db-widget__career-quiz-title", "Help me choose"));
-    const close = createButton("×", "db-widget__career-quiz-close", closeCareerQuiz);
+    const header = element("header", "db-widget__career-quiz-header db-tool-header");
+    const headerLeft = element("div", "db-tool-header-left");
+    headerLeft.append(
+      element("span", "db-tool-icon-badge", "🎯"),
+      element("h2", "db-widget__career-quiz-title db-tool-title", "Help me choose"),
+    );
+    header.appendChild(headerLeft);
+    const close = createButton("×", "db-widget__career-quiz-close db-tool-close", closeCareerQuiz);
     close.setAttribute("aria-label", "Close Help me choose");
     header.appendChild(close);
 
@@ -559,14 +565,14 @@
   }
 
   function renderCareerQuizProgress(widget) {
-    const progress = element("div", "db-widget__career-quiz-progress");
-    const track = element("div", "db-widget__career-quiz-progress-track");
+    const progress = element("div", "db-widget__career-quiz-progress db-tool-progress");
+    const track = element("div", "db-widget__career-quiz-progress-track db-progress-track");
     track.setAttribute("role", "progressbar");
     track.setAttribute("aria-label", "Help me choose progress");
     track.setAttribute("aria-valuemin", "0");
     track.setAttribute("aria-valuemax", String(CAREER_QUIZ_TOTAL_STEPS));
     track.setAttribute("aria-valuenow", String(widget.step));
-    const fill = element("span", "db-widget__career-quiz-progress-fill");
+    const fill = element("span", "db-widget__career-quiz-progress-fill db-progress-fill");
     fill.style.setProperty(
       "--db-career-quiz-progress",
       `${widget.step / CAREER_QUIZ_TOTAL_STEPS * 100}%`,
@@ -574,7 +580,7 @@
     track.appendChild(fill);
     progress.append(track, element(
       "strong",
-      "db-widget__career-quiz-progress-label",
+      "db-widget__career-quiz-progress-label db-progress-label",
       `${widget.step} of ${CAREER_QUIZ_TOTAL_STEPS}`,
     ));
     return progress;
@@ -584,12 +590,12 @@
     content.appendChild(renderCareerQuizProgress(widget));
     content.appendChild(element(
       "h3",
-      "db-widget__career-quiz-question",
+      "db-widget__career-quiz-question db-tool-question",
       careerQuizQuestionText(widget.message),
     ));
-    const options = element("div", "db-widget__career-quiz-options");
+    const options = element("div", "db-widget__career-quiz-options db-tool-opts");
     widget.actions.forEach((action) => {
-      options.appendChild(careerQuizButton(action.label, "db-widget__career-quiz-option", () => {
+      options.appendChild(careerQuizButton(action.label, "db-widget__career-quiz-option db-tool-opt", () => {
         requestCareerQuizStep(action.message);
       }));
     });
@@ -614,7 +620,7 @@
       widget.actions.slice(0, 3).forEach((action, index) => {
         actions.appendChild(careerQuizButton(
           action.label,
-          index === 0 ? "db-widget__career-quiz-primary" : "db-widget__career-quiz-secondary",
+          index === 0 ? "db-widget__career-quiz-primary db-tool-reveal" : "db-widget__career-quiz-secondary db-tool-back",
           () => handleAction(action),
         ));
       });
@@ -623,7 +629,7 @@
   }
 
   function renderCareerQuizResult(widget, content) {
-    const result = element("div", "db-widget__career-quiz-result");
+    const result = element("div", "db-widget__career-quiz-result db-tool-partial-box");
     result.appendChild(element("span", "db-widget__career-quiz-result-check", "✓"));
     result.appendChild(element(
       "p",
@@ -641,13 +647,13 @@
     if (widget.mode === "partial") {
       content.appendChild(careerQuizButton(
         "Continue to full result",
-        "db-widget__career-quiz-primary",
+        "db-widget__career-quiz-primary db-tool-reveal",
         () => requestCareerQuizStep("tool:continue", { detail: true }),
       ));
     } else if (widget.mode === "gated") {
       content.appendChild(careerQuizButton(
         "Continue to full result",
-        "db-widget__career-quiz-primary",
+        "db-widget__career-quiz-primary db-tool-reveal",
         () => openLeadPanel({
           source: "career_quiz_gate",
           label: "Continue to full result",
@@ -676,7 +682,7 @@
       content.append(
         element("h3", "db-widget__career-quiz-question", "The quiz could not continue."),
         element("p", "db-widget__career-quiz-supporting", widget.message || "Please try again."),
-        careerQuizButton("Try again", "db-widget__career-quiz-primary", () => {
+        careerQuizButton("Try again", "db-widget__career-quiz-primary db-tool-start", () => {
           requestCareerQuizStep(widget.retryMessage || "tool:career_quiz");
         }),
       );
@@ -835,25 +841,22 @@
       return;
     }
     const view = state.finderView;
-    view.bubble.replaceChildren();
-    const intro = state.finder.prefilled && state.finder.step === 1
-      ? `1 of 4 ✓ · ${state.finder.answers.program}`
-      : "Four quick taps—no typing needed.";
-    addRichText(view.bubble, intro);
+    view.bubble.remove();
     Array.from(view.content.querySelectorAll(".db-widget__component-stack")).forEach((node) => node.remove());
-    const panel = element("section", "db-widget__finder");
-    const header = element("div", "db-widget__finder-header");
-    header.append(
-      element("h3", "db-widget__finder-question", current.question),
-      element("span", "db-widget__finder-step", `${state.finder.step + 1} of 4`),
-    );
-    const progress = element("div", "db-widget__finder-progress");
-    const track = element("div", "db-widget__progress-track");
-    const fill = element("div", "db-widget__finder-progress-fill");
+    const panel = element("section", "db-widget__finder db-finder-widget");
+    const header = element("div", "db-widget__finder-header db-finder-title-row");
+    header.appendChild(element("h3", "db-widget__finder-title db-finder-title", "Help me choose"));
+    const progress = element("div", "db-widget__finder-progress db-tool-progress");
+    const track = element("div", "db-widget__progress-track db-progress-track");
+    const fill = element("div", "db-widget__finder-progress-fill db-progress-fill");
     fill.style.setProperty("--db-progress", `${(state.finder.step + 1) * 25}%`);
     track.appendChild(fill);
-    progress.appendChild(track);
-    const options = element("div", "db-widget__finder-options");
+    progress.append(
+      track,
+      element("span", "db-widget__finder-step db-progress-label", `${state.finder.step + 1} of 4`),
+    );
+    const question = element("h3", "db-widget__finder-question db-finder-question", current.question);
+    const options = element("div", "db-widget__finder-options db-finder-opts");
     const selectChoice = (choice) => {
       if (choice === "Show all") {
         openPicker("specialization", (item) => {
@@ -874,26 +877,30 @@
       const pageSize = offset === 0 || remaining <= 2 ? 2 : 1;
       if (offset > 0) {
         const previous = previousOffsets[previousOffsets.length - 1] || 0;
-        options.appendChild(createButton("Back", "db-widget__finder-option", () => {
+        options.appendChild(createButton("Back", "db-widget__finder-option db-finder-opt", () => {
           renderOptionPage(previous, previousOffsets.slice(0, -1));
         }));
       }
       current.options.slice(offset, offset + pageSize).forEach((choice) => {
-        const button = createButton(choice, "db-widget__finder-option", () => {
+        const button = createButton(choice, "db-widget__finder-option db-finder-opt", () => {
           selectChoice(choice);
         });
         button.setAttribute("aria-pressed", "false");
         options.appendChild(button);
       });
       if (offset + pageSize < current.options.length) {
-        options.appendChild(createButton("More", "db-widget__finder-option", () => {
+        options.appendChild(createButton("More", "db-widget__finder-option db-finder-opt", () => {
           renderOptionPage(offset + pageSize, [...previousOffsets, offset]);
         }));
       }
     };
     renderOptionPage();
-    const skip = createButton("Skip → show results now", "db-widget__finder-skip", submitFinder);
-    panel.append(header, progress, options, skip);
+    const skip = createButton("Skip → show results now", "db-widget__finder-skip db-finder-skip", submitFinder);
+    panel.append(header, progress);
+    if (state.finder.prefilled) {
+      panel.appendChild(element("p", "db-widget__finder-prefill db-prefill-note", "Program pre-filled from this page ✓"));
+    }
+    panel.append(question, options, skip);
     const stack = element("div", "db-widget__component-stack");
     stack.appendChild(panel);
     view.content.appendChild(stack);

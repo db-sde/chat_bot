@@ -253,6 +253,33 @@ def test_premium_admissions_ui_contracts_are_present() -> None:
     assert ".db-widget__sticky-context[hidden]" in styles
 
 
+def test_design_reference_hooks_cover_all_migrated_widget_surfaces() -> None:
+    source = _source("widget.js")
+    expected_hooks = {
+        "actionButton": ("db-chip",),
+        "renderProgramCard": ("db-card", "db-card-head", "db-card-mono", "db-card-title"),
+        "renderUniversityCard": ("db-card", "db-card-head", "db-card-mono", "db-card-title"),
+        "renderComparisonCard": ("db-compare", "db-compare-head", "db-compare-row", "db-compare-verdict"),
+        "renderFeesCard": ("db-fees", "db-fees-hero", "db-fees-plan-row", "db-fees-emi"),
+        "renderEligibilityCard": ("db-elig", "db-elig-hero", "db-elig-row"),
+        "renderReviewsCard": ("db-reviews", "db-reviews-summary", "db-quote"),
+        "renderSyllabusCard": ("db-syllabus", "db-sem-toggle", "db-sem-subs"),
+        "openDetails": ("db-details", "db-details-header", "db-details-body", "db-details-footer"),
+        "renderPickerResults": ("db-picker-section-label",),
+        "pickerRow": ("db-picker-row", "db-picker-mono", "db-picker-row-name", "db-picker-row-meta"),
+        "openPicker": ("db-picker", "db-picker-sheet", "db-picker-search", "db-picker-list"),
+        "renderInlineLeadCard": ("db-lead", "db-lead-form", "db-phone-wrapper", "db-lead-send"),
+        "ensureRoiWidget": ("db-tool-widget", "db-tool-header", "db-tool-icon-badge"),
+        "ensureCareerQuizWidget": ("db-tool-widget", "db-tool-header", "db-tool-icon-badge"),
+        "renderFinderStep": ("db-finder-widget", "db-finder-title-row", "db-finder-opts"),
+    }
+
+    for function_name, hooks in expected_hooks.items():
+        function_source = _function_source(source, function_name)
+        for hook in hooks:
+            assert hook in function_source, f"{function_name} is missing the {hook} design hook"
+
+
 def test_clearing_context_removes_all_stale_context_content() -> None:
     source = _source("widget.js")
     update_context = _function_source(source, "updateContext")

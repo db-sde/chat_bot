@@ -357,10 +357,10 @@
   function renderInlineLeadCard(kind, options = {}) {
     const isApplication = kind === "application" || /apply/i.test(String(options.label || ""));
     const actionMeta = normalizedAction(options.chip) || {};
-    const card = element("section", "db-widget__inline-lead");
+    const card = element("section", "db-widget__inline-lead db-lead");
     card.appendChild(element(
       "p",
-      "db-widget__inline-lead-text",
+      "db-widget__inline-lead-text db-lead-text",
       isApplication
         ? "Ready to apply? Share your number and a DegreeBaba admissions counsellor will help with the next step."
         : kind === "fees"
@@ -369,20 +369,20 @@
           ? "Want a counsellor to verify your eligibility? Share your number for one callback."
           : "Happy to connect you. Share your number for one admissions callback — no spam.",
     ));
-    const form = element("form", "db-widget__inline-lead-form");
-    const phoneWrapper = element("label", "db-widget__inline-phone-wrapper");
-    phoneWrapper.appendChild(element("span", "db-widget__inline-phone-prefix", "+91"));
+    const form = element("form", "db-widget__inline-lead-form db-lead-form");
+    const phoneWrapper = element("label", "db-widget__inline-phone-wrapper db-phone-wrapper");
+    phoneWrapper.appendChild(element("span", "db-widget__inline-phone-prefix db-phone-prefix", "+91"));
     const phone = document.createElement("input");
-    phone.className = "db-widget__inline-phone-input";
+    phone.className = "db-widget__inline-phone-input db-phone-input";
     phone.type = "tel";
     phone.inputMode = "numeric";
     phone.autocomplete = "tel";
     phone.placeholder = "Your number";
     phone.setAttribute("aria-label", "10-digit mobile number");
     phoneWrapper.appendChild(phone);
-    const submit = element("button", "db-widget__inline-lead-send", "Send");
+    const submit = element("button", "db-widget__inline-lead-send db-lead-send", "Send");
     submit.type = "submit";
-    const status = element("p", "db-widget__inline-lead-note", "No spam. One call about your admission query.");
+    const status = element("p", "db-widget__inline-lead-note db-lead-note", "No spam. One call about your admission query.");
     form.append(phoneWrapper, submit);
     card.append(form, status);
     form.addEventListener("submit", async (event) => {
@@ -423,10 +423,10 @@
           rememberSessionId(state.sessionId);
         }
         card.replaceChildren();
-        const done = element("div", "db-widget__inline-lead-done");
+        const done = element("div", "db-widget__inline-lead-done db-lead-done");
         done.append(
-          richCardIcon("db-widget__inline-lead-done-icon", RICH_CARD_ICONS.checkGreen),
-          element("p", "db-widget__inline-lead-done-text", response.message || "Thanks — a DegreeBaba counsellor can contact you shortly."),
+          richCardIcon("db-widget__inline-lead-done-icon db-lead-done-icon", RICH_CARD_ICONS.checkGreen),
+          element("p", "db-widget__inline-lead-done-text db-lead-done-text", response.message || "Thanks — a DegreeBaba counsellor can contact you shortly."),
         );
         card.appendChild(done);
       } catch (error) {
@@ -1066,16 +1066,16 @@
       transitionNavigation("specialization_picker");
     }
     const title = options.title || `Browse ${label}`;
-    const body = openOverlay(title, "db-widget__picker-overlay");
-    const sheet = element("section", "db-widget__picker db-widget__picker-sheet");
+    const body = openOverlay(title, "db-widget__picker-overlay db-picker");
+    const sheet = element("section", "db-widget__picker db-widget__picker-sheet db-picker-sheet");
     sheet.style.gridTemplateRows = "auto minmax(0, 1fr)";
     const searchWrap = element("div", "db-widget__picker-search-wrap");
-    const searchField = element("div", "db-widget__picker-search-field");
+    const searchField = element("div", "db-widget__picker-search-field db-picker-search");
     const searchIcon = element("span", "db-widget__picker-search-icon");
     searchIcon.setAttribute("aria-hidden", "true");
     searchIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg>';
     const search = document.createElement("input");
-    search.className = "db-widget__picker-search";
+    search.className = "db-widget__picker-search db-picker-input";
     search.type = "search";
     search.placeholder = options.display === "university" ? "Search universities" : `Search ${label}`;
     search.setAttribute("aria-label", search.placeholder);
@@ -1089,8 +1089,8 @@
       );
       searchWrap.prepend(selection);
     }
-    const content = element("div", "db-widget__picker-content db-widget__picker-list");
-    content.appendChild(element("p", "db-widget__picker-empty", "Loading published options…"));
+    const content = element("div", "db-widget__picker-content db-widget__picker-list db-picker-list");
+    content.appendChild(element("p", "db-widget__picker-empty db-picker-empty", "Loading published options…"));
     sheet.append(searchWrap, content);
     body.appendChild(sheet);
     window.setTimeout(() => search.focus(), 0);

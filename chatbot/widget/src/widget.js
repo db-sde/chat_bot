@@ -194,11 +194,11 @@
     overlay.hidden = true;
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
-    const overlayHeader = element("header", "db-widget__picker-header db-widget__detail-header");
-    const overlayTitle = element("h2", "db-widget__picker-title db-widget__detail-title");
+    const overlayHeader = element("header", "db-widget__picker-header db-widget__detail-header db-picker-header");
+    const overlayTitle = element("h2", "db-widget__picker-title db-widget__detail-title db-picker-title");
     overlayTitle.id = `${hostId}-overlay-title`;
     overlay.setAttribute("aria-labelledby", overlayTitle.id);
-    const overlayClose = createButton("×", "db-widget__picker-close db-widget__detail-close", closeOverlay);
+    const overlayClose = createButton("×", "db-widget__picker-close db-widget__detail-close db-picker-close", closeOverlay);
     overlayClose.setAttribute("aria-label", "Close panel");
     overlayHeader.append(overlayTitle, overlayClose);
     const overlayBody = element("div", "db-widget__overlay-body");
