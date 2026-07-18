@@ -2165,6 +2165,25 @@
       "eligibility_category": "graduate",
       "emi_amount": "From INR 6,600 per month",
       "emi_numeric": 6600.0,
+      "fee_plans": [
+        {
+          "plan_name": "Pay in full",
+          "plan_amount": "INR 158,000",
+          "plan_total": "INR 158,000",
+          "plan_note": "One-time payment"
+        },
+        {
+          "plan_name": "Semester-wise",
+          "plan_amount": "INR 79,000",
+          "plan_total": "INR 158,000",
+          "plan_note": "Available payment option"
+        },
+        {
+          "plan_name": "Monthly EMI",
+          "plan_amount": "From INR 6,600 per month",
+          "plan_note": "Easy EMI option"
+        }
+      ],
       "salary_outcomes": [
         {
           "job_title": "Cloud Engineer",

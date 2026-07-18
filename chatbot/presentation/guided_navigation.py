@@ -342,7 +342,20 @@ def _first_text(sources: Iterable[Any], *paths: str) -> str | None:
 def _fee_info(entity: Any, catalog: Any) -> dict[str, Any]:
     sources = _relation_chain(entity, catalog)
     plans: list[dict[str, str | None]] = []
-    for source in sources:
+    primary = sources[0] if sources else None
+    primary_has_own_fee = bool(
+        primary is not None
+        and (
+            _first_text((primary,), "total_fee", "starting_fee")
+            or any(
+                isinstance(safe_get(primary, path, None), (int, float))
+                and not isinstance(safe_get(primary, path, None), bool)
+                for path in ("total_fee_numeric", "starting_fee_numeric", "fee_numeric")
+            )
+        )
+    )
+    plan_sources = sources[:1] if primary_has_own_fee else sources
+    for source in plan_sources:
         rows = safe_get(source, "fee_plans", None) or []
         if not isinstance(rows, Iterable) or isinstance(rows, (str, bytes, Mapping)):
             continue

@@ -177,7 +177,7 @@ def test_information_projection_never_fabricates_absent_publisher_data(
     }
 
 
-def test_fee_projection_returns_published_backend_plans_for_nmims_bca(
+def test_fee_projection_returns_published_backend_plans(
     guide_client: TestClient,
 ) -> None:
     response = guide_client.get(
@@ -206,6 +206,36 @@ def test_fee_projection_returns_published_backend_plans_for_nmims_bca(
         {
             "name": "Monthly EMI",
             "amount": "From INR 2,800 per month",
+            "total": None,
+            "note": "Easy EMI option",
+        },
+    ]
+
+    mca_response = guide_client.get(
+        "/api/widget/guide/context",
+        params={"entity_id": "course-nmims-mca"},
+    )
+    assert mca_response.status_code == 200
+    mca_fees = mca_response.json()["info"]["fees"]
+    assert mca_fees["total_fee"] == "INR 158,000"
+    assert mca_fees["semester_fee"] == "INR 79,000.0 per semester"
+    assert mca_fees["emi"] == "From INR 6,600 per month"
+    assert mca_fees["plans"] == [
+        {
+            "name": "Pay in full",
+            "amount": "INR 158,000",
+            "total": "INR 158,000",
+            "note": "One-time payment",
+        },
+        {
+            "name": "Semester-wise",
+            "amount": "INR 79,000",
+            "total": "INR 158,000",
+            "note": "Available payment option",
+        },
+        {
+            "name": "Monthly EMI",
+            "amount": "From INR 6,600 per month",
             "total": None,
             "note": "Easy EMI option",
         },
