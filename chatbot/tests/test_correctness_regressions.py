@@ -72,7 +72,7 @@ async def test_pending_contact_is_committed_before_product_routing(service) -> N
 
     result = await turn(
         service,
-        "9876543210 and what is the fee for NMIMS MBA?",
+        "9876543210 and what is the fee for NMIMS MCA?",
         "contact-question",
     )
 

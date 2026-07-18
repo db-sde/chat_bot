@@ -104,6 +104,16 @@ def _action_provider_label(entity: Any, catalog: Any) -> str:
     return entity_label(entity, default="University")
 
 
+def _structured_accreditation(entity: Any, accreditation_type: str) -> str:
+    for item in safe_get(entity, "accreditations", []) or []:
+        item_type = clean_text(safe_get(item, "type", None))
+        if item_type.casefold() != accreditation_type.casefold():
+            continue
+        value = clean_text(safe_get(item, "value", None))
+        return " ".join(part for part in (item_type, value) if part)
+    return ""
+
+
 def _join_operands(labels: Sequence[str]) -> str:
     unique = list(dict.fromkeys(label for label in labels if label))[:3]
     if len(unique) < 2:
@@ -274,10 +284,18 @@ def _university_comparison(
     lines: list[str] = []
     for entity in entities[:3]:
         label = entity_label(entity, default="University")
-        naac = clean_text(first_value(entity, "naac_grade", default=""))
-        approval = clean_text(first_value(entity, "ugc_approved", "ugc_status", default=""))
+        comparison = safe_get(entity, "comparison_attributes", None)
+        comparison = comparison if isinstance(comparison, Mapping) else {}
+        naac = clean_text(comparison.get("naac_grade")) or clean_text(
+            first_value(entity, "naac_grade", default="")
+        )
+        approval = _structured_accreditation(entity, "UGC") or clean_text(
+            first_value(entity, "ugc_approved", "ugc_status", default="")
+        )
         starting_fee = entity_fee(entity)
-        programs = safe_get(entity, "programs_table", []) or []
+        programs = safe_get(entity, "program_ids", None) or safe_get(
+            entity, "programs_table", []
+        ) or []
         program_count = (
             len(programs)
             if isinstance(programs, Iterable) and not isinstance(programs, (str, bytes, Mapping))
@@ -295,6 +313,13 @@ def _university_comparison(
                 details.append(f"published starting fee {starting_fee}")
             if program_count:
                 details.append(f"{program_count} listed program{'s' if program_count != 1 else ''}")
+            nirf_rank = comparison.get("nirf_rank")
+            if isinstance(nirf_rank, int) and nirf_rank > 0:
+                details.append(f"NIRF rank {nirf_rank}")
+            if comparison.get("placement_support") is True:
+                details.append("placement support available")
+            if comparison.get("industry_projects") is True:
+                details.append("industry projects available")
         rendered_details = "; ".join(details) if details else "published details are limited"
         lines.append(f"{label}: {rendered_details}.")
 

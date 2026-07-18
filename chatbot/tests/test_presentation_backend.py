@@ -372,15 +372,15 @@ async def test_real_program_message_polishes_catalog_grammar_without_changing_te
     )
     try:
         result = await service.process_turn(
-            ChatRequest(message="Tell me about NMIMS MBA", session_id="polished-program")
+            ChatRequest(message="Tell me about NMIMS MCA", session_id="polished-program")
         )
     finally:
         await service.close()
 
-    assert "A 2 years online mba" in result.payload.text
-    assert "A 2-year online MBA" in (result.payload.message or "")
-    assert "published Online MBA offering from NMIMS" in (result.payload.message or "")
-    assert "Would you like to review the published fees" in (result.payload.message or "")
+    assert "A 2 years distance MCA" in result.payload.text
+    assert "A 2-year distance MCA" in (result.payload.message or "")
+    assert "published MCA offering from NMIMS Global Access" in (result.payload.message or "")
+    assert "Published career paths include" in (result.payload.message or "")
 
 
 def test_component_union_rejects_unknown_component_types() -> None:

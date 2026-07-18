@@ -67,6 +67,7 @@ def _chat(client: TestClient, message: str, session_id: str) -> dict[str, Any]:
             "Manipal MBA",
             "presentation-clarify-manipal",
             [
+                "Manipal Academy of Higher Education Online",
                 "Manipal University Jaipur Online",
                 "Sikkim Manipal University Online",
             ],
@@ -87,7 +88,10 @@ def test_clarification_preserves_resolver_choices_in_modern_actions(
         : len(expected_choices)
     ] == expected_choices
     assert len(payload["quick_actions"]) == 3
-    assert payload["quick_actions"][-1]["message"] == "Talk to a counsellor"
+    if len(expected_choices) < 3:
+        assert payload["quick_actions"][-1]["message"] == "Talk to a counsellor"
+    else:
+        assert [action["message"] for action in payload["quick_actions"]] == expected_choices
     assert all(len(action["label"]) <= 24 for action in payload["quick_actions"])
     if message == "mbaa":
         assert payload["quick_actions"][1]["message"] == "Browse programs"
@@ -163,23 +167,24 @@ def test_university_picker_selection_drills_into_linked_program_cards(
 
     assert 1 <= len(card_list["items"]) <= 3
     assert payload["message"] == (
-        "Here are 2 published program options for NMIMS Online."
+        "Here are three representative published program options for NMIMS Global Access."
     )
     assert all(item["type"] == "program_card" for item in card_list["items"])
     assert {item["id"] for item in card_list["items"]} == {
-        "course-nmims-bba",
-        "course-nmims-mba",
+        "course-nmims-bca",
+        "course-nmims-mca",
+        "course-nmims-mcom",
     }
-    assert all(item["university_name"] == "NMIMS" for item in card_list["items"])
+    assert all(item["university_name"] == "NMIMS Global Access" for item in card_list["items"])
 
 
 def test_lead_cta_requires_delivered_value_not_passive_card_metadata(
     client: TestClient,
 ) -> None:
-    overview = _chat(client, "Tell me about NMIMS MBA", "presentation-lead-overview")
-    fee = _chat(client, "What is the fee for NMIMS MBA?", "presentation-lead-fee")
-    criteria = _chat(client, "Am I eligible for NMIMS MBA?", "presentation-lead-criteria")
-    emi = _chat(client, "What is the EMI for NMIMS MBA?", "presentation-lead-emi")
+    overview = _chat(client, "Tell me about NMIMS MCA", "presentation-lead-overview")
+    fee = _chat(client, "What is the fee for NMIMS MCA?", "presentation-lead-fee")
+    criteria = _chat(client, "Am I eligible for NMIMS MCA?", "presentation-lead-criteria")
+    emi = _chat(client, "What is the EMI for NMIMS MCA?", "presentation-lead-emi")
 
     assert not any(component["type"] == "lead_cta" for component in overview["components"])
     assert not any(component["type"] == "lead_cta" for component in criteria["components"])
@@ -244,7 +249,7 @@ def test_comparison_uses_clean_catalog_title_without_unresolved_widget_warning(
 ) -> None:
     payload = _chat(
         client,
-        "Compare NMIMS Online MBA and Lovely Professional University Online MBA",
+        "Compare NMIMS MCA and Lovely Professional University MCA",
         "presentation-comparison-title",
     )
     card = next(
@@ -253,7 +258,7 @@ def test_comparison_uses_clean_catalog_title_without_unresolved_widget_warning(
         if component["type"] == "comparison_card"
     )
 
-    assert card["title"] == "NMIMS vs Lovely Professional University"
+    assert card["title"] == "NMIMS Global Access vs Lovely Professional University Online"
     assert "couldn't find" not in payload["message"].casefold()
     assert "not in the catalog" not in payload["message"].casefold()
     assert "NMIMS" in payload["message"]

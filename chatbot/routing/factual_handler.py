@@ -9,12 +9,19 @@ from response.builder import build_response
 from response.cards import (
     catalog_get_entity,
     clean_text,
+    entity_fee,
     entity_label,
     entity_university,
     find_catalog_entity,
     first_value,
 )
-from response.templates import render_topic, suggested_chips, topic_from_message
+from response.templates import (
+    accreditation_items,
+    ranking_items,
+    render_topic,
+    suggested_chips,
+    topic_from_message,
+)
 from schemas import ResponsePayload
 from taxonomy.alias_tables import normalize_text
 
@@ -173,12 +180,27 @@ async def _synthesized_overview(entity: Any, llm: Any) -> str | None:
         return None
 
     subject = entity_label(entity)
-    fields = [
-        clean_text(safe_get(entity, "hero_description", None), max_chars=300),
-        clean_text(safe_get(entity, "about_content", None), max_chars=900),
-        clean_text(safe_get(entity, "why_choose_content", None), max_chars=500),
-    ]
-    context = "\n".join(value for value in fields if value)
+    facts: list[str] = []
+    for label, value in (
+        ("Description", clean_text(safe_get(entity, "hero_description", None), max_chars=500)),
+        ("About", clean_text(safe_get(entity, "about_content", None), max_chars=700)),
+        ("Starting or total fee", entity_fee(entity)),
+        ("Average rating", clean_text(safe_get(entity, "average_rating", None))),
+        ("Review count", clean_text(safe_get(entity, "review_count", None))),
+    ):
+        if value:
+            facts.append(f"{label}: {value}")
+    approvals = accreditation_items(entity)
+    if approvals:
+        facts.append(f"Accreditations: {'; '.join(approvals)}")
+    rankings = ranking_items(entity)
+    if rankings:
+        facts.append(f"Rankings: {'; '.join(rankings)}")
+    if safe_get(entity, "placement_support", None) is True:
+        facts.append("Placement support: available")
+    if safe_get(entity, "industry_projects", None) is True:
+        facts.append("Industry projects: available")
+    context = "\n".join(facts)
     if not context:
         return None
     prompt = (
@@ -192,6 +214,20 @@ async def _synthesized_overview(entity: Any, llm: Any) -> str | None:
         return None
     text = str(result or "").strip()
     return text or None
+
+
+def _catalog_faq_answer(entity: Any, message: str) -> str | None:
+    """Return an exact catalog FAQ answer without invoking synthesis."""
+
+    query = normalize_text(message)
+    if not query:
+        return None
+    for faq in safe_get(entity, "faqs", []) or []:
+        question = normalize_text(safe_get(faq, "question", None))
+        answer = clean_text(safe_get(faq, "answer", None), max_chars=1800)
+        if answer and question and (query == question or query.endswith(question)):
+            return answer
+    return None
 
 
 async def handle_factual(
@@ -245,8 +281,8 @@ async def handle_factual(
         )
 
     selected_topic = topic or topic_from_message(message)
-    text: str | None = None
-    if selected_topic == "about" and llm is not None and use_llm:
+    text: str | None = _catalog_faq_answer(focused_entity, message)
+    if not text and selected_topic == "about" and llm is not None and use_llm:
         text = await _synthesized_overview(focused_entity, llm)
     if not text:
         text = render_topic(selected_topic, focused_entity, catalog=catalog)
@@ -262,7 +298,7 @@ async def handle_factual(
             chips = [
                 label
                 for label, paths in (
-                    ("Programs", ("programs_table",)),
+                    ("Programs", ("program_ids", "programs_table")),
                     ("Accreditations", ("accreditations", "naac_grade", "ugc_approved")),
                     ("Reviews", ("reviews",)),
                 )

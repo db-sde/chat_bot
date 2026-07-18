@@ -16,6 +16,7 @@ from .cards import (
     entity_page_type,
     entity_university,
     first_value,
+    format_inr,
     has_value,
     related_specialization_names,
     render_sections,
@@ -45,16 +46,40 @@ def fee_answer(entity: Any) -> str:
     subject = entity_label(entity)
     total = clean_text(safe_get(entity, "total_fee", None))
     starting = clean_text(safe_get(entity, "starting_fee", None))
+    total_numeric = safe_get(entity, "total_fee_numeric", None)
+    starting_numeric = first_value(
+        entity,
+        "starting_fee_numeric",
+        "fee_numeric",
+        default=None,
+    )
+    if not total and isinstance(total_numeric, (int, float)) and not isinstance(
+        total_numeric, bool
+    ):
+        total = format_inr(float(total_numeric))
+    if not starting and isinstance(starting_numeric, (int, float)) and not isinstance(
+        starting_numeric, bool
+    ):
+        starting = format_inr(float(starting_numeric))
+    metadata = safe_get(entity, "fee_metadata", None)
+    metadata_note = ""
+    if isinstance(metadata, Mapping):
+        fee_type = clean_text(metadata.get("fee_type")).replace("_", " ")
+        cycle = clean_text(metadata.get("billing_cycle")).replace("_", " ")
+        currency = clean_text(metadata.get("currency"))
+        parts = [value for value in (fee_type, cycle, currency) if value]
+        if parts:
+            metadata_note = f" Catalog fee metadata: {', '.join(parts)}."
 
     if total and starting and total.casefold() != starting.casefold():
         return (
             f"The published total fee for {subject} is {total}; "
-            f"the listed starting fee is {starting}."
+            f"the listed starting fee is {starting}.{metadata_note}"
         )
     if total:
-        return f"The published total fee for {subject} is {total}."
+        return f"The published total fee for {subject} is {total}.{metadata_note}"
     if starting:
-        return f"The published starting fee for {subject} is {starting}."
+        return f"The published starting fee for {subject} is {starting}.{metadata_note}"
 
     plans = safe_get(entity, "fee_plans", []) or []
     for plan in plans if isinstance(plans, (list, tuple)) else []:
@@ -83,6 +108,15 @@ def eligibility_answer(entity: Any) -> str:
     if detail:
         return f"For {subject}, {detail}"
     if summary:
+        requirements = _nested_lines(
+            safe_get(entity, "eligibility_requirements", None),
+            field_groups=(("requirement", "qualification", "text", "name"),),
+        )
+        if requirements:
+            return render_sections(
+                entity_heading(entity),
+                [("Eligibility", [summary]), ("Requirements", requirements)],
+            )
         return f"For {subject}, the published eligibility is: {summary}."
     programs = safe_get(entity, "programs_table", []) or []
     rendered: list[str] = []
@@ -104,18 +138,28 @@ def mode_answer(entity: Any) -> str:
     return f"{subject} is offered in {mode} mode."
 
 
-def placements_answer(entity: Any) -> str:
+def placements_answer(entity: Any, catalog: Any = None) -> str:
     subject = entity_label(entity)
+    published = safe_get(entity, "placement_support", None)
     content = clean_text(
-        first_value(
-            entity,
-            "placement_content",
-            "placement_support",
-            "placements_content",
-            default=None,
-        ),
+        first_value(entity, "placement_content", "placements_content", default=None),
         max_chars=520,
     )
+    if not content and published is None and catalog is not None:
+        linked = catalog_get_entity(catalog, safe_get(entity, "linked_university", None))
+        if linked is not None:
+            published = safe_get(linked, "placement_support", None)
+            content = clean_text(
+                first_value(
+                    linked,
+                    "placement_content",
+                    "placements_content",
+                    default=None,
+                ),
+                max_chars=520,
+            )
+    if not content and published is True:
+        content = "Placement support is listed as available."
     if not content:
         return unavailable_answer(entity, "placement")
     return render_sections(
@@ -148,12 +192,19 @@ def syllabus_answer(entity: Any) -> str:
 
 def admission_answer(entity: Any) -> str:
     subject = entity_label(entity)
-    steps = clean_text(safe_get(entity, "admission_steps", None), max_chars=500)
+    steps_value = safe_get(entity, "admission_steps", None)
+    steps = _nested_lines(
+        steps_value,
+        field_groups=(("step", "label", "title", "text"),),
+    )
     fee_note = clean_text(safe_get(entity, "admission_fee_note", None), max_chars=180)
     if steps and fee_note:
-        return f"For {subject}, {steps} {fee_note}"
+        return render_sections(
+            entity_heading(entity),
+            [("Admission Steps", steps), ("Fee Note", [fee_note])],
+        )
     if steps:
-        return f"For {subject}, {steps}"
+        return render_sections(entity_heading(entity), [("Admission Steps", steps)])
     if fee_note:
         return f"For {subject}, the published admission note is: {fee_note}"
     return unavailable_answer(entity, "admission-process")
@@ -204,20 +255,43 @@ def accreditation_items(entity: Any) -> list[str]:
     details: list[str] = []
     naac = clean_text(safe_get(entity, "naac_grade", None))
     ugc = clean_text(first_value(entity, "ugc_status", "ugc_approved", default=None))
-    if naac:
-        details.append(f"NAAC grade {naac}")
-    if ugc:
-        details.append(ugc)
-    details.extend(
-        _nested_lines(
-            safe_get(entity, "accreditations", None),
-            field_groups=(
-                ("body_name", "name", "title"),
-                ("body_descriptor", "descriptor", "status"),
-                ("body_detail", "detail", "description"),
-            ),
+    structured_types: set[str] = set()
+    for item in safe_get(entity, "accreditations", None) or []:
+        accreditation_type = clean_text(first_value(item, "type", default=None))
+        accreditation_value = clean_text(first_value(item, "value", default=None))
+        if accreditation_type:
+            structured_types.add(accreditation_type.casefold())
+            if accreditation_type.casefold() == "naac" and naac:
+                accreditation_value = " ".join(
+                    value
+                    for value in (accreditation_value, f"(NAAC grade {naac})")
+                    if value
+                )
+            details.append(
+                " — ".join(
+                    value for value in (accreditation_type, accreditation_value) if value
+                )
+            )
+            continue
+        details.extend(
+            _nested_lines(
+                item,
+                field_groups=(
+                    ("body_name", "name", "title"),
+                    ("body_descriptor", "descriptor", "status"),
+                    ("body_detail", "detail", "description"),
+                ),
+                limit=1,
+            )
         )
-    )
+    if naac and "naac" not in structured_types:
+        details.insert(0, f"NAAC grade {naac}")
+    if (
+        ugc
+        and ugc.casefold() not in {"true", "false"}
+        and "ugc" not in structured_types
+    ):
+        details.insert(0, ugc)
     for path in ("approvals", "approval"):
         details.extend(
             _nested_lines(
@@ -235,6 +309,9 @@ def ranking_items(entity: Any) -> list[str]:
     """Collect explicit publisher rankings; never infer a ranking from NAAC or fees."""
 
     result: list[str] = []
+    nirf_rank = safe_get(entity, "nirf_rank", None)
+    if isinstance(nirf_rank, int) and nirf_rank > 0:
+        result.append(f"NIRF rank {nirf_rank}")
     for path in ("rankings", "ranking", "ranking_content"):
         result.extend(
             _nested_lines(
@@ -260,9 +337,14 @@ def ranking_items(entity: Any) -> list[str]:
     return list(dict.fromkeys(value for value in result if value))[:6]
 
 
-def accreditation_answer(entity: Any) -> str:
+def accreditation_answer(entity: Any, catalog: Any = None) -> str:
     subject = entity_label(entity)
     details = accreditation_items(entity)
+    for relation in ("linked_course", "linked_university"):
+        linked = catalog_get_entity(catalog, safe_get(entity, relation, None))
+        if linked is not None:
+            details.extend(accreditation_items(linked))
+    details = list(dict.fromkeys(details))
     if not details:
         return unavailable_answer(entity, "accreditation")
     return render_sections(
@@ -298,7 +380,13 @@ def jobs_answer(entity: Any) -> str:
     rendered: list[str] = []
     for profile in profiles if isinstance(profiles, (list, tuple)) else []:
         title = clean_text(safe_get(profile, "job_title", None))
-        salary = clean_text(safe_get(profile, "avg_salary", None))
+        salary = clean_text(
+            first_value(profile, "avg_salary", "salary_display", default=None)
+        )
+        if not salary:
+            numeric_salary = safe_get(profile, "salary_numeric", None)
+            if isinstance(numeric_salary, (int, float)) and not isinstance(numeric_salary, bool):
+                salary = format_inr(float(numeric_salary))
         if title:
             rendered.append(f"{title} ({salary})" if salary else title)
     rendered.extend(
@@ -310,6 +398,11 @@ def jobs_answer(entity: Any) -> str:
             ),
         )
     )
+    for outcome in safe_get(entity, "salary_outcomes", None) or []:
+        title = clean_text(safe_get(outcome, "job_title", None))
+        salary = clean_text(safe_get(outcome, "salary_display", None))
+        if title:
+            rendered.append(f"{title} ({salary})" if salary else title)
     if not rendered:
         return unavailable_answer(entity, "career-outcome")
     return render_sections(
@@ -373,13 +466,21 @@ def provider_answer(entity: Any, catalog: Any = None) -> str:
     return f"{subject} is offered by {provider}."
 
 
-def programs_answer(entity: Any) -> str:
+def programs_answer(entity: Any, catalog: Any = None) -> str:
     subject = entity_label(entity)
     programs = safe_get(entity, "programs_table", []) or []
     rendered: list[str] = []
     for program in programs if isinstance(programs, (list, tuple)) else []:
         name = clean_text(safe_get(program, "program_name", None))
         fee = clean_text(safe_get(program, "program_fee", None))
+        if name:
+            rendered.append(f"{name} ({fee})" if fee else name)
+    for reference in safe_get(entity, "program_ids", []) or []:
+        program = catalog_get_entity(catalog, reference)
+        if program is None:
+            continue
+        name = entity_label(program, default="")
+        fee = entity_fee(program)
         if name:
             rendered.append(f"{name} ({fee})" if fee else name)
     if not rendered:
@@ -391,21 +492,39 @@ def programs_answer(entity: Any) -> str:
     )
 
 
-def reviews_answer(entity: Any) -> str:
+def reviews_answer(entity: Any, *, theme: str | None = None) -> str:
     subject = entity_label(entity)
     reviews = safe_get(entity, "reviews", []) or []
     rendered: list[str] = []
     for review in reviews if isinstance(reviews, (list, tuple)) else []:
+        review_theme = clean_text(safe_get(review, "theme", None))
+        if theme and theme.casefold() not in review_theme.casefold():
+            continue
         text = clean_text(safe_get(review, "review_text", None), max_chars=180)
         reviewer = clean_text(safe_get(review, "reviewer_name", None))
+        rating = safe_get(review, "rating", None)
+        attribution = " · ".join(
+            value
+            for value in (
+                reviewer,
+                f"{rating}/5" if isinstance(rating, (int, float)) else "",
+                review_theme.title(),
+            )
+            if value
+        )
         if text:
-            rendered.append(f'"{text}" — {reviewer}' if reviewer else f'"{text}"')
+            rendered.append(f'"{text}" — {attribution}' if attribution else f'"{text}"')
     if not rendered:
-        return unavailable_answer(entity, "review")
+        return unavailable_answer(entity, f"{theme or 'student'} review")
+    average = safe_get(entity, "average_rating", None)
+    count = safe_get(entity, "review_count", None)
+    intro = f"Published student feedback for {subject}."
+    if isinstance(average, (int, float)) and isinstance(count, int):
+        intro = f"{subject} has a published average rating of {average}/5 from {count} reviews."
     return render_sections(
         entity_heading(entity),
         [("Student Feedback", rendered[:3])],
-        intro=f"Published student feedback for {subject}.",
+        intro=intro,
     )
 
 
@@ -438,7 +557,7 @@ def career_items(entity: Any) -> list[str]:
     result: list[str] = []
     for profile in profiles if isinstance(profiles, (list, tuple)) else []:
         title = clean_text(safe_get(profile, "job_title", None))
-        salary = clean_text(safe_get(profile, "avg_salary", None))
+        salary = clean_text(first_value(profile, "avg_salary", "salary_display", default=None))
         if title:
             result.append(f"{title} ({salary})" if salary else title)
     result.extend(
@@ -451,6 +570,11 @@ def career_items(entity: Any) -> list[str]:
             limit=4,
         )
     )
+    for outcome in safe_get(entity, "salary_outcomes", None) or []:
+        title = clean_text(safe_get(outcome, "job_title", None))
+        salary = clean_text(safe_get(outcome, "salary_display", None))
+        if title:
+            result.append(f"{title} ({salary})" if salary else title)
     return list(dict.fromkeys(result))[:4]
 
 
@@ -504,7 +628,6 @@ def about_answer(entity: Any, catalog: Any = None) -> str:
         first_value(
             entity,
             "placement_content",
-            "placement_support",
             "placements_content",
             default=None,
         ),
@@ -512,6 +635,14 @@ def about_answer(entity: Any, catalog: Any = None) -> str:
     )
     if placement:
         sections.append(("Placement Support", [placement]))
+    elif safe_get(entity, "placement_support", None) is True:
+        sections.append(("Placement Support", ["Listed as available"]))
+    if safe_get(entity, "industry_projects", None) is True:
+        sections.append(("Industry Projects", ["Listed as available"]))
+    average_rating = safe_get(entity, "average_rating", None)
+    review_count = safe_get(entity, "review_count", None)
+    if isinstance(average_rating, (int, float)) and isinstance(review_count, int):
+        sections.append(("Student Rating", [f"{average_rating}/5 from {review_count} reviews"]))
     careers = career_items(entity)
     if careers:
         sections.append(("Career Outcomes", careers))
@@ -551,6 +682,35 @@ def render_topic(topic: str, entity: Any, *, catalog: Any = None) -> str:
         return about_answer(entity, catalog)
     if topic == "specializations":
         return specializations_answer(entity, catalog)
+    if topic == "programs":
+        return programs_answer(entity, catalog)
+    if topic == "placements":
+        return placements_answer(entity, catalog)
+    if topic == "accreditation":
+        return accreditation_answer(entity, catalog)
+    if topic in {
+        "reviews",
+        "faculty_reviews",
+        "placement_reviews",
+        "lms_reviews",
+        "flexibility_reviews",
+    }:
+        theme = {
+            "faculty_reviews": "faculty",
+            "placement_reviews": "placement",
+            "lms_reviews": "lms",
+            "flexibility_reviews": "flexibility",
+        }.get(topic)
+        return reviews_answer(entity, theme=theme)
+    if topic == "average_rating":
+        average = safe_get(entity, "average_rating", None)
+        count = safe_get(entity, "review_count", None)
+        if isinstance(average, (int, float)) and isinstance(count, int):
+            return (
+                f"The published average rating for {entity_label(entity)} is "
+                f"{average}/5 from {count} reviews."
+            )
+        return unavailable_answer(entity, "average-rating")
     template = TEMPLATE_BY_TOPIC.get(topic, about_answer)
     return template(entity)
 
@@ -577,6 +737,11 @@ def topic_from_message(message: str) -> str:
         ("duration", ("duration", "how long", " years", " semesters")),
         ("eligibility", ("eligib", "qualif", "requirement", "who can apply")),
         ("mode", (" mode", "online or offline", "distance mode", "learning mode")),
+        ("average_rating", ("average rating", "overall rating")),
+        ("faculty_reviews", ("faculty reviews", "faculty feedback")),
+        ("placement_reviews", ("placement reviews", "placement feedback")),
+        ("lms_reviews", ("lms reviews", "lms feedback")),
+        ("flexibility_reviews", ("flexibility reviews", "flexibility feedback")),
         ("placements", ("placement", "hiring", "recruit", "career support")),
         (
             "jobs",
@@ -611,18 +776,31 @@ def topic_from_message(message: str) -> str:
 
 
 _TOPIC_FIELDS: dict[str, tuple[str, ...]] = {
-    "fee": ("total_fee", "starting_fee", "fee_plans", "programs_table"),
+    "fee": (
+        "total_fee",
+        "starting_fee",
+        "total_fee_numeric",
+        "starting_fee_numeric",
+        "fee_numeric",
+        "fee_plans",
+        "programs_table",
+    ),
     "duration": ("duration",),
-    "eligibility": ("eligibility_summary", "eligibility_content", "programs_table"),
+    "eligibility": (
+        "eligibility_summary",
+        "eligibility_content",
+        "eligibility_requirements",
+        "programs_table",
+    ),
     "mode": ("mode", "mode_of_learning"),
-    "emi": ("emi_amount", "emi_content", "fee_plans"),
+    "emi": ("emi_amount", "emi_numeric", "emi_content", "fee_plans"),
     "placements": ("placement_content", "placement_support", "placements_content"),
     "syllabus": ("syllabus_content",),
-    "jobs": ("job_profiles", "career_outcomes"),
+    "jobs": ("job_profiles", "career_outcomes", "salary_outcomes"),
     "admission": ("admission_steps", "admission_fee_note"),
     "accreditation": ("naac_grade", "ugc_status", "ugc_approved", "accreditations"),
-    "programs": ("programs_table",),
-    "reviews": ("reviews",),
+    "programs": ("program_ids", "programs_table"),
+    "reviews": ("reviews", "average_rating", "review_count"),
     "exam": ("exam_content",),
 }
 

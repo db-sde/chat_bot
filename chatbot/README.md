@@ -56,16 +56,16 @@ LLM-backed responses emit real `token` events as provider deltas arrive, followe
   "suggested_chips": ["Eligibility", "EMI options"],
   "cta": null,
   "quick_actions": [
-    {"label": "Am I eligible?", "message": "NMIMS Online MBA eligibility", "action": "send_message"}
+    {"label": "Am I eligible?", "message": "NMIMS MCA eligibility", "action": "send_message"}
   ],
   "context": {
-    "university": "NMIMS",
-    "course": "Online MBA",
+    "university": "NMIMS Global Access",
+    "course": "MCA",
     "specialization": null,
-    "entity_id": "course-nmims-mba",
-    "label": "NMIMS · Online MBA"
+    "entity_id": "course-nmims-mca",
+    "label": "NMIMS Global Access · MCA"
   },
-  "metadata": {"route": "factual", "page_type": "course", "entity_id": "course-nmims-mba"},
+  "metadata": {"route": "factual", "page_type": "course", "entity_id": "course-nmims-mca"},
   "components": [
     {
       "type": "quick_actions",

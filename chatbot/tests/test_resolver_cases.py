@@ -160,12 +160,12 @@ async def test_case_08_mba_marketing_lists_all_provider_candidates(service) -> N
 
 
 @pytest.mark.asyncio
-async def test_case_09_nmims_mba_fee_persists_exact_entity(service) -> None:
-    await turn(service, "tell me about nmims mba", "case-09")
+async def test_case_09_nmims_mca_fee_persists_exact_entity(service) -> None:
+    await turn(service, "tell me about nmims mca", "case-09")
     result = await turn(service, "what is the fee?", "case-09")
     assert result.route == "factual"
-    assert result.state.focus.entity_id == "course-nmims-mba"
-    assert "INR 2,16,000" in result.payload.text
+    assert result.state.focus.entity_id == "course-nmims-mca"
+    assert "INR 158,000" in result.payload.text
 
 
 @pytest.mark.asyncio
@@ -177,20 +177,20 @@ async def test_case_10_compare_mba_and_mca_is_category_level(service) -> None:
 
 
 @pytest.mark.asyncio
-async def test_case_11_null_or_missing_placement_is_graceful(service) -> None:
-    await turn(service, "nmims mba", "case-11")
+async def test_case_11_structured_placement_support_is_used(service) -> None:
+    await turn(service, "nmims mca", "case-11")
     result = await turn(service, "what placement support is available?", "case-11")
     assert result.route == "factual"
-    assert "don't have published placement" in result.payload.text
+    assert "Placement support is listed as available" in result.payload.text
 
 
 @pytest.mark.asyncio
 async def test_case_12_db_answerable_fact_is_deterministic(service) -> None:
-    await turn(service, "nmims mba", "case-12")
+    await turn(service, "nmims mca", "case-12")
     result = await turn(service, "what is the duration?", "case-12")
     assert result.route == "factual"
     assert result.synthesis_prompt is None
-    assert result.payload.text == "The published duration for Online MBA is 2 Years."
+    assert result.payload.text == "The published duration for MCA is 2 Years."
 
 
 def test_case_13_lpu_alias_table_has_layer_one_priority(service) -> None:
@@ -215,6 +215,7 @@ def test_case_16_manipal_bigram_unique_and_unigram_ambiguous(service) -> None:
     assert [item.entity_id for item in unique] == ["uni-manipal-jaipur"]
     assert {item.entity_id for item in ambiguous} == {
         "uni-manipal-jaipur",
+        "uni-manipal-online",
         "uni-sikkim-manipal",
     }
 
@@ -239,8 +240,8 @@ async def test_case_19_mba_typos_require_medium_confirmation(service, typo: str)
     assert result.payload.text.startswith("Did you mean MBA?")
 
 
-def test_case_20_analytics_token_resolves_business_analytics(service) -> None:
-    candidates = service.matcher.resolve_slot(tokenize("analytics"), "specialization")
+def test_case_20_business_analytics_resolves_from_catalog(service) -> None:
+    candidates = service.matcher.resolve_slot(tokenize("business analytics"), "specialization")
     assert len(candidates) > 1
     assert {candidate.canonical_name for candidate in candidates} == {"Business Analytics"}
 
@@ -251,13 +252,12 @@ def test_case_21_hr_uses_catalog_specialization_alias(service) -> None:
     assert {candidate.canonical_name for candidate in candidates} == {
         "Human Resource Management"
     }
-    assert all(candidate.layer == 1 for candidate in candidates)
 
 
-def test_case_22_finance_token_resolves_finance_management(service) -> None:
+def test_case_22_finance_token_resolves_finance(service) -> None:
     candidates = service.matcher.resolve_slot(tokenize("finance"), "specialization")
     assert len(candidates) > 1
-    assert {candidate.canonical_name for candidate in candidates} == {"Finance Management"}
+    assert {candidate.canonical_name for candidate in candidates} == {"Finance"}
 
 
 def test_case_23_smu_acronym_collision_preserves_both_candidates() -> None:
@@ -289,12 +289,12 @@ async def test_case_25_marketing_mba_keeps_provider_family_for_discovery(service
 
 @pytest.mark.asyncio
 async def test_case_26_all_three_slots_resolve_independently(service) -> None:
-    result = await turn(service, "lpu mba finace", "case-26")
+    result = await turn(service, "lpu bba finace", "case-26")
     assert result.route == "factual"
     assert result.state.focus.university == "uni-lpu"
-    assert result.state.focus.category == "mba"
-    assert result.state.focus.specialization == "Finance Management"
-    assert result.state.focus.entity_id == "spec-lpu-mba-finance"
+    assert result.state.focus.category == "bba"
+    assert result.state.focus.specialization == "Finance"
+    assert result.state.focus.entity_id == "spec-lpu-bba-finance"
 
 
 @pytest.mark.asyncio

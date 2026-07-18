@@ -138,7 +138,7 @@
     cta_apply: "lead",
     cta_callback: "lead",
   });
-  const PROGRAM_OPTIONS = ["Online MBA", "Online MCA", "Online Executive MBA", "Online MSc"];
+  const PROGRAM_OPTIONS = ["MBA", "MCA", "BBA", "BCA"];
 
   function storedSessionId() {
     try {
@@ -789,10 +789,13 @@
     card.appendChild(header);
 
     const programsCount = publishedCount(component, "program_count", "num_programs", "programs");
+    const rating = component.average_rating
+      ? `★ ${component.average_rating}${component.review_count ? ` (${component.review_count})` : ""}`
+      : "";
     const pills = cardPills([
       compactFee(component.starting_fee || findFact(component, ["starting fee", "fee"]), "From "),
       programsCount || programsCount === 0 ? `${programsCount} Programs` : "",
-      component.learning_mode || component.mode || findFact(component, ["learning mode", "mode"]),
+      rating || component.learning_mode || component.mode || findFact(component, ["learning mode", "mode"]),
     ]);
     if (pills.childElementCount) card.appendChild(pills);
     card.appendChild(cardActions(component, "View details"));
@@ -833,7 +836,10 @@
     const ugc = component.ugc_status || findFact(component, ["ugc", "approval"]);
     const naacRaw = component.naac_grade || findFact(component, ["naac"]);
     const naac = naacRaw && !String(naacRaw).toLowerCase().includes("naac") ? `NAAC ${naacRaw}` : naacRaw;
-    const trust = trustRow([ugc, naac]);
+    const rating = component.average_rating
+      ? `★ ${component.average_rating}${component.review_count ? ` (${component.review_count})` : ""}`
+      : "";
+    const trust = trustRow([ugc, naac, rating]);
     if (trust) {
       trust.classList.add("db-widget__card-trust");
       title.appendChild(trust);
@@ -864,6 +870,7 @@
 
   const COMPARISON_ORDER = [
     "fees", "fee", "duration", "mode", "naac grade", "naac", "ugc status", "ugc",
+    "nirf rank", "placement support", "industry projects", "average rating",
     "specializations", "emi", "eligibility",
   ];
 
@@ -1406,6 +1413,15 @@
     );
     hero.append(total, semester);
     card.appendChild(hero);
+    const feeMetadata = data.fee_metadata && typeof data.fee_metadata === "object"
+      ? data.fee_metadata
+      : null;
+    if (feeMetadata) {
+      const metadata = [feeMetadata.currency, feeMetadata.fee_type, feeMetadata.billing_cycle]
+        .filter(Boolean)
+        .join(" · ");
+      if (metadata) card.appendChild(element("div", "db-widget__fees-metadata", metadata));
+    }
 
     const plans = Array.isArray(data.plans) ? data.plans.filter(Boolean) : [];
     if (plans.length) {
@@ -1572,7 +1588,12 @@
         const text = typeof testimonial === "object" ? testimonial.text || testimonial.description : testimonial;
         quote.appendChild(element("p", "db-widget__quote-text", publishedValue(text)));
         if (testimonial && typeof testimonial === "object") {
-          const attribution = [testimonial.reviewer_name, testimonial.reviewer_label].filter(Boolean).join(" · ");
+          const attribution = [
+            testimonial.reviewer_name,
+            testimonial.rating ? `${testimonial.rating}/5` : "",
+            testimonial.theme,
+            testimonial.reviewer_label,
+          ].filter(Boolean).join(" · ");
           if (attribution) quote.appendChild(element("footer", "db-widget__quote-name", attribution));
         }
         quotes.appendChild(quote);
@@ -2698,12 +2719,25 @@
 
   function inferProgramFromPage() {
     if (state.pageContext && state.pageContext.program) return state.pageContext.program;
-    const source = `${pageEntitySlug} ${document.title}`.toLowerCase();
-    const options = [
-      ["executive", "Online Executive MBA"], ["mba", "Online MBA"], ["mca", "Online MCA"], ["msc", "Online MSc"],
-    ];
-    const match = options.find(([needle]) => source.includes(needle));
-    return match ? match[1] : "";
+    if (state.pageContext && state.pageContext.course) return state.pageContext.course;
+    if (state.pageContext && state.pageContext.context && state.pageContext.context.course) {
+      return state.pageContext.context.course;
+    }
+    const source = `${pageEntitySlug} ${document.title}`.toLowerCase().replace(/[^a-z0-9]+/g, " ");
+    return PROGRAM_OPTIONS.find((program) => source.includes(program.toLowerCase())) || "";
+  }
+
+  async function finderProgramOptions() {
+    try {
+      const data = await loadCatalog("program");
+      const options = (data.options || [])
+        .map((item) => item.name)
+        .filter(Boolean)
+        .slice(0, 8);
+      return options.length ? options : PROGRAM_OPTIONS;
+    } catch (_error) {
+      return PROGRAM_OPTIONS;
+    }
   }
 
   async function finderAreaOptions() {
@@ -2719,7 +2753,7 @@
 
   function finderSteps() {
     return [
-      { key: "program", question: "Which program?", options: [...PROGRAM_OPTIONS, "Not sure"] },
+      { key: "program", question: "Which program?", options: [...state.finder.programOptions, "Not sure"] },
       { key: "area", question: "Which area?", options: state.finder.areaOptions.length ? [...state.finder.areaOptions, "Show all", "Not sure"] : ["Show all", "Not sure"] },
       { key: "approval", question: "Approval priority?", options: ["UGC-DEB only", "NAAC A+", "No preference"] },
       { key: "budget", question: "Your budget?", options: ["Under ₹1L", "₹1–2L", "₹2–3L", "₹3L+", "No preference"] },
@@ -2736,14 +2770,16 @@
       step: prefilled ? 1 : 0,
       answers: prefilled ? { program: prefilled } : {},
       prefilled: Boolean(prefilled),
+      programOptions: PROGRAM_OPTIONS,
       areaOptions: [],
     };
     state.finderView = createMessage("bot", "");
     renderFinderStep();
-    finderAreaOptions().then(({ featured }) => {
+    Promise.all([finderProgramOptions(), finderAreaOptions()]).then(([programs, { featured }]) => {
       if (!state.finder) return;
+      state.finder.programOptions = programs;
       state.finder.areaOptions = featured;
-      if (state.finder.step === 1) renderFinderStep();
+      if (state.finder.step <= 1) renderFinderStep();
     });
   }
 

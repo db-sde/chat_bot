@@ -235,7 +235,7 @@ async def test_known_entity_control_sequence_never_calls_gemini() -> None:
     service, metrics = await make_service(llm)
     try:
         results = [
-            await turn(service, "Tell me about NMIMS MBA", "known-control"),
+            await turn(service, "Tell me about NMIMS MCA", "known-control"),
             await turn(service, "What is the fee?", "known-control"),
             await turn(service, "Compare LPU and NMIMS", "known-control"),
             await turn(service, "Tell me about Jain MBA Finance", "known-control"),
@@ -249,8 +249,8 @@ async def test_known_entity_control_sequence_never_calls_gemini() -> None:
         "comparison",
         "fallback",
     ]
-    assert "INR 2,16,000" in results[1].payload.text
-    assert "Jain University does not currently offer Finance Management" in results[3].payload.text
+    assert "INR 158,000" in results[1].payload.text
+    assert "Jain Online does not currently offer Finance" in results[3].payload.text
     assert llm.intent_calls == []
     snapshot = metrics.snapshot()
     assert snapshot["total_messages"] == 4
@@ -335,7 +335,7 @@ async def test_open_human_help_reaches_callback_through_gemini(message: str) -> 
         (
             "Show MBA specializations",
             "list_specializations",
-            ("Business Analytics", "Finance Management", "Marketing"),
+            ("Digital Marketing", "Operations Management", "Retail Management"),
         ),
         (
             "Which universities offer Marketing specialization?",
@@ -344,14 +344,14 @@ async def test_open_human_help_reaches_callback_through_gemini(message: str) -> 
                 "Marketing Programs",
                 "Marketing is offered by",
                 "Published Universities",
-                "Jain University",
-                "NMIMS",
+                "Manipal University",
+                "IGNOU",
             ),
         ),
         (
             "Universities with Finance specialization",
             "list_providers",
-            ("Finance Management", "published universit"),
+            ("Finance", "published universit"),
         ),
     ],
 )

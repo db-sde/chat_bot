@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,7 +15,7 @@ class PublisherModel(BaseModel):
 
 class UniversityMeta(PublisherModel):
     document_title: str | None = None
-    page_type: Literal["university"]
+    page_type: Literal["university"] = "university"
     generated_by: str | None = None
 
 
@@ -25,6 +25,8 @@ class Fact(PublisherModel):
 
 
 class Accreditation(PublisherModel):
+    type: str | None = None
+    value: str | bool | int | float | None = None
     body_name: str | None = None
     body_descriptor: str | None = None
     body_detail: str | None = None
@@ -44,9 +46,12 @@ class FacultyMember(PublisherModel):
 
 
 class Review(PublisherModel):
+    review_id: str | None = None
     review_text: str | None = None
     reviewer_name: str | None = None
     reviewer_label: str | None = None
+    rating: float | None = None
+    theme: str | None = None
 
 
 class FAQ(PublisherModel):
@@ -55,7 +60,7 @@ class FAQ(PublisherModel):
 
 
 class University(PublisherModel):
-    meta: UniversityMeta = Field(alias="_meta")
+    meta: UniversityMeta = Field(default_factory=UniversityMeta, alias="_meta")
     id: str | None = None
     slug: str | None = None
     aliases: list[str] | None = None
@@ -63,12 +68,26 @@ class University(PublisherModel):
     university_name: str | None = None
     university_full_name: str | None = None
     hero_description: str | None = None
-    established_year: str | None = None
+    established_year: str | int | None = None
     naac_grade: str | None = None
-    ugc_approved: str | None = None
+    ugc_approved: str | bool | None = None
     mode_of_learning: str | None = None
     starting_fee: str | None = None
+    starting_fee_numeric: int | float | None = None
     num_programs: str | None = None
+    program_ids: list[str] | None = None
+    average_rating: float | None = None
+    review_count: int | None = None
+    discovery_tags: list[str] | None = None
+    lead_tags: list[str] | None = None
+    search_keywords: list[str] | None = None
+    normalized_search_keywords: list[str] | None = None
+    edge_case_notes: list[str] | None = Field(default=None, alias="_edge_case_notes")
+    comparison_attributes: dict[str, Any] | None = None
+    placement_support: bool | None = None
+    industry_projects: bool | None = None
+    nirf_rank: int | None = None
+    fee_metadata: dict[str, Any] | None = None
 
     about_heading: str | None = None
     why_choose_heading: str | None = None
@@ -106,4 +125,3 @@ class University(PublisherModel):
 
 UniversityModel = University
 UniversityEntity = University
-

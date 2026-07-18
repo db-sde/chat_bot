@@ -108,19 +108,22 @@ def test_bundled_university_card_uses_real_fields_and_progressive_details(
     entity = catalog.get_entity("uni-lpu")
     assert entity is not None
 
-    card = build_university_card(entity)
+    card = build_university_card(entity, catalog)
 
     assert card.id == entity.id
     assert card.slug == entity.slug
     assert card.name == entity.university_full_name
     assert card.summary == entity.hero_description
-    assert card.established_year == entity.established_year
+    assert card.established_year == str(entity.established_year)
     assert card.starting_fee == entity.starting_fee
     assert card.learning_mode == entity.mode_of_learning
     assert card.naac_grade == entity.naac_grade
     assert card.ugc_status == entity.ugc_approved
-    assert card.programs == [row.program_name for row in entity.programs_table]
-    assert card.program_count == len(entity.programs_table)
+    expected_programs = [
+        catalog.get_entity(program_id).program_name for program_id in entity.program_ids
+    ]
+    assert card.programs == expected_programs
+    assert card.program_count == len(entity.program_ids)
     assert card.logo_url is None
     assert card.details_url is None
     assert card.details is not None
@@ -128,15 +131,16 @@ def test_bundled_university_card_uses_real_fields_and_progressive_details(
     assert [faq.model_dump() for faq in card.details.faqs] == [
         faq.model_dump() for faq in entity.faqs
     ]
-    assert card.details.reviews == []
+    assert len(card.details.reviews) == entity.review_count
+    assert card.details.average_rating == entity.average_rating
     assert card.details.admission_steps is None
 
 
 def test_bundled_course_and_specialization_cards_inherit_only_catalog_relationships(
     catalog: CatalogStore,
 ) -> None:
-    course = catalog.get_entity("course-lpu-mba")
-    specialization = catalog.get_entity("spec-lpu-mba-finance")
+    course = catalog.get_entity("course-lpu-mca")
+    specialization = catalog.get_entity("spec-lpu-mca-cloud-computing")
     assert course is not None and specialization is not None
 
     course_card = build_program_card(course, catalog)
@@ -152,12 +156,12 @@ def test_bundled_course_and_specialization_cards_inherit_only_catalog_relationsh
     assert course_card.naac_grade == course.naac_grade
     assert course_card.ugc_status == course.ugc_status
     assert course_card.emi == course.emi_amount
-    assert course_card.career_outcome is None
-    assert course_card.average_salary is None
+    assert course_card.career_outcome == course.career_outcomes[0]
+    assert course_card.average_salary == course.job_profiles[0].avg_salary
     assert course_card.details is not None
     assert course_card.details.description == course.hero_description
-    assert course_card.details.reviews == []
-    assert course_card.details.admission_steps is None
+    assert len(course_card.details.reviews) == course.review_count
+    assert course_card.details.admission_steps is not None
 
     profile = specialization.job_profiles[0]
     assert specialization_card.kind == "specialization"
@@ -175,7 +179,7 @@ def test_bundled_course_and_specialization_cards_inherit_only_catalog_relationsh
     assert specialization_card.ugc_status == course.ugc_status
     assert specialization_card.emi == course.emi_amount
     assert specialization_card.details is not None
-    assert specialization_card.details.description is None
+    assert specialization_card.details.description == specialization.hero_description
     assert specialization_card.details.reviews == []
     assert specialization_card.details.faqs == []
     assert specialization_card.details.admission_steps is None
@@ -185,7 +189,7 @@ def test_comparison_rows_have_fixed_order_and_verdict_uses_only_published_fee(
     catalog: CatalogStore,
 ) -> None:
     card = build_comparison_card(
-        ["course-lpu-mba", "course-nmims-mba"],
+        ["course-lpu-mca", "course-nmims-mca"],
         catalog,
     )
 
@@ -205,10 +209,10 @@ def test_comparison_rows_have_fixed_order_and_verdict_uses_only_published_fee(
         expected_rows,
     ]
     assert card.items[0].facts[0].value == catalog.get_entity(
-        "course-lpu-mba"
+        "course-lpu-mca"
     ).total_fee
     assert card.items[1].facts[0].value == catalog.get_entity(
-        "course-nmims-mba"
+        "course-nmims-mca"
     ).total_fee
     assert card.verdict is not None
     assert "Lovely Professional University" in card.verdict
@@ -222,7 +226,7 @@ def test_comparison_rows_have_fixed_order_and_verdict_uses_only_published_fee(
 @pytest.mark.parametrize(
     ("message", "route", "excluded_label"),
     [
-        ("What is the NMIMS MBA fee?", "factual", "Show fees & EMI"),
+        ("What is the NMIMS MCA fee?", "factual", "Show fees & EMI"),
         ("Compare LPU and NMIMS", "comparison", "Compare my options"),
     ],
 )
@@ -232,7 +236,7 @@ def test_quick_actions_are_exactly_three_compact_and_do_not_repeat_answered_topi
     route: str,
     excluded_label: str,
 ) -> None:
-    entity = catalog.get_entity("course-nmims-mba")
+    entity = catalog.get_entity("course-nmims-mca")
     assert entity is not None
 
     actions = quick_actions_for_response(entity=entity, message=message, route=route)
@@ -265,19 +269,19 @@ def test_overview_followup_can_send_a_verbatim_catalog_faq_with_a_compact_label(
     assert actions[-1].label == "Talk to a counsellor"
 
 
-def test_context_projects_the_real_online_mba_label(catalog: CatalogStore) -> None:
+def test_context_projects_the_real_mca_label(catalog: CatalogStore) -> None:
     state = ConversationState(
         session_id="designer-context",
-        focus=Focus(entity_id="course-nmims-mba", category="mba"),
+        focus=Focus(entity_id="course-nmims-mca", category="mca"),
     )
 
     context = context_from_state(state, catalog)
 
-    assert context.university == "NMIMS"
-    assert context.course == "Online MBA"
+    assert context.university == "NMIMS Global Access"
+    assert context.course == "MCA"
     assert context.specialization is None
-    assert context.entity_id == "course-nmims-mba"
-    assert context.label == "NMIMS · Online MBA"
+    assert context.entity_id == "course-nmims-mca"
+    assert context.label == "NMIMS Global Access · MCA"
 
 
 def test_catalog_options_dedupe_without_inventing_popularity(
@@ -350,7 +354,7 @@ def test_finder_returns_priced_cheapest_middle_and_premium_mba_options(
     matching = [
         entity
         for entity in catalog.list_entities("course")
-        if normalize_category(entity.category or entity.program_name) == "mba"
+        if str(entity.program_name or "").casefold() == "mba"
     ]
     priced = sorted(
         (entity for entity in matching if parse_money(entity_fee(entity)) is not None),
@@ -382,25 +386,25 @@ def test_finder_applies_approval_and_budget_without_relaxing_filters(
 ) -> None:
     results, matched_count = finder_results(
         catalog,
-        program="mba",
+        program="bba",
         approval="UGC-DEB",
-        budget="Under 1L",
+        budget="1-2L",
     )
     matching = [
         entity
         for entity in catalog.list_entities("course")
-        if normalize_category(entity.category or entity.program_name) == "mba"
-        and "deb" in _published_status(entity, catalog).casefold()
+        if normalize_category(entity.program_name or entity.category) == "bba"
+        and "ugc" in _published_status(entity, catalog).casefold()
         and (fee := parse_money(entity_fee(entity))) is not None
-        and fee <= 100_000
+        and 100_000 <= fee <= 200_000
     ]
 
     assert matched_count == len(matching)
     assert matched_count >= 3
     assert len(results) == 3
-    assert all(parse_money(result.fee) <= 100_000 for result in results)
+    assert all(100_000 <= parse_money(result.fee) <= 200_000 for result in results)
     assert all(
-        "deb" in _published_status(catalog.get_entity(result.id), catalog).casefold()
+        "ugc" in _published_status(catalog.get_entity(result.id), catalog).casefold()
         for result in results
     )
 
@@ -410,13 +414,13 @@ def test_widget_page_context_and_catalog_endpoints_expose_deduplicated_real_data
 ) -> None:
     page = experience_client.get(
         "/api/widget/page-context",
-        params={"page_type": "course", "page_entity_slug": "nmims-online-mba"},
+        params={"page_type": "course", "page_entity_slug": "nmims-mca"},
     )
     specialization_page = experience_client.get(
         "/api/widget/page-context",
         params={
             "page_type": "specialization",
-            "page_entity_slug": "nmims-mba-analytics",
+            "page_entity_slug": "nmims-mca-cloud-computing",
         },
     )
     universities = experience_client.get("/api/widget/catalog/university")
@@ -426,14 +430,14 @@ def test_widget_page_context_and_catalog_endpoints_expose_deduplicated_real_data
     assert page.status_code == 200
     assert page.json() == {
         "page_type": "course",
-        "entity_id": "course-nmims-mba",
-        "slug": "nmims-online-mba",
+        "entity_id": "course-nmims-mca",
+        "slug": "nmims-mca",
         "context": {
-            "university": "NMIMS",
-            "course": "Online MBA",
+            "university": "NMIMS Global Access",
+            "course": "MCA",
             "specialization": None,
-            "entity_id": "course-nmims-mba",
-            "label": "NMIMS · Online MBA",
+            "entity_id": "course-nmims-mca",
+            "label": "NMIMS Global Access · MCA",
         },
     }
     assert universities.status_code == 200
@@ -441,11 +445,11 @@ def test_widget_page_context_and_catalog_endpoints_expose_deduplicated_real_data
     assert specializations.status_code == 200
     assert specialization_page.status_code == 200
     assert specialization_page.json()["context"] == {
-        "university": "NMIMS",
-        "course": "Online MBA",
-        "specialization": "Business Analytics",
-        "entity_id": "spec-nmims-mba-analytics",
-        "label": "NMIMS · Online MBA · Business Analytics",
+        "university": "NMIMS Global Access",
+        "course": "MCA",
+        "specialization": "Cloud Computing",
+        "entity_id": "spec-nmims-mca-cloud-computing",
+        "label": "NMIMS Global Access · MCA · Cloud Computing",
     }
 
     university_payload = universities.json()
@@ -466,20 +470,20 @@ def test_widget_finder_endpoint_returns_three_honestly_filtered_cards(
 ) -> None:
     response = experience_client.post(
         "/api/widget/finder",
-        json={"program": "mba", "approval": "UGC-DEB", "budget": "Under 1L"},
+        json={"program": "bba", "approval": "UGC-DEB", "budget": "1-2L"},
     )
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["matched_count"] >= 3
     assert payload["filters"] == {
-        "program": "mba",
+        "program": "bba",
         "approval": "UGC-DEB",
-        "budget": "Under 1L",
+        "budget": "1-2L",
     }
     assert len(payload["results"]) == 3
-    assert all(parse_money(result["fee"]) <= 100_000 for result in payload["results"])
-    assert all("deb" in result["ugc_status"].casefold() for result in payload["results"])
+    assert all(100_000 <= parse_money(result["fee"]) <= 200_000 for result in payload["results"])
+    assert all("ugc" in result["ugc_status"].casefold() for result in payload["results"])
 
 
 def test_widget_finder_endpoint_returns_honest_empty_for_unsupported_program(
@@ -505,13 +509,13 @@ def test_widget_context_clear_is_persisted_for_the_next_turn(
     focused = experience_client.post(
         "/chat",
         json={
-            "message": "Tell me about NMIMS MBA",
+            "message": "Tell me about NMIMS MCA",
             "session_id": session_id,
             "site_key": "degreebaba",
         },
     )
     assert focused.status_code == 200
-    assert _final_sse_payload(focused.text)["context"]["label"] == "NMIMS · Online MBA"
+    assert _final_sse_payload(focused.text)["context"]["label"] == "NMIMS Global Access · MCA"
 
     cleared = experience_client.post(
         "/api/widget/context/clear",

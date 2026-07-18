@@ -57,16 +57,23 @@ def clean_text(value: Any, *, max_chars: int | None = None) -> str:
 def entity_label(entity: Any, default: str = "this program") -> str:
     """Get the most specific human-readable name for an entity."""
 
-    value = first_value(
-        entity,
-        "program_name",
-        "spec_name",
-        "university_full_name",
-        "university_name",
-        "specialization_name",
-        "name",
-        default=default,
+    page_type = entity_page_type(entity)
+    paths = {
+        "university": ("university_full_name", "university_name", "name"),
+        "course": ("program_name", "name"),
+        "specialization": ("specialization_name", "spec_name", "name"),
+    }.get(
+        page_type,
+        (
+            "specialization_name",
+            "spec_name",
+            "program_name",
+            "university_name",
+            "university_full_name",
+            "name",
+        ),
     )
+    value = first_value(entity, *paths, default=default)
     return clean_text(value) or default
 
 
@@ -76,7 +83,19 @@ def entity_university(entity: Any) -> str:
 
 def entity_page_type(entity: Any) -> str:
     value = first_value(entity, "_meta.page_type", "page_type", default="")
-    return str(value).strip().lower()
+    rendered = str(value).strip().lower()
+    if rendered:
+        return rendered
+    category = clean_text(safe_get(entity, "category", None)).casefold()
+    if category == "university" or has_value(safe_get(entity, "university_full_name", None)):
+        return "university"
+    if category == "specialization" or has_value(
+        safe_get(entity, "specialization_name", None)
+    ):
+        return "specialization"
+    if has_value(safe_get(entity, "program_name", None)):
+        return "course"
+    return ""
 
 
 def entity_heading(entity: Any) -> str:
@@ -88,16 +107,12 @@ def entity_heading(entity: Any) -> str:
         return label
 
     provider = entity_university(entity)
-    category = clean_text(safe_get(entity, "category", None))
-    if category and len(category) <= 6 and category.replace("-", "").isalnum():
-        category = category.upper()
-    elif category:
-        category = category.replace("-", " ").title()
+    program = clean_text(first_value(entity, "program_name", "parent_course", default=None))
 
     parts: list[str] = []
     for value in (
         provider,
-        category if page_type == "specialization" else "",
+        program if page_type == "specialization" else "",
         label,
     ):
         if not value:
@@ -105,8 +120,12 @@ def entity_heading(entity: Any) -> str:
         normalized = value.casefold()
         if any(normalized == part.casefold() for part in parts):
             continue
-        # Course labels commonly already include their category ("Online MBA").
-        if category and value == category and category.casefold() in label.casefold():
+        if (
+            page_type == "specialization"
+            and program
+            and value == program
+            and program.casefold() in label.casefold()
+        ):
             continue
         parts.append(value)
     return " ".join(parts) or label
@@ -145,6 +164,16 @@ def entity_fee(entity: Any) -> str:
     if has_value(value):
         return clean_text(value)
 
+    numeric = first_value(
+        entity,
+        "total_fee_numeric",
+        "starting_fee_numeric",
+        "fee_numeric",
+        default=None,
+    )
+    if isinstance(numeric, (int, float)) and not isinstance(numeric, bool):
+        return format_inr(float(numeric))
+
     plans = safe_get(entity, "fee_plans", []) or []
     if isinstance(plans, Iterable) and not isinstance(plans, (str, bytes, Mapping)):
         for plan in plans:
@@ -166,6 +195,8 @@ def parse_money(value: Any) -> float | None:
 
     if not has_value(value):
         return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
     match = _NUMBER_RE.search(str(value))
     if not match:
         return None
@@ -327,7 +358,9 @@ def related_specialization_names(
         current_course = first_value(current_course, "id", "entity_id", "slug", default=None)
     current_course = clean_text(current_course)
     provider = entity_university(entity).casefold()
-    category = clean_text(safe_get(entity, "category", None)).casefold()
+    category = clean_text(
+        first_value(entity, "program_name", "parent_course", "category", default=None)
+    ).casefold()
     page_type = entity_page_type(entity)
 
     other_specs = safe_get(entity, "other_specs", []) or []
@@ -344,7 +377,9 @@ def related_specialization_names(
         if not candidate_label or candidate_label.casefold() == current_label.casefold():
             continue
         candidate_provider = entity_university(candidate).casefold()
-        candidate_category = clean_text(safe_get(candidate, "category", None)).casefold()
+        candidate_category = clean_text(
+            first_value(candidate, "program_name", "parent_course", "category", default=None)
+        ).casefold()
         linked_course = first_value(candidate, "linked_course.id", "linked_course", default=None)
         if isinstance(linked_course, Mapping):
             linked_course = first_value(linked_course, "id", "entity_id", "slug", default=None)
@@ -360,7 +395,10 @@ def related_specialization_names(
         if page_type == "university":
             related = same_provider
         elif page_type in {"course", "specialization"}:
-            related = linked or (same_provider and (not category or same_category))
+            has_link = bool(linked_course)
+            related = linked or (
+                not has_link and same_provider and (not category or same_category)
+            )
         if related:
             add(candidate_label)
         if len(result) >= limit:

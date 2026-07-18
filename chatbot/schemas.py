@@ -64,6 +64,8 @@ class CardReview(TransportModel):
     text: str = Field(min_length=1)
     reviewer_name: str | None = None
     reviewer_label: str | None = None
+    rating: float | None = None
+    theme: str | None = None
 
 
 class CardFAQ(TransportModel):
@@ -79,6 +81,8 @@ class CardDetails(TransportModel):
     admission_steps: str | None = None
     reviews: list[CardReview] = Field(default_factory=list)
     faqs: list[CardFAQ] = Field(default_factory=list)
+    average_rating: float | None = None
+    review_count: int | None = Field(default=None, ge=0)
 
 
 class UniversityCard(TransportModel):
@@ -95,6 +99,8 @@ class UniversityCard(TransportModel):
     learning_mode: str | None = None
     naac_grade: str | None = None
     ugc_status: str | None = None
+    average_rating: float | None = None
+    review_count: int | None = Field(default=None, ge=0)
     highlights: list[CardFact] = Field(default_factory=list)
     programs: list[str] = Field(default_factory=list)
     details: CardDetails | None = None
@@ -108,6 +114,7 @@ class ProgramCard(TransportModel):
     name: str = Field(min_length=1)
     university_name: str | None = None
     category: str | None = None
+    discipline: str | None = None
     summary: str | None = None
     duration: str | None = None
     fee: str | None = None
@@ -115,6 +122,8 @@ class ProgramCard(TransportModel):
     mode: str | None = None
     naac_grade: str | None = None
     ugc_status: str | None = None
+    average_rating: float | None = None
+    review_count: int | None = Field(default=None, ge=0)
     specialization_count: int | None = Field(default=None, ge=0)
     emi: str | None = None
     career_outcome: str | None = None

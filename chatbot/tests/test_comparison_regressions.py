@@ -67,31 +67,35 @@ def test_catalog_unique_smu_and_lpu_are_separate_operands(comparison_catalog) ->
 
 
 @pytest.mark.parametrize(
-    ("message", "expected_ids"),
+    ("message", "expected_category", "expected_ids"),
     [
         (
-            "Compare MBA fees of LPU and NMIMS",
-            ("course-lpu-mba", "course-nmims-mba"),
+            "Compare MCA fees of LPU and NMIMS",
+            "mca",
+            ("course-lpu-mca", "course-nmims-mca"),
         ),
         (
-            "Compare LPU MBA and NMIMS MBA",
-            ("course-lpu-mba", "course-nmims-mba"),
+            "Compare LPU MCA and NMIMS MCA",
+            "mca",
+            ("course-lpu-mca", "course-nmims-mca"),
         ),
         (
-            "Compare arkajain MBA and Jain MBA",
-            ("course-arkajain-mba", "course-jain-mba"),
+            "Compare DY Patil MBA and IGNOU MBA",
+            "mba",
+            ("course-dypatil-mba", "course-ignou-mba"),
         ),
     ],
 )
 def test_common_category_resolves_one_course_per_university(
     comparison_catalog,
     message: str,
+    expected_category: str,
     expected_ids: tuple[str, str],
 ) -> None:
     update = comparison_update(message, comparison_catalog)
 
     assert update.ambiguous == {}
-    assert update.comparison_common_category == "mba"
+    assert update.comparison_common_category == expected_category
     assert update.comparison_entity_ids == expected_ids
 
 
@@ -111,9 +115,7 @@ def test_specialization_provider_records_form_named_family_operands(
     assert update.ambiguous == {}
     assert len(update.comparison_specializations) == 2
     assert {item.canonical_name for item in update.comparison_specializations[0]} == {"Marketing"}
-    assert {item.canonical_name for item in update.comparison_specializations[1]} == {
-        "Finance Management"
-    }
+    assert {item.canonical_name for item in update.comparison_specializations[1]} == {"Finance"}
 
 
 @pytest.mark.asyncio
@@ -128,14 +130,14 @@ async def test_handler_renders_university_operands(comparison_catalog) -> None:
     )
 
     assert "Lovely Professional University Online" in payload.text
-    assert "NMIMS Online" in payload.text
+    assert "NMIMS Global Access" in payload.text
     assert "NAAC A++" in payload.text
 
 
 @pytest.mark.asyncio
-async def test_handler_renders_concrete_mba_fee_comparison(comparison_catalog) -> None:
+async def test_handler_renders_concrete_mca_fee_comparison(comparison_catalog) -> None:
     catalog, indexes, _ = comparison_catalog
-    update = comparison_update("Compare MBA fees of LPU and NMIMS", comparison_catalog)
+    update = comparison_update("Compare MCA fees of LPU and NMIMS", comparison_catalog)
 
     payload = await handle_comparison(
         catalog=catalog,
@@ -146,9 +148,9 @@ async def test_handler_renders_concrete_mba_fee_comparison(comparison_catalog) -
     )
 
     assert "Lovely Professional University Online" in payload.text
-    assert "NMIMS Online" in payload.text
-    assert catalog.get_entity("course-lpu-mba").total_fee in payload.text
-    assert catalog.get_entity("course-nmims-mba").total_fee in payload.text
+    assert "NMIMS Global Access" in payload.text
+    assert catalog.get_entity("course-lpu-mca").total_fee in payload.text
+    assert catalog.get_entity("course-nmims-mca").total_fee in payload.text
 
 
 @pytest.mark.asyncio
@@ -175,7 +177,7 @@ async def test_handler_renders_specialization_family_aggregate(comparison_catalo
         }
     )
     assert f"Marketing: {marketing_count} provider options" in payload.text
-    assert f"Finance Management: {finance_count} provider options" in payload.text
+    assert f"Finance: {finance_count} provider options" in payload.text
 
 
 @pytest.mark.asyncio
@@ -204,13 +206,13 @@ async def _service() -> ChatbotService:
 @pytest.mark.parametrize(
     ("message", "first", "second"),
     [
-        ("Compare LPU and NMIMS", "Lovely Professional University Online", "NMIMS Online"),
-        ("Compare MBA fees of LPU and NMIMS", "INR 1,34,000", "INR 2,16,000"),
-        ("Compare LPU MBA and NMIMS MBA", "INR 1,34,000", "INR 2,16,000"),
+        ("Compare LPU and NMIMS", "Lovely Professional University Online", "NMIMS Global Access"),
+        ("Compare MCA fees of LPU and NMIMS", "INR 157,000", "INR 158,000"),
+        ("Compare LPU MCA and NMIMS MCA", "INR 157,000", "INR 158,000"),
         (
-            "Compare arkajain MBA and Jain MBA",
-            "Arka Jain University Online",
-            "Jain University Online",
+            "Compare DY Patil MBA and IGNOU MBA",
+            "DY Patil University Online",
+            "IGNOU",
         ),
     ],
 )
@@ -271,7 +273,7 @@ async def test_catalog_unique_smu_comparison_needs_no_clarification() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("message", ["Compare LPU", "Compare LPU and MBA"])
+@pytest.mark.parametrize("message", ["Compare LPU", "Compare LPU and MCA"])
 async def test_incomplete_comparison_asks_for_second_university(message: str) -> None:
     service = await _service()
     try:

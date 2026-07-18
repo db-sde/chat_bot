@@ -156,28 +156,29 @@ invent university facts in the browser. A representative response is:
 ```json
 {
   "session_id": "session-123",
-  "text": "NMIMS Online MBA\n\nOnline MBA is offered by NMIMS. ...",
-  "message": "A 2-year online MBA with practical, industry-aligned learning.\n\nThis is a published Online MBA offering from NMIMS.\n\nWould you like to review the published fees for NMIMS Online MBA?",
+  "text": "NMIMS Global Access MCA\n\nMCA is offered by NMIMS Global Access. ...",
+  "message": "A 2-year distance MCA with practical, industry-aligned learning at NMIMS Global Access. ...",
   "suggested_chips": [
-    "NMIMS Online MBA Fees",
-    "NMIMS Online MBA Eligibility"
+    "NMIMS MCA Fees",
+    "NMIMS MCA Eligibility"
   ],
   "cta": null,
   "components": [
     {
       "type": "program_card",
       "kind": "course",
-      "id": "course-nmims-mba",
-      "name": "Online MBA",
-      "university_name": "NMIMS",
-      "category": "mba",
-      "summary": "A 2 years online mba with practical, industry-aligned learning.",
+      "id": "course-nmims-mca",
+      "name": "MCA",
+      "university_name": "NMIMS Global Access",
+      "category": "MCA",
+      "discipline": "technology",
+      "summary": "A 2 years distance MCA with practical, industry-aligned learning at NMIMS Global Access.",
       "duration": "2 Years",
-      "fee": "INR 2,16,000",
+      "fee": "INR 158,000",
       "eligibility": "Bachelor's degree in any discipline",
-      "mode": "Online",
-      "specializations": ["Marketing", "Business Analytics"],
-      "career_outcomes": [],
+      "mode": "Distance",
+      "specializations": ["Cloud Computing", "AI & Machine Learning", "Cyber Security"],
+      "career_outcomes": ["Cloud Engineer (INR 8.0 LPA)"],
       "highlights": [
         {"label": "Approvals & accreditations", "value": "UGC Entitled"}
       ]
@@ -186,13 +187,13 @@ invent university facts in the browser. A representative response is:
       "type": "quick_actions",
       "actions": [
         {
-          "label": "NMIMS Online MBA Fees",
-          "message": "NMIMS Online MBA Fees",
+          "label": "NMIMS MCA Fees",
+          "message": "NMIMS MCA Fees",
           "action": "send_message"
         },
         {
-          "label": "NMIMS Online MBA Eligibility",
-          "message": "NMIMS Online MBA Eligibility",
+          "label": "NMIMS MCA Eligibility",
+          "message": "NMIMS MCA Eligibility",
           "action": "send_message"
         }
       ]

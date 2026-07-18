@@ -59,17 +59,17 @@ async def test_focus_switches_fully_to_lpu_on_new_university_mention(service) ->
 
 @pytest.mark.asyncio
 async def test_specialization_resets_when_university_and_category_rementioned(service) -> None:
-    """Saying 'NMIMS MBA' after 'NMIMS MBA Analytics' must zoom out."""
+    """Saying 'NMIMS MCA' after a specialization must zoom out."""
 
-    await turn(service, "NMIMS MBA Analytics", "bug-2.2")
-    result = await turn(service, "Tell me about NMIMS MBA", "bug-2.2")
+    await turn(service, "NMIMS MCA Cloud Computing", "bug-2.2")
+    result = await turn(service, "Tell me about NMIMS MCA", "bug-2.2")
     focus = result.state.focus
     # Specialization must be gone — the user zoomed out to the course level.
     assert focus.specialization is None, f"stale spec: {focus.specialization}"
     assert focus.specialization_concept is None
     # The course overview may now list available specializations as follow-up
     # catalog data; it must still render the course itself, not a stale spec page.
-    assert result.payload.text.startswith("NMIMS Online MBA")
+    assert result.payload.text.startswith("NMIMS Global Access MCA")
     assert "Popular Specializations" in result.payload.text
 
 
@@ -160,7 +160,7 @@ async def test_structured_logging_emits_pipeline_stages(service, caplog) -> None
     """A /chat turn must produce log lines for key pipeline stages."""
 
     with caplog.at_level(logging.INFO):
-        await turn(service, "LPU MBA fee", "log-test")
+        await turn(service, "LPU MCA fee", "log-test")
 
     records = caplog.records
     logger_names = {record.name for record in records}

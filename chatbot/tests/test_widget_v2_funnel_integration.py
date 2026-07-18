@@ -156,7 +156,7 @@ def test_guide_context_returns_persisted_session_opening_and_navigation(
             "session_id": session_id,
             "page_type": "course",
             "university": "nmims",
-            "course": "mba",
+            "course": "mca",
         },
     )
 
@@ -171,13 +171,13 @@ def test_guide_context_returns_persisted_session_opening_and_navigation(
         "step": "course_card",
         "page_type": "course",
         "surface": "page:course",
-        "entity_id": "course-nmims-mba",
+        "entity_id": "course-nmims-mca",
         "interaction_count": 0,
     }
 
     persisted = _persisted_state(client, session_id)
     assert persisted.navigation.step is NavigationStep.COURSE_CARD
-    assert persisted.navigation.entity_id == "course-nmims-mba"
+    assert persisted.navigation.entity_id == "course-nmims-mca"
     assert persisted.navigation.config_version == payload["opening"]["config_version"]
 
 
@@ -189,11 +189,11 @@ def test_homepage_hydration_clears_stale_academic_focus(client: TestClient) -> N
             "session_id": session_id,
             "page_type": "course",
             "university": "nmims",
-            "course": "mba",
+            "course": "mca",
         },
     )
     assert course.status_code == 200
-    assert _persisted_state(client, session_id).focus.entity_id == "course-nmims-mba"
+    assert _persisted_state(client, session_id).focus.entity_id == "course-nmims-mca"
 
     homepage = client.get(
         "/api/widget/guide/context",
@@ -254,7 +254,7 @@ def test_no_specialization_answer_returns_to_the_authoritative_course_card(
         params={
             "session_id": session_id,
             "page_type": "course",
-            "university": "nmims",
+            "university": "uni-sikkim-manipal",
             "course": "bba",
         },
     )
@@ -266,7 +266,7 @@ def test_no_specialization_answer_returns_to_the_authoritative_course_card(
             "session_id": session_id,
             "page_type": "course",
             "surface": "page:course",
-            "entity_id": "course-nmims-bba",
+            "entity_id": "course-sikkim-manipal-bba",
             "completed_chip_id": "specializations",
             "config_version": context.json()["opening"]["config_version"],
             "answer_state": "no_specializations",
@@ -277,12 +277,12 @@ def test_no_specialization_answer_returns_to_the_authoritative_course_card(
     payload = response.json()
     action_ids = {action["chip_id"] for action in payload["followup"]["actions"]}
     assert payload["navigation"]["step"] == "course_card"
-    assert payload["navigation"]["entity_id"] == "course-nmims-bba"
+    assert payload["navigation"]["entity_id"] == "course-sikkim-manipal-bba"
     assert not {"browse_programs", "browse_universities"}.intersection(action_ids)
 
     persisted = _persisted_state(client, session_id)
     assert persisted.navigation.step is NavigationStep.COURSE_CARD
-    assert persisted.navigation.entity_id == "course-nmims-bba"
+    assert persisted.navigation.entity_id == "course-sikkim-manipal-bba"
 
 
 def test_chat_routed_chip_persists_completion_without_a_second_request(
@@ -295,7 +295,7 @@ def test_chat_routed_chip_persists_completion_without_a_second_request(
             "session_id": session_id,
             "page_type": "course",
             "university": "nmims",
-            "course": "mba",
+            "course": "mca",
         },
     )
     assert context.status_code == 200
@@ -309,7 +309,7 @@ def test_chat_routed_chip_persists_completion_without_a_second_request(
             "chip_surface": "page:course",
             "chip_config_version": context.json()["opening"]["config_version"],
             "page_type": "course",
-            "page_entity_slug": "course-nmims-mba",
+            "page_entity_slug": "course-nmims-mca",
         },
     )
 
@@ -333,7 +333,7 @@ def test_typed_answer_surface_keeps_navigation_step_in_sync(client: TestClient) 
             "session_id": session_id,
             "page_type": "course",
             "university": "nmims",
-            "course": "mba",
+            "course": "mca",
         },
     )
     assert context.status_code == 200
@@ -344,7 +344,7 @@ def test_typed_answer_surface_keeps_navigation_step_in_sync(client: TestClient) 
             "session_id": session_id,
             "message": "What is the fee?",
             "page_type": "course",
-            "page_entity_slug": "course-nmims-mba",
+            "page_entity_slug": "course-nmims-mca",
         },
     )
 
@@ -364,7 +364,7 @@ async def test_navigation_survives_memory_session_store_serialization() -> None:
     sync_page_navigation(
         state,
         page_type="course",
-        entity_id="course-nmims-mba",
+        entity_id="course-nmims-mca",
         config_version="test-config-v1",
     )
     advance_navigation(state, chip_id="fees_emi", surface="card:course")
@@ -398,7 +398,7 @@ def test_guide_chip_rejects_stale_page_context(client: TestClient) -> None:
         params={
             "session_id": session_id,
             "page_type": "specialization",
-            "entity_id": "spec-nmims-mba-analytics",
+            "entity_id": "spec-nmims-mca-cloud-computing",
         },
     )
     assert context.status_code == 200
@@ -445,7 +445,7 @@ def test_roi_program_step_reuses_catalog_matcher_for_university_course_phrase(
 ) -> None:
     service = client.app.state.service
 
-    assert service._resolve_tool_entity("NMIMS MBA") == "course-nmims-mba"
+    assert service._resolve_tool_entity("NMIMS MCA") == "course-nmims-mca"
     assert service._resolve_tool_entity("a course that is not in the catalog") is None
 
 

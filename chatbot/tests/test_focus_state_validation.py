@@ -46,7 +46,7 @@ def test_hydrate_focus_concepts_migrates_legacy_ids_once(
 ) -> None:
     focus = Focus(
         university="uni-nmims",
-        entity_id="course-nmims-mba",
+        entity_id="course-nmims-mca",
     )
 
     hydrated = hydrate_focus_concepts(focus, indexes)
@@ -54,8 +54,8 @@ def test_hydrate_focus_concepts_migrates_legacy_ids_once(
     hydrate_focus_concepts(focus, indexes)
 
     assert hydrated is focus
-    assert focus.university_concept == "NMIMS"
-    assert focus.course_concept == "mba"
+    assert focus.university_concept == "NMIMS Global Access"
+    assert focus.course_concept == "mca"
     assert focus.specialization_concept is None
     assert focus.source == "context"
     assert focus.sources == {"university": "context", "course": "context"}
@@ -65,21 +65,21 @@ def test_hydrate_focus_concepts_migrates_legacy_ids_once(
 def test_hydrate_focus_concepts_uses_specialization_record_metadata(
     indexes: TaxonomyIndexes,
 ) -> None:
-    focus = Focus(entity_id="spec-lpu-mba-finance")
+    focus = Focus(entity_id="spec-lpu-mca-cloud-computing")
 
     hydrate_focus_concepts(focus, indexes)
 
-    assert focus.university_concept == "Lovely Professional University"
-    assert focus.course_concept == "mba"
-    assert focus.specialization_concept == "Finance Management"
+    assert focus.university_concept == "Lovely Professional University Online"
+    assert focus.course_concept == "mca"
+    assert focus.specialization_concept == "Cloud Computing"
 
 
 def test_validate_focus_returns_one_concrete_course_for_valid_pair(
     indexes: TaxonomyIndexes,
 ) -> None:
     focus = Focus(
-        university_concept="Narsee Monjee Institute of Management Studies Online",
-        course_concept="mba",
+        university_concept="NMIMS Global Access",
+        course_concept="mca",
         university="uni-nmims",
         sources={"university": "explicit", "course": "explicit"},
     )
@@ -87,7 +87,7 @@ def test_validate_focus_returns_one_concrete_course_for_valid_pair(
     result = validate_focus(focus, indexes)
 
     assert result.valid
-    assert result.compatible_entity_ids == ("course-nmims-mba",)
+    assert result.compatible_entity_ids == ("course-nmims-mca",)
     assert not result.explicit_conflict
 
 
@@ -116,9 +116,9 @@ def test_validate_focus_late_binds_all_three_concepts(
     indexes: TaxonomyIndexes,
 ) -> None:
     focus = Focus(
-        university_concept="Lovely Professional University",
-        course_concept="mba",
-        specialization_concept="Finance Management",
+        university_concept="Lovely Professional University Online",
+        course_concept="mca",
+        specialization_concept="Cloud Computing",
     )
 
     result = validate_focus(
@@ -128,16 +128,16 @@ def test_validate_focus_late_binds_all_three_concepts(
     )
 
     assert result.valid
-    assert result.compatible_entity_ids == ("spec-lpu-mba-finance",)
+    assert result.compatible_entity_ids == ("spec-lpu-mca-cloud-computing",)
 
 
 def test_validate_focus_marks_two_explicit_incompatible_concepts_as_conflict(
     indexes: TaxonomyIndexes,
 ) -> None:
     focus = Focus(
-        university_concept="IGNOU",
+        university_concept="Lovely Professional University Online",
         course_concept="mba",
-        university="uni-ignou",
+        university="uni-lpu",
         category="mba",
     )
 
@@ -152,9 +152,9 @@ def test_validate_focus_marks_two_explicit_incompatible_concepts_as_conflict(
     assert result.compatible_entity_ids == ()
     assert result.reason == "explicit_catalog_conflict"
     # Explicit evidence is retained so a handler can explain the combination.
-    assert focus.university_concept == "IGNOU"
+    assert focus.university_concept == "Lovely Professional University Online"
     assert focus.course_concept == "mba"
-    assert focus.university == "uni-ignou"
+    assert focus.university == "uni-lpu"
     assert focus.category == "mba"
 
 
@@ -162,11 +162,11 @@ def test_per_slot_context_provenance_overrides_stale_global_source(
     indexes: TaxonomyIndexes,
 ) -> None:
     focus = Focus(
-        university_concept="IGNOU",
+        university_concept="Lovely Professional University Online",
         course_concept="mba",
         source="explicit",
         sources={"university": "context", "course": "context"},
-        university="uni-ignou",
+        university="uni-lpu",
         category="mba",
     )
 
@@ -181,13 +181,13 @@ def test_validate_focus_drops_inherited_conflict_and_keeps_explicit_course(
     indexes: TaxonomyIndexes,
 ) -> None:
     focus = Focus(
-        university_concept="IGNOU",
+        university_concept="Lovely Professional University Online",
         course_concept="mba",
         source="explicit",
         sources={"university": "context", "course": "explicit"},
-        university="uni-ignou",
+        university="uni-lpu",
         category="mba",
-        entity_id="course-ignou-mca",
+        entity_id="course-lpu-mca",
     )
 
     result = validate_focus(focus, indexes, explicit_slots={"course"})

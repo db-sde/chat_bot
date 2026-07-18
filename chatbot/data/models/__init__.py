@@ -41,6 +41,13 @@ from .university import (
 def _page_type(value: Any) -> str | None:
     if isinstance(value, dict):
         meta = value.get("_meta", value.get("meta"))
+        category = str(value.get("category") or "").casefold()
+        if category == "university" or value.get("university_full_name"):
+            return "university"
+        if category == "specialization" or value.get("specialization_name"):
+            return "specialization"
+        if value.get("program_name") or value.get("linked_university"):
+            return "course"
     else:
         meta = getattr(value, "meta", None)
     if isinstance(meta, dict):
@@ -59,7 +66,7 @@ CATALOG_ENTITY_ADAPTER = TypeAdapter(CatalogEntity)
 
 
 def parse_entity(value: Any) -> CatalogEntity:
-    """Validate a publisher envelope using its strict nested page-type tag."""
+    """Validate either a legacy tagged envelope or a Catalog V3 flat entity."""
 
     return CATALOG_ENTITY_ADAPTER.validate_python(value)
 

@@ -50,7 +50,18 @@ def _slugify(value: str) -> str:
 
 
 def _extract_category(program_name: str | None, explicit: str | None) -> str | None:
-    if explicit and explicit.strip():
+    # Catalog V3 uses ``category`` for a broad discipline bucket rather than
+    # the degree code. Use the program name for those records while preserving
+    # compatibility with earlier publisher data where category was the code.
+    if explicit and explicit.strip() and explicit.casefold() not in {
+        "university",
+        "specialization",
+        "management",
+        "technology",
+        "commerce",
+        "undergraduate",
+        "media",
+    }:
         return normalize_category(explicit) or None
     return normalize_category(program_name) or None
 
@@ -286,7 +297,7 @@ class CatalogStore:
             spec_name = entity.specialization_name or entity.spec_name
             canonical_name = spec_name or "Specialization"
             university_name = entity.university_name
-            program_name = None
+            program_name = entity.program_name or entity.parent_course
             # Publisher specialization pages do not always carry an explicit category or
             # linked course. Their document title commonly retains the program family
             # (for example "Online MBA Banking Specialization Page"), which is safe
@@ -294,7 +305,10 @@ class CatalogStore:
             # A specialization name is not itself a course category. Derive a
             # missing category only from publisher document context (or an
             # explicit field), never from labels such as "Banking & Insurance".
-            category = _extract_category(entity.meta.document_title, entity.category)
+            category = _extract_category(
+                program_name or entity.meta.document_title,
+                entity.category,
+            )
             specialization_name = spec_name
         else:  # pragma: no cover - the discriminated union makes this unreachable
             raise TypeError(f"Unsupported catalog entity: {type(entity)!r}")

@@ -60,22 +60,22 @@ def test_homepage_context_has_no_catalog_entity(guide_client: TestClient) -> Non
         (
             {"page_type": "university", "university": "nmims"},
             "uni-nmims",
-            "NMIMS",
+            "NMIMS Global Access",
         ),
         (
-            {"page_type": "course", "university": "nmims", "course": "mba"},
-            "course-nmims-mba",
-            "NMIMS • Online MBA",
+            {"page_type": "course", "university": "nmims", "course": "mca"},
+            "course-nmims-mca",
+            "NMIMS Global Access • MCA",
         ),
         (
             {
                 "page_type": "specialization",
                 "university": "nmims",
-                "course": "mba",
-                "specialization": "business-analytics",
+                "course": "mca",
+                "specialization": "cloud-computing",
             },
-            "spec-nmims-mba-analytics",
-            "NMIMS • Online MBA • Business Analytics",
+            "spec-nmims-mca-cloud-computing",
+            "NMIMS Global Access • MCA • Cloud Computing",
         ),
     ],
 )
@@ -98,17 +98,17 @@ def test_simulator_shorthands_resolve_exact_catalog_relationships(
 def test_entity_id_context_derives_all_parent_labels(guide_client: TestClient) -> None:
     response = guide_client.get(
         "/api/widget/guide/context",
-        params={"entity_id": "spec-nmims-mba-analytics"},
+        params={"entity_id": "spec-nmims-mca-cloud-computing"},
     )
 
     assert response.status_code == 200
     assert response.json()["context"] == {
         "page_type": "specialization",
-        "university": "NMIMS",
-        "course": "Online MBA",
-        "specialization": "Business Analytics",
-        "entity_id": "spec-nmims-mba-analytics",
-        "label": "NMIMS • Online MBA • Business Analytics",
+        "university": "NMIMS Global Access",
+        "course": "MCA",
+        "specialization": "Cloud Computing",
+        "entity_id": "spec-nmims-mca-cloud-computing",
+        "label": "NMIMS Global Access • MCA • Cloud Computing",
     }
 
 
@@ -117,29 +117,32 @@ def test_information_projection_never_fabricates_absent_publisher_data(
 ) -> None:
     response = guide_client.get(
         "/api/widget/guide/context",
-        params={"entity_id": "spec-nmims-mba-analytics"},
+        params={"entity_id": "spec-nmims-mca-cloud-computing"},
     )
 
     info = response.json()["info"]
     assert info["fees"] == {
         "available": True,
-        "total_fee": "INR 2,16,000",
-        "semester_fee": "INR 54,500 per semester",
-        "emi": "From INR 9,000 per month",
-        "plans": [
-            {
-                "name": "Semester Fee",
-                "amount": "INR 54,500",
-                "total": "INR 2,16,000",
-            }
-        ],
+        "total_fee": "INR 161,023",
+        "semester_fee": "INR 79,000.0 per semester",
+        "emi": "From INR 6,600 per month",
+        "plans": [],
+        "fee_numeric": 161023,
+        "fee_metadata": {
+            "currency": "INR",
+            "fee_type": "total",
+            "billing_cycle": "total",
+        },
     }
     assert info["eligibility"]["summary"] == "Bachelor's degree in any discipline"
-    assert info["eligibility"]["requirements"] == []
+    assert info["eligibility"]["requirements"] == [
+        "Bachelor's degree in any discipline",
+        "Minimum 50% aggregate marks",
+    ]
     assert info["career"] == {
-        "available": False,
-        "average_salary": None,
-        "job_roles": [],
+        "available": True,
+        "average_salary": "INR 4.0 LPA",
+        "job_roles": ["Business Analyst"],
         "recruiters": [],
     }
     assert info["syllabus"] == {"available": False, "semesters": []}
@@ -148,14 +151,28 @@ def test_information_projection_never_fabricates_absent_publisher_data(
         "rating": None,
         "breakdown": [],
         "testimonials": [],
+        "review_count": None,
     }
     assert info["accreditations"] == {
         "available": True,
-        "items": ["UGC Entitled", "NAAC grade A+"],
+        "items": [
+            "UGC Entitled",
+            "NAAC — Accredited (NAAC grade A+)",
+            "NIRF — Ranked",
+            "UGC — Entitled",
+            "AICTE — Approved",
+        ],
     }
     assert info["admissions"] == {
-        "available": False,
-        "steps": None,
+        "available": True,
+        "steps": [
+            "Fill the online application form",
+            "Upload required academic documents",
+            "Pay the registration fee",
+            "Receive counselor verification call",
+            "Complete fee payment for the first semester",
+            "Get enrollment confirmation and LMS access",
+        ],
         "fee_note": None,
     }
 
@@ -163,17 +180,16 @@ def test_information_projection_never_fabricates_absent_publisher_data(
 def test_related_records_follow_catalog_links(guide_client: TestClient) -> None:
     course = guide_client.get(
         "/api/widget/guide/context",
-        params={"page_type": "course", "university": "nmims", "course": "mba"},
+        params={"page_type": "course", "university": "nmims", "course": "mca"},
     ).json()
     specialization_ids = {item["id"] for item in course["related"]["specializations"]}
 
     assert specialization_ids == {
-        "spec-nmims-mba-analytics",
-        "spec-nmims-mba-marketing",
+        "spec-nmims-mca-cloud-computing",
     }
     assert course["related"]["universities"][0]["id"] == "uni-nmims"
     assert all(
-        item["category"] == "mba" for item in course["related"]["alternatives"]
+        item["category"] == "MCA" for item in course["related"]["alternatives"]
     )
 
 
@@ -186,40 +202,42 @@ def test_catalog_picker_endpoints_are_searchable_and_grounded(
     programs = guide_client.get("/api/widget/guide/catalog/programs")
     courses = guide_client.get(
         "/api/widget/guide/catalog/courses",
-        params={"university": "nmims", "course": "mba"},
+        params={"university": "nmims", "course": "mca"},
     )
     specializations = guide_client.get(
         "/api/widget/guide/catalog/specializations",
-        params={"university": "nmims", "course": "mba", "q": "analytics"},
+        params={"university": "nmims", "course": "mca", "q": "cloud"},
     )
 
     assert universities.status_code == 200
     assert [item["id"] for item in universities.json()["items"]] == ["uni-nmims"]
     university = universities.json()["items"][0]
-    assert university["name"] == "NMIMS Online"
+    assert university["name"] == "NMIMS Global Access"
     assert university["naac_grade"] == "A+"
     assert university["ugc_status"] == "UGC Entitled"
-    assert university["program_count"] == 2
+    assert university["program_count"] == 4
 
     assert programs.status_code == 200
     program_items = programs.json()["items"]
-    assert [item["name"] for item in program_items[:4]] == ["MBA", "MCA", "BBA", "MSc"]
+    assert {"MBA", "MCA", "BBA", "MSc AI & ML"}.issubset(
+        {item["name"] for item in program_items}
+    )
     assert all(item["provider_count"] > 0 for item in program_items)
 
     assert courses.status_code == 200
-    assert [item["id"] for item in courses.json()["items"]] == ["course-nmims-mba"]
+    assert [item["id"] for item in courses.json()["items"]] == ["course-nmims-mca"]
     assert courses.json()["items"][0]["type"] == "program_card"
 
     assert specializations.status_code == 200
     assert [item["id"] for item in specializations.json()["items"]] == [
-        "spec-nmims-mba-analytics"
+        "spec-nmims-mca-cloud-computing"
     ]
 
 
 def test_compare_reuses_existing_comparison_card(guide_client: TestClient) -> None:
     response = guide_client.post(
         "/api/widget/guide/compare",
-        json={"entity_ids": ["course-lpu-mba", "course-nmims-mba"]},
+        json={"entity_ids": ["course-lpu-mca", "course-nmims-mca"]},
     )
 
     assert response.status_code == 200
@@ -227,8 +245,8 @@ def test_compare_reuses_existing_comparison_card(guide_client: TestClient) -> No
     assert payload["type"] == "comparison_card"
     assert payload["title"] == "Compare catalog options"
     assert [item["id"] for item in payload["items"]] == [
-        "course-lpu-mba",
-        "course-nmims-mba",
+        "course-lpu-mca",
+        "course-nmims-mca",
     ]
     assert payload["verdict"]
     labels = {fact["label"] for fact in payload["items"][0]["facts"]}
@@ -239,10 +257,10 @@ def test_compare_reuses_existing_comparison_card(guide_client: TestClient) -> No
     "body",
     [
         {},
-        {"entity_ids": ["course-lpu-mba"]},
-        {"entity_ids": ["course-lpu-mba"] * 2},
-        {"entity_ids": ["course-lpu-mba", 7]},
-        ["course-lpu-mba", "course-nmims-mba"],
+        {"entity_ids": ["course-lpu-mca"]},
+        {"entity_ids": ["course-lpu-mca"] * 2},
+        {"entity_ids": ["course-lpu-mca", 7]},
+        ["course-lpu-mca", "course-nmims-mca"],
     ],
 )
 def test_compare_rejects_invalid_operand_shapes(
@@ -257,7 +275,7 @@ def test_compare_rejects_invalid_operand_shapes(
 def test_compare_returns_not_found_for_unknown_exact_id(guide_client: TestClient) -> None:
     response = guide_client.post(
         "/api/widget/guide/compare",
-        json={"entity_ids": ["course-lpu-mba", "not-a-catalog-id"]},
+        json={"entity_ids": ["course-lpu-mca", "not-a-catalog-id"]},
     )
 
     assert response.status_code == 404
@@ -276,7 +294,7 @@ def test_context_validation_reports_invalid_and_unknown_inputs(guide_client: Tes
         params={
             "page_type": "course",
             "university": "missing-university",
-            "course": "mba",
+            "course": "mca",
         },
     )
 
@@ -293,12 +311,12 @@ def test_guide_routes_do_not_enter_existing_chat_pipeline(guide_client: TestClie
     try:
         context = guide_client.get(
             "/api/widget/guide/context",
-            params={"page_type": "course", "university": "nmims", "course": "mba"},
+            params={"page_type": "course", "university": "nmims", "course": "mca"},
         )
         catalog = guide_client.get("/api/widget/guide/catalog/programs")
         comparison = guide_client.post(
             "/api/widget/guide/compare",
-            json={"entity_ids": ["course-lpu-mba", "course-nmims-mba"]},
+            json={"entity_ids": ["course-lpu-mca", "course-nmims-mca"]},
         )
     finally:
         service.process_turn = original

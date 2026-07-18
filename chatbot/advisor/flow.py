@@ -9,6 +9,7 @@ from typing import Any
 from data.accessor import safe_get
 from response.builder import build_response
 from response.cards import (
+    catalog_get_entity,
     clean_text,
     entity_label,
     entity_page_type,
@@ -21,6 +22,7 @@ from response.cards import (
 from schemas import ResponsePayload
 from session.state import AdvisorField
 from taxonomy.alias_tables import normalize_text
+from taxonomy.index_builder import normalize_category
 
 _LAKH_AMOUNT_RE = re.compile(
     r"(?<![\w.])(?:₹\s*|rs\.?\s*|inr\s*)?(\d+(?:\.\d+)?)\s*"
@@ -238,11 +240,13 @@ def _category_specializations(
 ) -> list[str]:
     names: list[str] = []
     seen: set[str] = set()
-    target = normalize_text(category or "")
+    target = normalize_category(category or "")
     for entity in iter_catalog_entities(catalog):
         if entity_page_type(entity) != "specialization":
             continue
-        entity_category = normalize_text(safe_get(entity, "category", ""))
+        entity_category = normalize_category(
+            first_value(entity, "program_name", "parent_course", "category", default="")
+        )
         if target and entity_category != target:
             continue
         name = clean_text(first_value(entity, "specialization_name", "spec_name", default=""))
@@ -290,6 +294,21 @@ def _entity_text(entity: Any) -> str:
         )
     for item in safe_get(entity, "job_profiles", []) or []:
         pieces.append(clean_text(safe_get(item, "job_title", None)))
+    for path in (
+        "career_outcomes",
+        "discovery_tags",
+        "finder_tags",
+        "career_tracks",
+        "roi_tags",
+        "search_keywords",
+    ):
+        pieces.extend(clean_text(value) for value in (safe_get(entity, path, []) or []))
+    profile = safe_get(entity, "recommendation_profile", None)
+    if isinstance(profile, Mapping):
+        pieces.extend(clean_text(value) for value in profile.values())
+    attributes = safe_get(entity, "recommendation_attributes", None)
+    if isinstance(attributes, Mapping):
+        pieces.extend(clean_text(key) for key, value in attributes.items() if value is True)
     return normalize_text(" ".join(pieces))
 
 
@@ -300,6 +319,16 @@ def _published_total_fee(entity: Any) -> tuple[float | None, str]:
             value = clean_text(safe_get(plan, "plan_total", None))
             if value:
                 break
+    if not value:
+        numeric = first_value(
+            entity,
+            "total_fee_numeric",
+            "starting_fee_numeric",
+            "fee_numeric",
+            default=None,
+        )
+        if isinstance(numeric, (int, float)) and not isinstance(numeric, bool):
+            value = format_inr(float(numeric))
     return parse_money(value), value
 
 
@@ -321,7 +350,7 @@ def _matches_specialization(entity: Any, preference: str | None) -> bool:
 
 
 def _candidate_pool(advisor: Any, catalog: Any) -> list[Any]:
-    category = normalize_text(getattr(advisor, "category", None) or "")
+    category = normalize_category(getattr(advisor, "category", None) or "")
     preference = getattr(advisor, "preferred_specialization", None)
     all_entities = iter_catalog_entities(catalog)
     page_type = "specialization" if preference and preference != "No preference" else "course"
@@ -329,7 +358,19 @@ def _candidate_pool(advisor: Any, catalog: Any) -> list[Any]:
         entity
         for entity in all_entities
         if entity_page_type(entity) == page_type
-        and (not category or normalize_text(safe_get(entity, "category", "")) == category)
+        and (
+            not category
+            or normalize_category(
+                first_value(
+                    entity,
+                    "program_name",
+                    "parent_course",
+                    "category",
+                    default="",
+                )
+            )
+            == category
+        )
         and _matches_specialization(entity, preference)
     ]
     # Sparse catalogs may publish a course without dedicated specialization pages.
@@ -338,7 +379,13 @@ def _candidate_pool(advisor: Any, catalog: Any) -> list[Any]:
             entity
             for entity in all_entities
             if entity_page_type(entity) == "course"
-            and (not category or normalize_text(safe_get(entity, "category", "")) == category)
+            and (
+                not category
+                or normalize_category(
+                    first_value(entity, "program_name", "category", default="")
+                )
+                == category
+            )
         ]
     return pool
 
@@ -355,7 +402,19 @@ def _ranked_recommendations(advisor: Any, catalog: Any, *, limit: int = 3) -> li
         amount, _ = _published_total_fee(entity)
         if budget is not None and (amount is None or amount > budget):
             continue
-        haystack = set(_entity_text(entity).split())
+        linked_university = catalog_get_entity(
+            catalog,
+            safe_get(entity, "linked_university", None),
+        )
+        searchable = " ".join(
+            value
+            for value in (
+                _entity_text(entity),
+                _entity_text(linked_university) if linked_university is not None else "",
+            )
+            if value
+        )
+        haystack = set(searchable.split())
         score = float(len(goal_terms & haystack))
         if _matches_specialization(entity, advisor.preferred_specialization):
             score += 5
@@ -363,6 +422,17 @@ def _ranked_recommendations(advisor: Any, catalog: Any, *, limit: int = 3) -> li
             score += 1
         if first_value(entity, "ugc_status", "ugc_approved", "naac_grade", default=None):
             score += 1
+        attributes = safe_get(entity, "recommendation_attributes", None)
+        if isinstance(attributes, Mapping):
+            experience = normalize_text(getattr(advisor, "work_experience", None) or "")
+            if (
+                "fresher" in experience and attributes.get("freshers") is True
+            ) or (
+                experience
+                and "fresher" not in experience
+                and attributes.get("working_professional") is True
+            ):
+                score += 1
         if budget is not None and amount is not None:
             score += 2
         university = entity_university(entity) or entity_label(entity)
@@ -414,6 +484,11 @@ def _reasons(entity: Any, advisor: Any) -> list[str]:
     jobs = [item for item in jobs if item]
     if jobs:
         reasons.append(f"Published career roles include {', '.join(jobs[:2])}.")
+    elif safe_get(entity, "career_outcomes", None):
+        outcomes = [clean_text(value) for value in safe_get(entity, "career_outcomes", [])]
+        outcomes = [value for value in outcomes if value]
+        if outcomes:
+            reasons.append(f"Published career outcomes include {', '.join(outcomes[:2])}.")
     placement = clean_text(safe_get(entity, "placement_content", None), max_chars=150)
     if placement:
         reasons.append(f"Published placement support: {placement}")

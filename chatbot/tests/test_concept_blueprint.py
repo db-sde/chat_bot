@@ -58,9 +58,9 @@ async def turn(service: ChatbotService, message: str, session_id: str):
     [
         ("monypal mba fees", "clarification", "Manipal"),
         ("markting", "list_providers", "Marketing is offered"),
-        ("finace", "list_providers", "Finance Management is offered"),
+        ("finace", "list_providers", "Finance is offered"),
         ("lpuu", "clarification", "Lovely Professional University"),
-        ("nmis", "clarification", "NMIMS Online"),
+        ("nmis", "clarification", "NMIMS Global Access"),
     ],
 )
 async def test_catalog_typos_are_deterministic_and_zero_gemini(
@@ -154,13 +154,13 @@ async def test_known_concept_guidance_reaches_advisory_without_becoming_facts(
 @pytest.mark.asyncio
 async def test_weak_topic_locking_and_attribute_context(blueprint_service) -> None:
     service, llm, _ = blueprint_service
-    await turn(service, "NMIMS MBA", "weak-lock")
+    await turn(service, "NMIMS MCA", "weak-lock")
 
     fee = await turn(service, "What are the fees?", "weak-lock")
     switched = await turn(service, "What is BBA?", "weak-lock")
 
     assert fee.route == "factual"
-    assert "INR 2,16,000" in fee.payload.text
+    assert "INR 158,000" in fee.payload.text
     assert switched.route == "category"
     assert switched.state.focus.university_concept is None
     assert switched.state.focus.course_concept == "bba"
@@ -174,7 +174,7 @@ async def test_explicit_specialization_discovery_clears_inherited_university(
     blueprint_service,
 ) -> None:
     service, llm, _ = blueprint_service
-    await turn(service, "NMIMS MBA", "discovery-switch")
+    await turn(service, "NMIMS MCA", "discovery-switch")
 
     result = await turn(
         service,
@@ -195,10 +195,13 @@ async def test_explicit_specialization_discovery_clears_inherited_university(
 async def test_explicit_invalid_combination_is_explained(blueprint_service) -> None:
     service, llm, _ = blueprint_service
 
-    result = await turn(service, "Annamalai University MBA", "invalid-combination")
+    result = await turn(service, "LPU MBA", "invalid-combination")
 
     assert result.route == "fallback"
-    assert "Annamalai University does not currently offer MBA" in result.payload.text
+    assert (
+        "Lovely Professional University Online does not currently offer MBA"
+        in result.payload.text
+    )
     assert "Available providers include" in result.payload.text
     assert llm.intent_calls == []
 
@@ -207,11 +210,11 @@ async def test_explicit_invalid_combination_is_explained(blueprint_service) -> N
 async def test_true_acronym_ambiguity_still_clarifies(blueprint_service) -> None:
     service, llm, _ = blueprint_service
 
-    result = await turn(service, "GU", "true-ambiguity")
+    result = await turn(service, "Manipal", "true-ambiguity")
 
     assert result.route == "clarification"
-    assert "Ganpat University" in result.payload.text
-    assert "GITAM University" in result.payload.text
+    assert "Manipal University Jaipur Online" in result.payload.text
+    assert "Sikkim Manipal University Online" in result.payload.text
     assert llm.intent_calls == []
 
 
@@ -244,8 +247,8 @@ async def test_blueprint_observability_events_are_emitted(
     with caplog.at_level(logging.INFO):
         await turn(service, "markting", "logs-recognition")
         await turn(service, "Harvard MBA", "logs-unknown")
-        await turn(service, "Annamalai University MBA", "logs-validation")
-        await turn(service, "GU", "logs-clarification")
+        await turn(service, "LPU MBA", "logs-validation")
+        await turn(service, "Manipal", "logs-clarification")
 
     messages = "\n".join(record.getMessage() for record in caplog.records)
     assert "[recognition]" in messages

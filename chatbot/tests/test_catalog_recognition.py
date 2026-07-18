@@ -268,8 +268,8 @@ def test_shorter_exact_catalog_phrase_beats_broad_fuzzy_span(
     mentions = extract_mentions("Which Online MBA is best for Marketing?", sample_matcher)
 
     assert [item.entity_id for item in mentions.courses] == ["category:mba"]
-    assert mentions.courses[0].matched_span == "online mba"
-    assert mentions.courses[0].method == "alias"
+    assert mentions.courses[0].matched_span == "mba"
+    assert mentions.courses[0].method == "exact"
     assert mentions.unknown_entities == []
 
 

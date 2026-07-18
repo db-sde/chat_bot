@@ -56,7 +56,7 @@ async def turn(service: ChatbotService, message: str, session_id: str):
         ("Tell me about IIT Bombay Online MBA", "IIT Bombay"),
         ("Tell me about Harvard MBA", "Harvard"),
         ("Tell me about Oxford Online MBA", "Oxford"),
-        ("Tell me about MBA in Artificial Intelligence", "Artificial Intelligence"),
+        ("Tell me about MBA in Astrophysics", "Astrophysics"),
     ],
 )
 async def test_mixed_known_unknown_acknowledges_missing_qualifier(

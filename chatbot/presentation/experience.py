@@ -18,7 +18,7 @@ from response.cards import (
     iter_catalog_entities,
     parse_money,
 )
-from response.templates import topic_from_message
+from response.templates import accreditation_items, topic_from_message
 from schemas import CatalogOption, ProgramCard, QuickAction, ResponseContext
 from taxonomy.index_builder import normalize_category
 
@@ -75,7 +75,7 @@ def context_from_state(
         elif page_type == "specialization":
             linked_course = catalog_get_entity(catalog, safe_get(resolved, "linked_course", None))
             course = _concept(safe_get(linked_course, "program_name", None)) or course or _concept(
-                safe_get(resolved, "category", None)
+                first_value(resolved, "program_name", "parent_course", default=None)
             )
             specialization = specialization or _concept(
                 first_value(
@@ -115,7 +115,7 @@ def context_from_entity(entity: Any, catalog: Any = None) -> ResponseContext:
         linked_course = catalog_get_entity(catalog, safe_get(entity, "linked_course", None))
         course = _display_course(
             _concept(safe_get(linked_course, "program_name", None))
-            or _concept(safe_get(entity, "category", None))
+            or _concept(first_value(entity, "program_name", "parent_course", default=None))
         )
         specialization = _concept(
             first_value(entity, "specialization_name", "spec_name", default=None)
@@ -257,13 +257,22 @@ def _option_meta(entity: Any) -> str | None:
     page_type = entity_page_type(entity)
     details: list[str] = []
     naac = clean_text(safe_get(entity, "naac_grade", None))
-    ugc = clean_text(first_value(entity, "ugc_status", "ugc_approved", default=None))
+    ugc = next(
+        (
+            value
+            for value in accreditation_items(entity)
+            if value.casefold().startswith("ugc")
+        ),
+        clean_text(first_value(entity, "ugc_status", default=None)),
+    )
     if naac:
         details.append(f"NAAC {naac}")
     if ugc:
         details.append(ugc)
     if page_type == "university":
-        programs = safe_get(entity, "programs_table", []) or []
+        programs = safe_get(entity, "program_ids", None) or safe_get(
+            entity, "programs_table", []
+        ) or []
         if programs:
             details.append(f"{len(programs)} programs")
     elif page_type == "course":
@@ -287,7 +296,9 @@ def _catalog_option(entity: Any) -> CatalogOption | None:
         page_type=entity_page_type(entity),
         name=entity_label(entity),
         university_name=_concept(entity_university(entity)),
-        category=_concept(safe_get(entity, "category", None)),
+        category=_concept(
+            first_value(entity, "program_name", "parent_course", "category", default=None)
+        ),
         meta=_option_meta(entity),
     )
 
@@ -339,7 +350,9 @@ def catalog_options(
         ):
             continue
         if normalized_program:
-            category = clean_text(safe_get(entity, "category", None)).casefold()
+            category = clean_text(
+                first_value(entity, "program_name", "parent_course", "category", default=None)
+            ).casefold()
             linked_course = clean_text(
                 first_value(entity, "linked_course.id", "linked_course", default=None)
             ).casefold()
@@ -353,7 +366,16 @@ def catalog_options(
             (
                 entity_label(entity),
                 entity_university(entity),
-                clean_text(safe_get(entity, "category", None)),
+                clean_text(
+                    first_value(
+                        entity,
+                        "program_name",
+                        "parent_course",
+                        "discipline",
+                        "category",
+                        default=None,
+                    )
+                ),
             )
         ).casefold()
         if normalized_query and normalized_query not in haystack:
@@ -365,7 +387,7 @@ def catalog_options(
     for entity in entities:
         if page_type == "course":
             key = normalize_category(
-                first_value(entity, "category", "program_name", default=None)
+                first_value(entity, "program_name", "category", default=None)
             ) or entity_label(entity).casefold()
         elif page_type == "specialization":
             key = entity_label(entity).casefold()
@@ -471,16 +493,45 @@ def _approval_values(entity: Any, catalog: Any, *paths: str) -> list[str]:
     return [value for value in values if value]
 
 
+def _structured_accreditation_values(
+    entity: Any,
+    catalog: Any,
+    accreditation_type: str,
+) -> list[str]:
+    """Read V3 accreditation objects before consulting legacy display strings."""
+
+    candidates = [entity]
+    linked = catalog_get_entity(catalog, safe_get(entity, "linked_university", None))
+    if linked is not None:
+        candidates.append(linked)
+    values: list[str] = []
+    for candidate in candidates:
+        for accreditation in safe_get(candidate, "accreditations", []) or []:
+            item_type = clean_text(safe_get(accreditation, "type", None))
+            if item_type.casefold() != accreditation_type.casefold():
+                continue
+            values.append(clean_text(safe_get(accreditation, "value", None)))
+    return [value for value in values if value]
+
+
 def _matches_approval(entity: Any, approval: str, catalog: Any) -> bool:
     normalized = clean_text(approval).casefold()
     if normalized in _NEUTRAL:
         return True
     if "ugc-deb" in normalized or "ugc deb" in normalized:
+        structured = _structured_accreditation_values(entity, catalog, "UGC")
+        if structured:
+            return any(
+                value.casefold() in {"entitled", "recognized", "approved"}
+                for value in structured
+            )
         return any(
-            "deb" in value.casefold()
+            "deb" in value.casefold() or "ugc entitled" in value.casefold()
             for value in _approval_values(entity, catalog, "ugc_status", "ugc_approved")
         )
     if "ugc" in normalized:
+        if _structured_accreditation_values(entity, catalog, "UGC"):
+            return True
         return "ugc" in _approval_value(
             entity, catalog, "ugc_status", "ugc_approved"
         ).casefold()

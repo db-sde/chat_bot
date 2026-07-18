@@ -220,7 +220,7 @@ def _list_card_entities(route_name: str, state: Any, catalog: Any) -> list[Any]:
             entity
             for entity in iter_catalog_entities(catalog)
             if entity_page_type(entity) == "course"
-            and normalize_category(first_value(entity, "category", "program_name", default=None))
+            and normalize_category(first_value(entity, "program_name", "category", default=None))
             == normalized
         ]
         return _representative_entities(matches)

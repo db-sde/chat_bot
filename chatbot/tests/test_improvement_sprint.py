@@ -214,10 +214,10 @@ async def test_comparison_and_context_rules(
     assert all("NMIMS" in chip and "Amity" in chip for chip in comparison.payload.suggested_chips)
 
     session_id = "sprint-context"
-    await turn(sprint_service, session_id, "Tell me about NMIMS MBA")
+    await turn(sprint_service, session_id, "Tell me about NMIMS MCA")
     fee = await turn(sprint_service, session_id, "What are the fees?")
     assert fee.route == "factual"
-    assert fee.state.focus.entity_id == "course-nmims-mba"
+    assert fee.state.focus.entity_id == "course-nmims-mca"
     assert "published total fee" in fee.payload.text
 
     unrelated = await turn(sprint_service, session_id, "What is pi?")

@@ -132,15 +132,23 @@ def _card_details(entity: Any, catalog: Any = None) -> CardDetails | None:
         max_chars=2400,
     )
     accreditations = accreditation_items(entity)
-    if not accreditations:
-        for relation in ("linked_course", "linked_university"):
-            linked = _linked_entity(entity, relation, catalog)
-            if linked is not None and (accreditations := accreditation_items(linked)):
-                break
-    admission_steps = optional_text(
-        first_value(entity, "admission_steps", "admission_fee_note", default=None),
-        max_chars=2400,
-    )
+    for relation in ("linked_course", "linked_university"):
+        linked = _linked_entity(entity, relation, catalog)
+        if linked is not None:
+            accreditations.extend(accreditation_items(linked))
+    accreditations = list(dict.fromkeys(accreditations))
+    raw_steps = safe_get(entity, "admission_steps", None)
+    if isinstance(raw_steps, Iterable) and not isinstance(raw_steps, (str, bytes, Mapping)):
+        admission_steps = "\n".join(
+            f"{index}. {clean_text(step)}"
+            for index, step in enumerate(raw_steps, start=1)
+            if clean_text(step)
+        ) or None
+    else:
+        admission_steps = optional_text(
+            first_value(entity, "admission_steps", "admission_fee_note", default=None),
+            max_chars=2400,
+        )
 
     reviews: list[CardReview] = []
     for review in safe_get(entity, "reviews", []) or []:
@@ -152,6 +160,8 @@ def _card_details(entity: Any, catalog: Any = None) -> CardDetails | None:
                 text=text,
                 reviewer_name=optional_text(safe_get(review, "reviewer_name", None)),
                 reviewer_label=optional_text(safe_get(review, "reviewer_label", None)),
+                rating=safe_get(review, "rating", None),
+                theme=optional_text(safe_get(review, "theme", None)),
             )
         )
         if len(reviews) >= 6:
@@ -172,6 +182,8 @@ def _card_details(entity: Any, catalog: Any = None) -> CardDetails | None:
         admission_steps=admission_steps,
         reviews=reviews,
         faqs=faqs,
+        average_rating=safe_get(entity, "average_rating", None),
+        review_count=safe_get(entity, "review_count", None),
     )
     return details if any(details.model_dump().values()) else None
 
@@ -180,6 +192,11 @@ def _specialization_count(entity: Any, catalog: Any) -> int | None:
     published = _integer_value(safe_get(entity, "num_specializations", None))
     if published is not None:
         return published
+    linked_ids = safe_get(entity, "specialization_ids", None) or []
+    if isinstance(linked_ids, Iterable) and not isinstance(linked_ids, (str, bytes, Mapping)):
+        count = len(list(linked_ids))
+        if count:
+            return count
     entity_id = _identifier(entity)
     if entity_page_type(entity) == "course" and entity_id:
         count = sum(
@@ -202,7 +219,22 @@ def _career_pair(entity: Any) -> tuple[str | None, str | None]:
         salary = optional_text(first_value(profile, "avg_salary", "salary", default=None))
         if career or salary:
             return career, salary
+    for outcome in safe_get(entity, "salary_outcomes", []) or []:
+        career = optional_text(safe_get(outcome, "job_title", None))
+        salary = optional_text(safe_get(outcome, "salary_display", None))
+        if career or salary:
+            return career, salary
     return None, None
+
+
+def _structured_accreditation(entity: Any, kind: str) -> str | None:
+    for item in safe_get(entity, "accreditations", []) or []:
+        item_type = clean_text(safe_get(item, "type", None))
+        if item_type.casefold() != kind.casefold():
+            continue
+        value = clean_text(safe_get(item, "value", None))
+        return " ".join(part for part in (item_type, value) if part)
+    return None
 
 
 def _approval_fact(entity: Any) -> CardFact | None:
@@ -215,7 +247,7 @@ def _ranking_fact(entity: Any) -> CardFact | None:
     return card_fact("Published rankings", "; ".join(values[:3])) if values else None
 
 
-def build_university_card(entity: Any) -> UniversityCard:
+def build_university_card(entity: Any, catalog: Any = None) -> UniversityCard:
     """Build a university card without filling absent publisher facts."""
 
     programs = catalog_strings(
@@ -223,12 +255,24 @@ def build_university_card(entity: Any) -> UniversityCard:
         fields=("program_name", "name", "title"),
         limit=8,
     )
+    for reference in safe_get(entity, "program_ids", []) or []:
+        program = catalog_get_entity(catalog, reference)
+        if program is not None:
+            programs.append(entity_label(program, default=""))
+    programs = list(dict.fromkeys(program for program in programs if program))[:8]
     program_rows = safe_get(entity, "programs_table", None) or []
     program_count = _integer_value(safe_get(entity, "num_programs", None))
     if program_count is None and isinstance(program_rows, Iterable) and not isinstance(
         program_rows, (str, bytes, Mapping)
     ):
-        program_count = len(list(program_rows))
+        published_count = len(list(program_rows))
+        program_count = published_count or None
+    if program_count is None:
+        program_ids = safe_get(entity, "program_ids", []) or []
+        if isinstance(program_ids, Iterable) and not isinstance(
+            program_ids, (str, bytes, Mapping)
+        ):
+            program_count = len(list(program_ids)) or None
     established_year = optional_text(safe_get(entity, "established_year", None))
     learning_mode = optional_text(
         first_value(entity, "mode_of_learning", "mode", default=None)
@@ -236,7 +280,8 @@ def build_university_card(entity: Any) -> UniversityCard:
     starting_fee = optional_text(first_value(entity, "starting_fee", default=None))
     naac_grade = optional_text(safe_get(entity, "naac_grade", None))
     ugc_status = optional_text(
-        first_value(entity, "ugc_approved", "ugc_status", default=None)
+        _structured_accreditation(entity, "UGC")
+        or first_value(entity, "ugc_status", "ugc_approved", default=None)
     )
     highlights = unique_facts(
         (
@@ -276,6 +321,8 @@ def build_university_card(entity: Any) -> UniversityCard:
         learning_mode=learning_mode,
         naac_grade=naac_grade,
         ugc_status=ugc_status,
+        average_rating=safe_get(entity, "average_rating", None),
+        review_count=safe_get(entity, "review_count", None),
         highlights=highlights,
         programs=programs,
         details=_card_details(entity),
@@ -285,14 +332,15 @@ def build_university_card(entity: Any) -> UniversityCard:
 def build_program_card(entity: Any, catalog: Any = None) -> ProgramCard:
     """Build a course/specialization card from publisher fields only."""
 
+    placement_value = first_value(
+        entity,
+        "placement_content",
+        "placement_support",
+        "placements_content",
+        default=None,
+    )
     placement = optional_text(
-        first_value(
-            entity,
-            "placement_content",
-            "placement_support",
-            "placements_content",
-            default=None,
-        ),
+        "Available" if placement_value is True else placement_value,
         max_chars=300,
     )
     naac_grade = optional_text(_first_catalog_value(entity, catalog, "naac_grade"))
@@ -310,21 +358,39 @@ def build_program_card(entity: Any, catalog: Any = None) -> ProgramCard:
     )
     emi = optional_text(_first_catalog_value(entity, catalog, "emi_amount", "emi_content"))
     career_outcome, average_salary = _career_pair(entity)
+    scholarship_types = catalog_strings(
+        safe_get(entity, "scholarship_types", None),
+        fields=("name", "title", "label"),
+        limit=3,
+    )
+    scholarship_value = ", ".join(scholarship_types) or (
+        "Available" if safe_get(entity, "scholarship_available", None) is True else None
+    )
     highlights = unique_facts(
         (
             _approval_fact(entity),
             _ranking_fact(entity),
             card_fact("Placement support", placement),
+            card_fact("Scholarships", scholarship_value),
         )
     )
     page_type = entity_page_type(entity)
+    program_category = optional_text(
+        first_value(entity, "program_name", "parent_course", default=None)
+    )
+    legacy_category = optional_text(safe_get(entity, "category", None))
+    if not program_category and legacy_category not in {"university", "specialization"}:
+        program_category = legacy_category
     return ProgramCard(
         kind="specialization" if page_type == "specialization" else "course",
         id=_identifier(entity),
         slug=optional_text(safe_get(entity, "slug", None)),
         name=_card_name(entity, "Program"),
         university_name=optional_text(entity_university(entity)),
-        category=optional_text(safe_get(entity, "category", None)),
+        category=program_category,
+        discipline=optional_text(
+            first_value(entity, "discipline", "category", default=None)
+        ),
         summary=_summary(entity),
         duration=optional_text(safe_get(entity, "duration", None)),
         fee=optional_text(entity_fee(entity)),
@@ -332,6 +398,8 @@ def build_program_card(entity: Any, catalog: Any = None) -> ProgramCard:
         mode=optional_text(first_value(entity, "mode", "mode_of_learning", default=None)),
         naac_grade=naac_grade,
         ugc_status=ugc_status,
+        average_rating=safe_get(entity, "average_rating", None),
+        review_count=safe_get(entity, "review_count", None),
         specialization_count=_specialization_count(entity, catalog),
         emi=emi,
         career_outcome=career_outcome,
@@ -346,7 +414,7 @@ def build_program_card(entity: Any, catalog: Any = None) -> ProgramCard:
 
 def build_entity_card(entity: Any, catalog: Any = None) -> UniversityCard | ProgramCard:
     if entity_page_type(entity) == "university":
-        return build_university_card(entity)
+        return build_university_card(entity, catalog)
     return build_program_card(entity, catalog)
 
 
@@ -373,33 +441,63 @@ def _comparison_item(entity: Any, catalog: Any = None) -> ComparisonItem:
         if specialization_count is not None
         else ", ".join(specializations[:5])
     )
-    facts = unique_facts(
-        (
-            card_fact("Fees", entity_fee(entity)),
-            card_fact("Duration", safe_get(entity, "duration", None)),
-            card_fact("Mode", first_value(entity, "mode", "mode_of_learning", default=None)),
-            card_fact("NAAC grade", _first_catalog_value(entity, catalog, "naac_grade")),
-            card_fact(
-                "UGC status",
-                _first_catalog_value(entity, catalog, "ugc_status", "ugc_approved"),
+    comparison = safe_get(entity, "comparison_attributes", None)
+    if isinstance(comparison, Mapping) and comparison:
+        ugc = _structured_accreditation(entity, "UGC")
+        facts = unique_facts(
+            (
+                card_fact("Fees", entity_fee(entity)),
+                card_fact("NAAC grade", comparison.get("naac_grade")),
+                card_fact("UGC status", ugc),
+                card_fact("NIRF rank", comparison.get("nirf_rank")),
+                card_fact(
+                    "Placement support",
+                    "Available"
+                    if comparison.get("placement_support") is True
+                    else "Not available"
+                    if comparison.get("placement_support") is False
+                    else None,
+                ),
+                card_fact(
+                    "Industry projects",
+                    "Available"
+                    if comparison.get("industry_projects") is True
+                    else "Not available"
+                    if comparison.get("industry_projects") is False
+                    else None,
+                ),
+                card_fact("Average rating", safe_get(entity, "average_rating", None)),
             ),
-            card_fact("Specializations", specialization_value),
-            card_fact(
-                "EMI",
-                _first_catalog_value(entity, catalog, "emi_amount", "emi_content"),
-            ),
-            card_fact(
-                "Eligibility",
-                _first_catalog_value(
-                    entity,
-                    catalog,
-                    "eligibility_summary",
-                    "eligibility_content",
+            limit=8,
+        )
+    else:
+        facts = unique_facts(
+            (
+                card_fact("Fees", entity_fee(entity)),
+                card_fact("Duration", safe_get(entity, "duration", None)),
+                card_fact("Mode", first_value(entity, "mode", "mode_of_learning", default=None)),
+                card_fact("NAAC grade", _first_catalog_value(entity, catalog, "naac_grade")),
+                card_fact(
+                    "UGC status",
+                    _first_catalog_value(entity, catalog, "ugc_status", "ugc_approved"),
+                ),
+                card_fact("Specializations", specialization_value),
+                card_fact(
+                    "EMI",
+                    _first_catalog_value(entity, catalog, "emi_amount", "emi_content"),
+                ),
+                card_fact(
+                    "Eligibility",
+                    _first_catalog_value(
+                        entity,
+                        catalog,
+                        "eligibility_summary",
+                        "eligibility_content",
+                    ),
                 ),
             ),
-        ),
-        limit=8,
-    )
+            limit=8,
+        )
     return ComparisonItem(
         id=_identifier(entity),
         name=_card_name(entity, "Catalog option"),

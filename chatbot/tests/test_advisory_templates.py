@@ -266,18 +266,18 @@ async def test_finance_family_job_followup_never_selects_an_arbitrary_provider()
         await service.close()
 
     assert provider.route == "list_providers"
-    assert "Finance Management is offered by" in provider.payload.text
+    assert "Finance is offered by" in provider.payload.text
     assert "published universities" in provider.payload.text
-    assert "Arka Jain University" in provider.payload.text
+    assert "IGNOU" in provider.payload.text
     assert "Lovely Professional University" in provider.payload.text
     assert jobs.route == "factual"
     assert (
-        "Finance Management has published records from multiple universities"
+        "Finance has published records from multiple universities"
         in jobs.payload.text
     )
     assert "Which university" in jobs.payload.text
-    assert "Lovely Professional University MBA Finance Management" not in jobs.payload.text
-    assert any("Finance Management" in chip for chip in jobs.payload.suggested_chips)
+    assert "Lovely Professional University MBA Finance" not in jobs.payload.text
+    assert any("Finance" in chip for chip in jobs.payload.suggested_chips)
 
 
 @pytest.mark.asyncio
@@ -304,5 +304,5 @@ async def test_accreditation_and_fee_query_shortlists_universities_not_categorie
     assert "highest published NAAC grade" in result.payload.text
     assert "A++" in result.payload.text
     assert "Universities with that grade" in result.payload.text
-    assert "SASTRA Deemed University" in result.payload.text
+    assert "Lovely Professional University Online" in result.payload.text
     assert "MCA currently has the lowest" not in result.payload.text

@@ -154,11 +154,18 @@ def _same_university(entity: Any, university: Any, catalog: Any) -> bool:
 
 
 def _same_category(entity: Any, course: Any) -> bool:
-    return bool(
-        _normalise(safe_get(entity, "category", None))
-        and _normalise(safe_get(entity, "category", None))
-        == _normalise(safe_get(course, "category", None))
+    entity_program = _normalise(
+        first_value(entity, "program_name", "parent_course", default=None)
     )
+    course_program = _normalise(safe_get(course, "program_name", None))
+    return bool(entity_program and entity_program == course_program)
+
+
+def _same_course(entity: Any, course: Any, catalog: Any) -> bool:
+    linked_reference = clean_text(safe_get(entity, "linked_course", None))
+    if linked_reference:
+        return _entity_id(_linked(entity, "linked_course", catalog)) == _entity_id(course)
+    return _same_category(entity, course)
 
 
 def _resolve_university(catalog: Any, value: str | None) -> Any:
@@ -199,11 +206,7 @@ def _resolve_specialization(
             for entity in _entities(catalog, "specialization")
             if _matches(entity, value, catalog)
             and (university is None or _same_university(entity, university, catalog))
-            and (
-                course is None
-                or _entity_id(_linked(entity, "linked_course", catalog)) == _entity_id(course)
-                or _same_category(entity, course)
-            )
+            and (course is None or _same_course(entity, course, catalog))
         ),
         None,
     )
@@ -229,7 +232,7 @@ def _parent_course(entity: Any, catalog: Any) -> Any:
         return linked
     return _resolve_course(
         catalog,
-        clean_text(safe_get(entity, "category", None)),
+        clean_text(first_value(entity, "program_name", "parent_course", default=None)),
         _parent_university(entity, catalog),
     )
 
@@ -298,15 +301,18 @@ def _courses_for_university(catalog: Any, university: Any) -> list[Any]:
 
 
 def _specializations_for_course(catalog: Any, course: Any) -> list[Any]:
-    return [
-        entity
-        for entity in _entities(catalog, "specialization")
-        if _entity_id(_linked(entity, "linked_course", catalog)) == _entity_id(course)
-        or (
-            _same_category(entity, course)
-            and _same_university(entity, _parent_university(course, catalog), catalog)
-        )
-    ]
+    result: list[Any] = []
+    for entity in _entities(catalog, "specialization"):
+        linked_reference = clean_text(safe_get(entity, "linked_course", None))
+        if linked_reference:
+            if _entity_id(_linked(entity, "linked_course", catalog)) == _entity_id(course):
+                result.append(entity)
+            continue
+        if _same_category(entity, course) and _same_university(
+            entity, _parent_university(course, catalog), catalog
+        ):
+            result.append(entity)
+    return result
 
 
 def _relation_chain(entity: Any, catalog: Any) -> list[Any]:
@@ -364,12 +370,32 @@ def _fee_info(entity: Any, catalog: Any) -> dict[str, Any]:
             None,
         )
     emi = _first_text(sources, "emi_amount", "emi_content")
+    numeric = next(
+        (
+            value
+            for source in sources
+            for path in ("total_fee_numeric", "starting_fee_numeric", "fee_numeric")
+            if isinstance((value := safe_get(source, path, None)), (int, float))
+            and not isinstance(value, bool)
+        ),
+        None,
+    )
+    metadata = next(
+        (
+            dict(value)
+            for source in sources
+            if isinstance((value := safe_get(source, "fee_metadata", None)), Mapping)
+        ),
+        None,
+    )
     return {
         "available": bool(total_fee or semester_fee or emi or plans),
         "total_fee": total_fee,
         "semester_fee": semester_fee,
         "emi": emi,
         "plans": plans,
+        "fee_numeric": numeric,
+        "fee_metadata": metadata,
     }
 
 
@@ -435,6 +461,13 @@ def _career_info(entity: Any) -> dict[str, Any]:
             "title",
         )
     )
+    for outcome in safe_get(entity, "salary_outcomes", None) or []:
+        role = clean_text(safe_get(outcome, "job_title", None))
+        salary = clean_text(safe_get(outcome, "salary_display", None))
+        if role:
+            roles.append(role)
+        if salary:
+            salaries.append(salary)
     recruiters: list[str] = []
     for path in ("recruiters", "top_recruiters", "hiring_partners"):
         recruiters.extend(
@@ -524,15 +557,29 @@ def _review_info(entity: Any) -> dict[str, Any]:
                     "text": text,
                     "reviewer_name": clean_text(safe_get(review, "reviewer_name", None)) or None,
                     "reviewer_label": clean_text(safe_get(review, "reviewer_label", None)) or None,
+                    "rating": safe_get(review, "rating", None),
+                    "theme": clean_text(safe_get(review, "theme", None)) or None,
                 }
             )
             if len(testimonials) >= 12:
                 break
+    if not breakdown and testimonials:
+        theme_counts: dict[str, int] = {}
+        for item in testimonials:
+            theme = clean_text(item.get("theme")).title()
+            if theme:
+                theme_counts[theme] = theme_counts.get(theme, 0) + 1
+        total = sum(theme_counts.values())
+        breakdown = [
+            {"label": theme, "value": f"{round(count / total * 100)}%"}
+            for theme, count in sorted(theme_counts.items())
+        ] if total else []
     return {
         "available": bool(rating or breakdown or testimonials),
         "rating": rating,
         "breakdown": breakdown,
         "testimonials": testimonials,
+        "review_count": safe_get(entity, "review_count", None),
     }
 
 
@@ -546,7 +593,17 @@ def _accreditation_info(entity: Any, catalog: Any) -> dict[str, Any]:
 
 def _admission_info(entity: Any, catalog: Any) -> dict[str, Any]:
     sources = _relation_chain(entity, catalog)
-    steps = _first_text(sources, "admission_steps")
+    steps: list[str] = []
+    for source in sources:
+        steps = _string_values(
+            safe_get(source, "admission_steps", None),
+            "step",
+            "label",
+            "title",
+            "text",
+        )
+        if steps:
+            break
     fee_note = _first_text(sources, "admission_fee_note")
     return {
         "available": bool(steps or fee_note),
@@ -735,9 +792,13 @@ def guide_catalog(
 
     if normalized_kind == "programs":
         providers: dict[str, set[str]] = {}
+        program_labels: dict[str, str] = {}
         for entity in _entities(catalog, "course"):
-            category = _normalise(safe_get(entity, "category", None))
+            category = _normalise(
+                first_value(entity, "program_name", "category", default=None)
+            )
             if category:
+                program_labels.setdefault(category, _course_name(entity))
                 university_entity = _parent_university(entity, catalog)
                 provider_key = _entity_id(university_entity) or _normalise(_university_name(entity))
                 if provider_key:
@@ -748,7 +809,9 @@ def guide_catalog(
                 "id": category,
                 "slug": category,
                 "page_type": "course",
-                "name": _PROGRAM_NAMES.get(category, category.upper()),
+                "name": program_labels.get(category) or _PROGRAM_NAMES.get(
+                    category, category.upper()
+                ),
                 "provider_count": len(provider_ids),
             }
             for category, provider_ids in providers.items()
@@ -790,11 +853,7 @@ def guide_catalog(
         entity
         for entity in _entities(catalog, "specialization")
         if (university_entity is None or _same_university(entity, university_entity, catalog))
-        and (
-            course_entity is None
-            or _entity_id(_linked(entity, "linked_course", catalog)) == _entity_id(course_entity)
-            or _same_category(entity, course_entity)
-        )
+        and (course_entity is None or _same_course(entity, course_entity, catalog))
         and (not term or any(term in value for value in _entity_terms(entity, catalog)))
     ]
     return _card_list(entities, catalog, limit=250)

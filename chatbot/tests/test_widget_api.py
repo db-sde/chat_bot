@@ -74,7 +74,7 @@ def test_chat_transport_keeps_legacy_fields_and_adds_rich_components() -> None:
         response = client.post(
             "/chat",
             json={
-                "message": "Tell me about NMIMS MBA",
+                "message": "Tell me about NMIMS MCA",
                 "session_id": "widget-rich-program",
                 "site_key": "degreebaba",
                 "page_university_slug": "nmims",

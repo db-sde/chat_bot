@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import time
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -467,6 +468,11 @@ class ChatbotService:
     ) -> bool:
         """Build and queue one complete event without affecting the request path."""
 
+        entity_id = state.navigation.entity_id or state.focus.entity_id
+        event_attributes = dict(attributes or {})
+        catalog_dimensions = self.catalog_analytics_dimensions(entity_id)
+        if catalog_dimensions:
+            event_attributes["catalog_v3"] = catalog_dimensions
         try:
             payload = build_event(
                 event,
@@ -480,18 +486,42 @@ class ChatbotService:
                 interaction_count=state.navigation.interaction_count,
                 entity={
                     "type": state.navigation.page_type or None,
-                    "id": state.navigation.entity_id or state.focus.entity_id,
+                    "id": entity_id,
                 },
                 config_version=(
                     state.navigation.config_version or self.chip_map.snapshot().version
                 ),
                 content_version=content_version,
-                attributes=attributes,
+                attributes=event_attributes or None,
             )
         except Exception as exc:
             LOGGER.warning("Unable to build analytics event %s: %s", event, exc)
             return False
         return self.analytics.emit(payload)
+
+    def catalog_analytics_dimensions(self, entity_id: str | None) -> dict[str, Any]:
+        """Project bounded Catalog V3 dimensions onto analytics events."""
+
+        entity = self.catalog.get_entity(entity_id) if entity_id else None
+        if entity is None:
+            return {}
+        result: dict[str, Any] = {}
+        for field in ("review_count", "average_rating"):
+            value = safe_get(entity, field, None)
+            if value is not None:
+                result[field] = value
+        for field in ("discovery_tags", "career_outcomes"):
+            values = safe_get(entity, field, None)
+            if isinstance(values, list):
+                result[field] = [str(value) for value in values[:12]]
+        fee_metadata = safe_get(entity, "fee_metadata", None)
+        if isinstance(fee_metadata, Mapping):
+            result["fee_metadata"] = {
+                str(key): value
+                for key, value in fee_metadata.items()
+                if value is not None
+            }
+        return result
 
     def record_chip_action(
         self,
@@ -1833,15 +1863,25 @@ async def widget_analytics_endpoint(
         "config_version": command.config_version,
         "content_version": command.content_version,
     }
+    event_attributes: dict[str, Any] = {}
+    catalog_dimensions = service.catalog_analytics_dimensions(command.entity.get("id"))
+    if catalog_dimensions:
+        event_attributes["catalog_v3"] = catalog_dimensions
+    if command.lead_tags:
+        event_attributes["lead_tags"] = command.lead_tags
     try:
         if command.event == "chip_shown":
-            event = build_chip_shown(command.chips, **key_block)
+            event = build_chip_shown(
+                command.chips,
+                attributes=event_attributes or None,
+                **key_block,
+            )
         else:
             event = build_event(
                 command.event,
                 chip_id=command.chip_id,
                 chip_handler=command.chip_handler,
-                attributes={"lead_tags": command.lead_tags} if command.lead_tags else None,
+                attributes=event_attributes or None,
                 **key_block,
             )
     except ValueError as exc:

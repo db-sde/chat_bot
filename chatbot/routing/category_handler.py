@@ -62,10 +62,22 @@ def available_categories(category_index: Any, catalog: Any = None) -> list[str]:
     """List known categories, most represented first."""
 
     counts: dict[str, int] = {}
+    # Catalog V3 uses broad discipline buckets in ``category``. Program choices
+    # come from published course ``program_name`` values, not that bucket or
+    # specialization repetitions.
+    if catalog is not None:
+        for entity in iter_catalog_entities(catalog):
+            if entity_page_type(entity) != "course":
+                continue
+            program_name = safe_get(entity, "program_name", None)
+            if program_name:
+                key = str(program_name).strip().casefold()
+                counts[key] = counts.get(key, 0) + 1
+
     mapping = getattr(category_index, "category_to_entities", None)
     if not isinstance(mapping, Mapping) and isinstance(category_index, Mapping):
         mapping = category_index
-    if isinstance(mapping, Mapping):
+    if not counts and isinstance(mapping, Mapping):
         for category, values in mapping.items():
             if not category:
                 continue
@@ -77,11 +89,20 @@ def available_categories(category_index: Any, catalog: Any = None) -> list[str]:
 
     if not counts:
         for entity in iter_catalog_entities(catalog):
-            category = safe_get(entity, "category", None)
+            category = safe_get(entity, "program_name", None) or safe_get(
+                entity, "category", None
+            )
             if category:
                 key = str(category).strip().casefold()
                 counts[key] = counts.get(key, 0) + 1
-    return [item[0] for item in sorted(counts.items(), key=lambda item: (-item[1], item[0]))]
+    priority = {name: index for index, name in enumerate(("mba", "mca", "bba", "bca"))}
+    return [
+        item[0]
+        for item in sorted(
+            counts.items(),
+            key=lambda item: (priority.get(item[0], len(priority)), -item[1], item[0]),
+        )
+    ]
 
 
 def entities_for_category(category: str, category_index: Any, catalog: Any) -> list[Any]:
@@ -108,7 +129,9 @@ def entities_for_category(category: str, category_index: Any, catalog: Any) -> l
 
     target = str(category or "").strip().casefold()
     for entity in iter_catalog_entities(catalog):
-        value = str(safe_get(entity, "category", "") or "").strip().casefold()
+        value = str(
+            safe_get(entity, "program_name", None) or safe_get(entity, "category", "") or ""
+        ).strip().casefold()
         if value == target:
             records.append(entity)
     return records
