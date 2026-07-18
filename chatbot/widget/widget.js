@@ -1311,7 +1311,7 @@
     checkWhite: '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
     checkGreen: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
     chevron: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>',
-    dollar: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E84010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>',
+    currency: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E84010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>',
     dash: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"></path></svg>',
     checkWhite21: '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"></path></svg>',
     phone: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>',
@@ -1389,7 +1389,7 @@
     const emi = String(data.emi || entity.emi || "").trim();
     if (emi) {
       const note = element("div", "db-widget__fees-emi db-fees-emi");
-      note.append(richCardIcon("", RICH_CARD_ICONS.dollar), element("span", "", displayFeeAmount(emi)));
+      note.append(richCardIcon("", RICH_CARD_ICONS.currency), element("span", "", displayFeeAmount(emi)));
       card.appendChild(note);
     }
     return card;
@@ -1909,6 +1909,7 @@
     panel.style.height = "100%";
     panel.style.gridTemplateRows = "auto minmax(0, 1fr) auto";
     const details = detailsFor(component);
+    // detailSection(detailBody, "Key details", details.key_details)
     const header = element("div", "db-widget__details-header db-details-header");
     const back = createButton("‹ Back", "db-widget__details-back db-details-back", closeOverlay);
     const titleRow = element("div", "db-widget__details-title-row db-details-title-row");
@@ -2040,6 +2041,7 @@
     };
     if (kind === "roi") {
       const months = tags.payback_months || full.payback_months;
+      const firstWithEmi = components.find((c) => c && c.emi);
       return {
         ...base,
         headLabel: "Your ROI result",
@@ -2048,6 +2050,7 @@
         invest: formatInr(full.fee_numeric),
         avgSalary: formatInr(full.expected_post_program_salary_annual),
         currentSalary: formatInr(full.current_salary_annual),
+        emi: firstWithEmi ? displayFeeAmount(firstWithEmi.emi, { stripSemester: true }) : "",
         verdict: base.message,
       };
     }
@@ -2079,7 +2082,7 @@
       [
         { label: "Investment", value: data.invest },
         { label: "Avg salary", value: data.avgSalary },
-        { label: "Payback", value: data.heroValue },
+        { label: "EMI/mo", value: data.emi || data.heroValue },
       ].filter((item) => item.value).forEach((item) => {
         const stat = element("div", "db-widget__roi-stat db-roi-stat");
         stat.append(
