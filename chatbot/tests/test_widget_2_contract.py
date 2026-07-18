@@ -550,6 +550,52 @@ def test_roi_exits_cleanly_and_does_not_take_over_a_different_page() -> None:
     assert "return loadGuideContext(entityReference, logicalType)" in loader
 
 
+def test_career_quiz_uses_one_persistent_card_and_real_catalog_results() -> None:
+    source = _source("widget.js")
+    styles = _source("widget.css")
+    handler = _function_source(source, "handleAction")
+    opener = _function_source(source, "openCareerQuiz")
+    request_step = _function_source(source, "requestCareerQuizStep")
+    renderer = _function_source(source, "renderCareerQuizWidget")
+    results = _function_source(source, "renderCareerQuizRecommendations")
+    sender = _function_source(source, "sendMessage")
+    loader = _function_source(source, "loadGuideContext")
+    lead_panel = _function_source(source, "openLeadPanel")
+
+    assert 'String(action.tool) === "career_quiz"' in handler
+    assert "openCareerQuiz(action)" in handler
+    assert 'requestCareerQuizStep("tool:career_quiz"' in opener
+    assert "state.careerQuizWidget.row.isConnected" in source
+    assert "displayUser: false" in request_step
+    assert "showTyping: false" in request_step
+    assert "onPayload: (payload) => updateCareerQuizWidget(payload)" in request_step
+    assert "widget.body.replaceChildren()" in renderer
+    assert "widget.results.replaceChildren()" in renderer
+    assert "renderComponent(card)" in results
+    assert 'requestCareerQuizStep("tool:continue", { detail: true })' in source
+    assert "else if (careerQuizFlowMetadata(payload)) updateCareerQuizWidget(payload)" in sender
+    assert "updateCareerQuizWidget(resumeResponse)" in loader
+    assert "options.careerQuizWidget && state.careerQuizWidget" in lead_panel
+    assert "db-widget__career-quiz-progress-track" in styles
+    assert "db-widget__career-quiz-options" in styles
+    assert "db-widget__career-quiz-result" in styles
+
+
+def test_career_quiz_closes_and_resets_when_page_context_changes() -> None:
+    source = _source("widget.js")
+    closer = _function_source(source, "closeCareerQuiz")
+    abandon = _function_source(source, "abandonPersistedCareerQuizFlow")
+    loader = _function_source(source, "loadGuideContext")
+
+    assert 'fetchJson("/api/widget/context/clear"' in abandon
+    assert "applyActiveFlow(null)" in abandon
+    assert "forgetCareerQuizPage()" in abandon
+    assert "await abandonPersistedCareerQuizFlow()" in closer
+    assert "await hydratePageContext()" in closer
+    assert "storedCareerQuizPageKey()" in loader
+    assert "careerQuizOrigin !== currentPageKey()" in loader
+
+
 def test_action_lead_tags_are_preserved_in_analytics() -> None:
     source = _source("widget.js")
     payload = _function_source(source, "analyticsPayload")

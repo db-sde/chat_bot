@@ -48,6 +48,7 @@
 
   const GUIDED_THINKING_MS = 650;
   const ROI_TOTAL_STEPS = 2;
+  const CAREER_QUIZ_TOTAL_STEPS = 5;
   const responsiveActionLayouts = new Set();
   const NavigationStep = Object.freeze({
     HOMEPAGE: "HOMEPAGE",
@@ -210,6 +211,30 @@
     }
   }
 
+  function storedCareerQuizPageKey() {
+    try {
+      return window.sessionStorage.getItem(`degreebaba:${siteKey}:career-quiz-page`) || "";
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function rememberCareerQuizPage() {
+    try {
+      window.sessionStorage.setItem(`degreebaba:${siteKey}:career-quiz-page`, currentPageKey());
+    } catch (_error) {
+      // Storage can be unavailable in privacy-restricted third-party contexts.
+    }
+  }
+
+  function forgetCareerQuizPage() {
+    try {
+      window.sessionStorage.removeItem(`degreebaba:${siteKey}:career-quiz-page`);
+    } catch (_error) {
+      // Storage can be unavailable in privacy-restricted third-party contexts.
+    }
+  }
+
   function safeHttpUrl(value) {
     if (!value) return "";
     try {
@@ -262,6 +287,7 @@
     activeFlow: null,
     activeFlowResumeKey: "",
     roiWidget: null,
+    careerQuizWidget: null,
     toolLeadRequiresName: false,
     pendingLeadPersistence: null,
     viewedActions: new Set(),
@@ -421,6 +447,11 @@
   function roiFlowMetadata(payload) {
     const flow = activeFlowMetadata(payload);
     return flow && String(flow.tool || "") === "roi" ? flow : null;
+  }
+
+  function careerQuizFlowMetadata(payload) {
+    const flow = activeFlowMetadata(payload);
+    return flow && String(flow.tool || "") === "career_quiz" ? flow : null;
   }
 
   function applyActiveFlow(flow) {
@@ -719,6 +750,10 @@
     if (String(action.chip_handler) === "tool_entry" && action.tool) {
       if (String(action.tool) === "roi") {
         openRoiCalculator(action);
+        return;
+      }
+      if (String(action.tool) === "career_quiz") {
+        openCareerQuiz(action);
         return;
       }
       transitionNavigation("tool");
@@ -1502,6 +1537,353 @@
     widget.collapsed = false;
     renderRoiWidget();
     anchorBotMessage(widget.row);
+  }
+
+  function careerQuizQuestionNumber(step) {
+    const match = String(step || "").match(/^q(\d+)$/i);
+    return match ? Math.min(CAREER_QUIZ_TOTAL_STEPS, Math.max(1, Number(match[1]))) : 1;
+  }
+
+  function careerQuizQuestionText(message) {
+    const text = String(message || "").trim();
+    const trailingQuestion = text.match(/(?:^|[.!]\s+)([^.!?]*\?)\s*$/);
+    if (trailingQuestion) return trailingQuestion[1].trim();
+    const sections = text
+      .split(/\n\s*\n/)
+      .map((section) => section.trim())
+      .filter(Boolean);
+    return sections[sections.length - 1] || "Choose the answer that feels most like you.";
+  }
+
+  function ensureCareerQuizWidget() {
+    if (state.careerQuizWidget && state.careerQuizWidget.row.isConnected) {
+      return state.careerQuizWidget;
+    }
+    deactivateGuidedActions();
+    collapseGuidedCards();
+    const view = createMessage("bot", "");
+    view.row.classList.add("db-widget__message-row--career-quiz");
+    view.bubble.remove();
+    const avatar = view.row.querySelector(".db-widget__avatar--message");
+    if (avatar) avatar.remove();
+    const stack = element("div", "db-widget__component-stack db-widget__career-quiz-stack");
+    const card = element("section", "db-widget__career-quiz-card");
+    card.setAttribute("aria-label", "Help me choose");
+
+    const header = element("header", "db-widget__career-quiz-header");
+    header.appendChild(element("h2", "db-widget__career-quiz-title", "Help me choose"));
+    const close = createButton("×", "db-widget__career-quiz-close", closeCareerQuiz);
+    close.setAttribute("aria-label", "Close Help me choose");
+    header.appendChild(close);
+
+    const body = element("div", "db-widget__career-quiz-body");
+    const live = element("p", "db-widget__sr-only");
+    live.setAttribute("aria-live", "polite");
+    const results = element("div", "db-widget__career-quiz-results");
+    card.append(header, body, live);
+    stack.append(card, results);
+    view.content.appendChild(stack);
+    state.careerQuizWidget = {
+      view,
+      row: view.row,
+      card,
+      body,
+      live,
+      results,
+      mode: "idle",
+      step: 0,
+      payload: null,
+      message: "",
+      actions: [],
+      components: [],
+      busy: false,
+      retryMessage: "",
+      chip: null,
+      detailRequested: false,
+      leadConfirmation: "",
+    };
+    anchorBotMessage(view.row);
+    return state.careerQuizWidget;
+  }
+
+  function careerQuizButton(label, className, handler) {
+    const button = createButton(label, className, handler);
+    button.disabled = Boolean(state.careerQuizWidget && state.careerQuizWidget.busy);
+    return button;
+  }
+
+  async function abandonPersistedCareerQuizFlow() {
+    if (!state.sessionId) {
+      applyActiveFlow(null);
+      forgetCareerQuizPage();
+      return;
+    }
+    await fetchJson("/api/widget/context/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id: state.sessionId }),
+    });
+    applyActiveFlow(null);
+    state.activeFlowResumeKey = "";
+    forgetCareerQuizPage();
+  }
+
+  function removeCareerQuizWidget() {
+    const widget = state.careerQuizWidget;
+    if (widget && widget.row.isConnected) widget.row.remove();
+    state.careerQuizWidget = null;
+  }
+
+  async function closeCareerQuiz() {
+    const widget = state.careerQuizWidget;
+    if (!widget || widget.busy) return;
+    const unfinished = Boolean(state.activeFlow && state.activeFlow.tool === "career_quiz");
+    widget.busy = true;
+    renderCareerQuizWidget();
+    try {
+      if (unfinished) await abandonPersistedCareerQuizFlow();
+      else forgetCareerQuizPage();
+      removeCareerQuizWidget();
+      state.conversationStarted = false;
+      await hydratePageContext();
+      if (state.starter) {
+        state.messages.appendChild(state.starter);
+        state.starter.hidden = false;
+        refreshResponsiveActionLayouts();
+      }
+    } catch (error) {
+      widget.busy = false;
+      widget.mode = "error";
+      widget.message = "I couldn’t close this quiz just now. Please try again.";
+      renderCareerQuizWidget();
+      console.warn("DegreeBaba could not close the Career Quiz", error);
+    }
+  }
+
+  function requestCareerQuizStep(message, options = {}) {
+    const widget = ensureCareerQuizWidget();
+    if (widget.busy) return;
+    if (message === "tool:career_quiz") rememberCareerQuizPage();
+    widget.busy = true;
+    widget.retryMessage = message;
+    widget.detailRequested = options.detail === true;
+    renderCareerQuizWidget();
+    sendMessage(message, {
+      chip: options.chip || null,
+      displayUser: false,
+      showTyping: false,
+      keepStarter: false,
+      blurInput: false,
+      onPayload: (payload) => updateCareerQuizWidget(payload),
+      onError: (payload) => {
+        widget.busy = false;
+        widget.mode = "error";
+        widget.message = payload.message;
+        renderCareerQuizWidget();
+      },
+    });
+  }
+
+  function renderCareerQuizProgress(widget) {
+    const progress = element("div", "db-widget__career-quiz-progress");
+    const track = element("div", "db-widget__career-quiz-progress-track");
+    track.setAttribute("role", "progressbar");
+    track.setAttribute("aria-label", "Help me choose progress");
+    track.setAttribute("aria-valuemin", "0");
+    track.setAttribute("aria-valuemax", String(CAREER_QUIZ_TOTAL_STEPS));
+    track.setAttribute("aria-valuenow", String(widget.step));
+    const fill = element("span", "db-widget__career-quiz-progress-fill");
+    fill.style.setProperty(
+      "--db-career-quiz-progress",
+      `${widget.step / CAREER_QUIZ_TOTAL_STEPS * 100}%`,
+    );
+    track.appendChild(fill);
+    progress.append(track, element(
+      "strong",
+      "db-widget__career-quiz-progress-label",
+      `${widget.step} of ${CAREER_QUIZ_TOTAL_STEPS}`,
+    ));
+    return progress;
+  }
+
+  function renderCareerQuizQuestion(widget, content) {
+    content.appendChild(renderCareerQuizProgress(widget));
+    content.appendChild(element(
+      "h3",
+      "db-widget__career-quiz-question",
+      careerQuizQuestionText(widget.message),
+    ));
+    const options = element("div", "db-widget__career-quiz-options");
+    widget.actions.forEach((action) => {
+      options.appendChild(careerQuizButton(action.label, "db-widget__career-quiz-option", () => {
+        requestCareerQuizStep(action.message);
+      }));
+    });
+    content.appendChild(options);
+  }
+
+  function renderCareerQuizRecommendations(widget) {
+    widget.results.replaceChildren();
+    widget.components.forEach((component) => {
+      if (["card_list", "finder_results"].includes(component.type)) {
+        (component.cards || component.items || component.results || []).slice(0, 3).forEach((card) => {
+          const rendered = renderComponent(card);
+          if (rendered) widget.results.appendChild(rendered);
+        });
+        return;
+      }
+      const rendered = renderComponent(component);
+      if (rendered) widget.results.appendChild(rendered);
+    });
+    if (widget.mode === "complete" && widget.actions.length) {
+      const actions = element("div", "db-widget__career-quiz-result-actions");
+      widget.actions.slice(0, 3).forEach((action, index) => {
+        actions.appendChild(careerQuizButton(
+          action.label,
+          index === 0 ? "db-widget__career-quiz-primary" : "db-widget__career-quiz-secondary",
+          () => handleAction(action),
+        ));
+      });
+      widget.results.appendChild(actions);
+    }
+  }
+
+  function renderCareerQuizResult(widget, content) {
+    const result = element("div", "db-widget__career-quiz-result");
+    result.appendChild(element("span", "db-widget__career-quiz-result-check", "✓"));
+    result.appendChild(element(
+      "p",
+      "db-widget__career-quiz-result-copy",
+      widget.message || "Your best-fit area is ready.",
+    ));
+    content.appendChild(result);
+    if (widget.leadConfirmation) {
+      content.appendChild(element(
+        "p",
+        "db-widget__career-quiz-confirmation",
+        widget.leadConfirmation,
+      ));
+    }
+    if (widget.mode === "partial") {
+      content.appendChild(careerQuizButton(
+        "Continue to full result",
+        "db-widget__career-quiz-primary",
+        () => requestCareerQuizStep("tool:continue", { detail: true }),
+      ));
+    } else if (widget.mode === "gated") {
+      content.appendChild(careerQuizButton(
+        "Continue to full result",
+        "db-widget__career-quiz-primary",
+        () => openLeadPanel({
+          source: "career_quiz_gate",
+          label: "Continue to full result",
+          requireName: true,
+          careerQuizWidget: true,
+        }),
+      ));
+    }
+  }
+
+  function renderCareerQuizWidget() {
+    const widget = state.careerQuizWidget;
+    if (!widget || !widget.row.isConnected) return;
+    widget.body.replaceChildren();
+    widget.results.replaceChildren();
+    const content = element("div", "db-widget__career-quiz-stage");
+    if (widget.mode === "question") {
+      renderCareerQuizQuestion(widget, content);
+    } else if (["partial", "gated", "complete"].includes(widget.mode)) {
+      renderCareerQuizResult(widget, content);
+    } else if (widget.mode === "idle") {
+      content.append(
+        element("p", "db-widget__career-quiz-supporting", "Answer 5 quick questions and we’ll point you to your best-fit field."),
+      );
+    } else {
+      content.append(
+        element("h3", "db-widget__career-quiz-question", "The quiz could not continue."),
+        element("p", "db-widget__career-quiz-supporting", widget.message || "Please try again."),
+        careerQuizButton("Try again", "db-widget__career-quiz-primary", () => {
+          requestCareerQuizStep(widget.retryMessage || "tool:career_quiz");
+        }),
+      );
+    }
+    if (widget.busy) {
+      content.classList.add("db-widget__career-quiz-stage--busy");
+      content.setAttribute("aria-busy", "true");
+      content.appendChild(element("span", "db-widget__career-quiz-loading", "Updating…"));
+    }
+    widget.body.appendChild(content);
+    if (widget.mode === "complete") renderCareerQuizRecommendations(widget);
+    widget.live.textContent = widget.mode === "question"
+      ? `Help me choose question ${widget.step} of ${CAREER_QUIZ_TOTAL_STEPS}`
+      : widget.mode === "complete"
+        ? "Help me choose completed"
+        : "Help me choose updated";
+  }
+
+  function updateCareerQuizWidget(payload) {
+    const widget = ensureCareerQuizWidget();
+    const safePayload = payload && typeof payload === "object" ? payload : {};
+    const flow = careerQuizFlowMetadata(safePayload);
+    const rawFlow = activeFlowMetadata(safePayload);
+    widget.busy = false;
+    widget.payload = safePayload;
+    widget.message = String(safePayload.message || safePayload.text || "").trim();
+    widget.actions = payloadActions(
+      safePayload,
+      Array.isArray(safePayload.components) ? safePayload.components : [],
+    ).map(normalizedAction).filter((action) => action && action.label);
+    widget.components = (Array.isArray(safePayload.components) ? safePayload.components : [])
+      .filter((component) => component && !["quick_actions", "lead_cta"].includes(component.type));
+    applyActionMetadata(widget.actions);
+    if (rawFlow) applyActiveFlow(rawFlow);
+
+    const step = String(flow && flow.step || rawFlow && rawFlow.step || "");
+    if (/^q\d+$/i.test(step)) {
+      rememberCareerQuizPage();
+      widget.mode = "question";
+      widget.step = careerQuizQuestionNumber(step);
+    } else if (step === "partial_reveal") {
+      widget.mode = "partial";
+      widget.step = CAREER_QUIZ_TOTAL_STEPS;
+    } else if (step === "await_lead") {
+      widget.mode = "gated";
+      widget.step = CAREER_QUIZ_TOTAL_STEPS;
+    } else if (step === "reveal") {
+      forgetCareerQuizPage();
+      widget.mode = "complete";
+      widget.step = CAREER_QUIZ_TOTAL_STEPS;
+    } else if (step === "exit") {
+      forgetCareerQuizPage();
+      removeCareerQuizWidget();
+      return;
+    } else {
+      forgetCareerQuizPage();
+      widget.mode = "error";
+    }
+    renderCareerQuizWidget();
+    anchorBotMessage(widget.row);
+    if (step === "await_lead" && widget.detailRequested) {
+      widget.detailRequested = false;
+      openLeadPanel({
+        source: "career_quiz_gate",
+        label: "Continue to full result",
+        requireName: true,
+        careerQuizWidget: true,
+      });
+    }
+  }
+
+  function openCareerQuiz(action) {
+    state.conversationStarted = true;
+    if (state.starter) state.starter.hidden = true;
+    deactivateGuidedActions();
+    transitionNavigation("tool");
+    const widget = ensureCareerQuizWidget();
+    widget.chip = action || widget.chip;
+    renderCareerQuizWidget();
+    anchorBotMessage(widget.row);
+    requestCareerQuizStep("tool:career_quiz", { chip: widget.chip });
   }
 
   function renderComponent(component) {
@@ -2749,6 +3131,9 @@
     }
     const hadActiveFlow = Boolean(state.activeFlow);
     const hadRoiFlow = Boolean(state.activeFlow && state.activeFlow.tool === "roi");
+    const hadCareerQuizFlow = Boolean(
+      state.activeFlow && state.activeFlow.tool === "career_quiz",
+    );
     state.lastMessage = message;
     state.input.value = "";
     if (state.send) state.send.classList.remove("db-widget__send--active");
@@ -2819,10 +3204,15 @@
       if (hadActiveFlow && !activeFlowMetadata(payload)) applyActiveFlow(null);
       if (typeof options.onPayload === "function") options.onPayload(payload);
       else if (roiFlowMetadata(payload)) updateRoiWidget(payload);
+      else if (careerQuizFlowMetadata(payload)) updateCareerQuizWidget(payload);
       else {
         if (hadRoiFlow && state.roiWidget) {
           state.roiWidget.collapsed = true;
           renderRoiWidget();
+        }
+        if (hadCareerQuizFlow && state.careerQuizWidget) {
+          forgetCareerQuizPage();
+          removeCareerQuizWidget();
         }
         renderBotPayload(payload);
       }
@@ -2917,6 +3307,7 @@
       ? payload.active_flow
       : null;
     const roiOrigin = storedRoiPageKey();
+    const careerQuizOrigin = storedCareerQuizPageKey();
     if (
       activeFlow && String(activeFlow.tool || "") === "roi" &&
       roiOrigin && roiOrigin !== currentPageKey()
@@ -2927,6 +3318,18 @@
         return loadGuideContext(entityReference, logicalType);
       } catch (error) {
         console.warn("DegreeBaba could not reset ROI after the page context changed", error);
+      }
+    }
+    if (
+      activeFlow && String(activeFlow.tool || "") === "career_quiz" &&
+      careerQuizOrigin && careerQuizOrigin !== currentPageKey()
+    ) {
+      try {
+        await abandonPersistedCareerQuizFlow();
+        state.conversationStarted = false;
+        return loadGuideContext(entityReference, logicalType);
+      } catch (error) {
+        console.warn("DegreeBaba could not reset the Career Quiz after the page context changed", error);
       }
     }
     const resumeResponse = activeFlow && activeFlow.response && typeof activeFlow.response === "object"
@@ -2950,6 +3353,9 @@
     if (shouldResume) {
       state.activeFlowResumeKey = resumeKey;
       if (String(activeFlow.tool || "") === "roi") updateRoiWidget(resumeResponse);
+      else if (String(activeFlow.tool || "") === "career_quiz") {
+        updateCareerQuizWidget(resumeResponse);
+      }
       else renderBotPayload(resumeResponse);
     }
     return state.guideBundle;
@@ -3710,6 +4116,7 @@
   function openLeadPanel(options = {}) {
     const isApplication = /apply/i.test(String(options.label || ""));
     const isRoiResult = options.roiWidget === true;
+    const isCareerQuizResult = options.careerQuizWidget === true;
     const requiresName = options.requireName === true || state.toolLeadRequiresName;
     const actionMeta = normalizedAction(options.chip || options.component) || {};
     transitionNavigation("lead");
@@ -3717,7 +4124,13 @@
       emitAnalytics(isApplication ? "apply_clicked" : "counsellor_clicked", null);
     }
     const body = openOverlay(
-      isRoiResult ? "Your detailed ROI" : isApplication ? "Start your application" : "Talk to a counsellor",
+      isRoiResult
+        ? "Your detailed ROI"
+        : isCareerQuizResult
+          ? "Your program matches"
+          : isApplication
+            ? "Start your application"
+            : "Talk to a counsellor",
       "db-widget__detail-overlay db-widget__lead-overlay",
     );
     const panel = element("section", "db-widget__detail-panel db-widget__lead-panel");
@@ -3730,6 +4143,8 @@
       "",
       isRoiResult
         ? "Unlock your detailed ROI result"
+        : isCareerQuizResult
+          ? "Unlock your best-fit program matches"
         : isApplication
           ? "Take the next step with an admissions counsellor"
           : "Talk to a real admissions counsellor",
@@ -3739,6 +4154,8 @@
       "",
       isRoiResult
         ? "Share your details to view the full estimate and get help understanding the result."
+        : isCareerQuizResult
+          ? "Share your details to see the three published programs matched to your quiz result."
         : "Share your phone number and a DegreeBaba counsellor can help with fees, eligibility, and next steps.",
     ));
     const form = element("form", "db-widget__lead-form");
@@ -3760,7 +4177,13 @@
     const submit = element(
       "button",
       "db-widget__lead-button",
-      isRoiResult ? "View detailed result" : isApplication ? "Continue with a counsellor" : "Request a callback",
+      isRoiResult
+        ? "View detailed result"
+        : isCareerQuizResult
+          ? "View my matches"
+          : isApplication
+            ? "Continue with a counsellor"
+            : "Request a callback",
     );
     submit.type = "submit";
     if (requiresName) form.appendChild(name);
@@ -3819,6 +4242,9 @@
           if (options.roiWidget && state.roiWidget) {
             state.roiWidget.leadConfirmation = response.message || "Your details are saved.";
             updateRoiWidget(response.response);
+          } else if (options.careerQuizWidget && state.careerQuizWidget) {
+            state.careerQuizWidget.leadConfirmation = response.message || "Your details are saved.";
+            updateCareerQuizWidget(response.response);
           } else {
             renderBotPayload({
               message: response.message || "Thanks — your details are saved.",
@@ -3828,7 +4254,7 @@
         }
       } catch (error) {
         console.warn("DegreeBaba phone-only lead endpoint unavailable; using chat funnel", error);
-        if (options.roiWidget) {
+        if (options.roiWidget || options.careerQuizWidget) {
           submit.disabled = false;
           status.textContent = "I couldn’t save that just now. Please check your connection and try again.";
         } else {
