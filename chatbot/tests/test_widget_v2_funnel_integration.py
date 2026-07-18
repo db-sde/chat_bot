@@ -197,7 +197,7 @@ def test_guide_context_returns_persisted_session_opening_and_navigation(
         (
             {"page_type": "university", "entity_id": "uni-nmims"},
             "page:university",
-            ["programs_here", "starting_fees", "placement_support"],
+            ["programs_here", "placement_support", "counsellor"],
         ),
         (
             {"page_type": "course", "entity_id": "course-nmims-mca"},
@@ -263,9 +263,8 @@ def test_opening_chips_are_filtered_by_catalog_v3_data(client: TestClient) -> No
     }
     assert "reviews" not in university_ids
     assert "average_rating" not in university_ids
-    assert {"placement_support", "starting_fees", "why_choose"}.issubset(
-        university_ids
-    )
+    assert {"placement_support", "why_choose"}.issubset(university_ids)
+    assert "starting_fees" not in university_ids
     assert "specializations" not in course_ids
     assert "compare_program" in course_ids
     assert "reviews" not in specialization_ids
@@ -348,7 +347,11 @@ def test_guide_chip_post_persists_progress_and_suppresses_completed_action(
     session_id = "widget-v2-chip-progress"
     context = client.get(
         "/api/widget/guide/context",
-        params={"session_id": session_id, "page_type": "homepage"},
+        params={
+            "session_id": session_id,
+            "page_type": "course",
+            "entity_id": "course-nmims-mca",
+        },
     )
     assert context.status_code == 200
 
@@ -356,8 +359,9 @@ def test_guide_chip_post_persists_progress_and_suppresses_completed_action(
         "/api/widget/guide/chips",
         json={
             "session_id": session_id,
-            "page_type": "homepage",
-            "surface": "page:home",
+            "page_type": "course",
+            "surface": "page:course",
+            "entity_id": "course-nmims-mca",
             "completed_chip_id": "fees_emi",
             "config_version": context.json()["opening"]["config_version"],
             "answer_state": "fees",

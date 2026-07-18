@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-18-chip-ux",
+  "version": "2026-07-18-chip-flow-v1",
   "chips": {
     "browse_universities": {
       "handler": "list_universities",
@@ -76,12 +76,6 @@
     "fees_across": {
       "handler": "get_fees",
       "label": "💸 Fees across universities",
-      "funnel_stage": "bottom",
-      "requires": ["fees"]
-    },
-    "starting_fees": {
-      "handler": "get_fees",
-      "label": "💰 Fees & EMI",
       "funnel_stage": "bottom",
       "requires": ["fees"]
     },
@@ -233,8 +227,6 @@
       ],
       "more": [
         "compare_universities",
-        "fees_emi",
-        "roi_tool",
         "counsellor"
       ]
     },
@@ -249,7 +241,6 @@
       "more": [
         "compare_top",
         "careers",
-        "roi_tool",
         "counsellor"
       ]
     },
@@ -257,16 +248,15 @@
       "funnel_stage": "mid",
       "top": [
         "programs_here",
-        "starting_fees",
         "placement_support",
-        "reviews"
+        "reviews",
+        "counsellor"
       ],
       "more": [
         "approvals",
         "why_choose",
         "admission_process",
         "compare_others",
-        "counsellor",
         "average_rating"
       ]
     },
@@ -286,7 +276,6 @@
         "syllabus",
         "apply_now",
         "compare_program",
-        "roi_tool",
         "counsellor"
       ]
     },
@@ -305,8 +294,7 @@
         "compare_specializations",
         "syllabus",
         "apply_now",
-        "counsellor",
-        "roi_tool"
+        "counsellor"
       ]
     },
     "card:university": {
@@ -346,8 +334,8 @@
       "follow": ["careers_from_syllabus", "eligibility", "apply_now"]
     },
     "answer:validity": {
-      "funnel_stage": "bottom",
-      "follow": ["see_fees", "eligibility", "apply_now"]
+      "funnel_stage": "top",
+      "follow": ["browse_programs", "counsellor"]
     },
     "answer:approvals": {
       "funnel_stage": "bottom",
@@ -359,15 +347,15 @@
     },
     "answer:average_rating": {
       "funnel_stage": "bottom",
-      "follow": ["reviews", "fees_emi", "apply_now", "counsellor"]
+      "follow": ["reviews", "apply_now", "counsellor"]
     },
     "answer:placement": {
       "funnel_stage": "bottom",
-      "follow": ["fees_emi", "roi_tool", "apply_now"]
+      "follow": ["fees_emi", "apply_now"]
     },
     "answer:overview": {
       "funnel_stage": "bottom",
-      "follow": ["reviews", "starting_fees", "compare_others", "counsellor"]
+      "follow": ["reviews", "compare_others", "counsellor"]
     },
     "answer:admissions": {
       "funnel_stage": "bottom",
@@ -383,7 +371,7 @@
     },
     "tool:reveal": {
       "funnel_stage": "bottom",
-      "follow": ["compare", "apply_now", "counsellor"]
+      "follow": ["compare", "apply_now", "counsellor", "roi_tool"]
     }
   },
   "faq_chips": {

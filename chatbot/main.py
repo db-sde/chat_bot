@@ -785,6 +785,9 @@ class ChatbotService:
             result.state.navigation.surface = (
                 rendered_action.surface or result.state.navigation.surface
             )
+            result.state.navigation.current_node = (
+                rendered_action.surface or result.state.navigation.current_node
+            )
             result.state.navigation.config_version = (
                 rendered_action.config_version or result.state.navigation.config_version
             )
@@ -1681,45 +1684,6 @@ async def widget_stylesheet() -> FileResponse:
 async def widget_demo() -> FileResponse:
     return FileResponse(WIDGET_DIR / "demo.html", media_type="text/html")
 
-
-@app.get("/widget/prototype", include_in_schema=False)
-async def guided_prototype_redirect() -> RedirectResponse:
-    """Keep relative simulator assets stable when the short URL is opened."""
-
-    return RedirectResponse(
-        url="/widget/prototype/",
-        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
-    )
-
-
-@app.get("/widget/prototype/", include_in_schema=False)
-@app.get("/widget/prototype/index.html", include_in_schema=False)
-async def guided_prototype() -> FileResponse:
-    """Serve the isolated guided-navigation testing simulator."""
-
-    return FileResponse(WIDGET_DIR / "prototype" / "index.html", media_type="text/html")
-
-
-@app.get("/prototype.css", include_in_schema=False)
-@app.get("/widget/prototype/prototype.css", include_in_schema=False)
-async def guided_prototype_stylesheet() -> FileResponse:
-    return FileResponse(
-        WIDGET_DIR / "prototype" / "prototype.css",
-        media_type="text/css",
-        headers={"Cache-Control": "no-store"},
-    )
-
-
-@app.get("/prototype.js", include_in_schema=False)
-@app.get("/widget/prototype/prototype.js", include_in_schema=False)
-async def guided_prototype_script() -> FileResponse:
-    return FileResponse(
-        WIDGET_DIR / "prototype" / "prototype.js",
-        media_type="application/javascript",
-        headers={"Cache-Control": "no-store"},
-    )
-
-
 @app.get("/api/widget/guide/context")
 async def widget_guide_context_endpoint(
     request: Request,
@@ -1843,8 +1807,10 @@ async def widget_guide_chips_endpoint(
             ),
             service.catalog,
         ),
+        completed_chip_id=command.completed_chip_id,
     )
     state_value.navigation.surface = followup.surface
+    state_value.navigation.current_node = followup.surface
     state_value.navigation.config_version = followup.config_version
     await service.session_store.set(state_value)
     correlation_id = logging_setup.correlation_id(

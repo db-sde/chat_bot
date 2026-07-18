@@ -7,10 +7,13 @@ import pytest
 
 from funnel import (
     DEFAULT_CHIP_MAP_PATH,
+    DEFAULT_FLOW_MAP_PATH,
     ChipEngine,
     ChipJourneyState,
     ChipMapLoadError,
     ChipMapStore,
+    FlowMapLoadError,
+    FlowMapStore,
     FunnelStage,
     JourneyEngine,
     ResolvedChip,
@@ -33,22 +36,21 @@ def _ids(chips: object) -> list[str]:
         (
             "homepage",
             ["browse_universities", "browse_programs", "career_quiz_tool", "validity"],
-            ["compare_universities", "fees_emi", "roi_tool", "counsellor"],
+            ["compare_universities", "counsellor"],
         ),
         (
             "pillar",
             ["list_providers", "fees_across", "specialization_quiz_tool", "check_eligibility"],
-            ["compare_top", "careers", "roi_tool", "counsellor"],
+            ["compare_top", "careers", "counsellor"],
         ),
         (
             "university",
-            ["programs_here", "starting_fees", "placement_support", "reviews"],
+            ["programs_here", "placement_support", "reviews", "counsellor"],
             [
                 "approvals",
                 "why_choose",
                 "admission_process",
                 "compare_others",
-                "counsellor",
                 "average_rating",
             ],
         ),
@@ -63,7 +65,6 @@ def _ids(chips: object) -> list[str]:
                 "syllabus",
                 "apply_now",
                 "compare_program",
-                "roi_tool",
                 "counsellor",
             ],
         ),
@@ -78,7 +79,6 @@ def _ids(chips: object) -> list[str]:
                 "syllabus",
                 "apply_now",
                 "counsellor",
-                "roi_tool",
             ],
         ),
     ],
@@ -93,7 +93,7 @@ def test_journey_engine_returns_only_configured_opening_sets(
 
     assert _ids(result.top) == top
     assert _ids(result.more) == more
-    assert result.config_version == "2026-07-18-chip-ux"
+    assert result.config_version == "2026-07-18-chip-flow-v1"
     assert not result.missing_surface
 
 
@@ -103,7 +103,7 @@ def test_catalog_v3_chip_labels_are_short_and_action_oriented(
     chips = store.snapshot().chips
 
     assert chips["programs_here"].label == "📚 Programs offered"
-    assert chips["starting_fees"].label == "💰 Fees & EMI"
+    assert "starting_fees" not in chips
     assert chips["eligibility"].label == "✅ Eligibility"
     assert chips["syllabus"].label == "📖 Curriculum"
     assert chips["scholarship_tool"].label == "🎓 Scholarships"
@@ -119,7 +119,7 @@ def test_catalog_v3_chip_labels_are_short_and_action_oriented(
         ("eligibility_no", ["eligible_programs", "counsellor"]),
         ("careers", ["see_fees", "roi_tool", "apply_now"]),
         ("syllabus", ["careers_from_syllabus", "eligibility", "apply_now"]),
-        ("validity", ["see_fees", "eligibility", "apply_now"]),
+        ("validity", ["browse_programs", "counsellor"]),
         ("reviews", ["fees_emi", "apply_now", "counsellor"]),
         ("comparison", ["roi_tool", "apply_now", "counsellor"]),
     ],
@@ -130,7 +130,7 @@ def test_chip_engine_resolves_specified_answer_surfaces(
     expected: list[str],
 ) -> None:
     result = ChipEngine(store).lookup(
-        page_type="course",
+        page_type="homepage" if answer_state == "validity" else "course",
         answer_state=answer_state,
         interaction_count=1,
     )
@@ -196,6 +196,29 @@ def test_tool_reveal_uses_apply_counsellor_compare_priority(store: ChipMapStore)
     )
 
     assert _ids(result.chips)[:3] == ["apply_now", "counsellor", "compare"]
+    assert _ids(result.chips)[3:] == ["roi_tool"]
+
+
+def test_roi_is_only_declared_on_context_ready_followup_surfaces(
+    store: ChipMapStore,
+) -> None:
+    config = store.snapshot()
+    roi_surfaces = {
+        key
+        for key, surface in config.surfaces.items()
+        if "roi_tool" in surface.follow
+    }
+
+    assert roi_surfaces == {
+        "answer:fees",
+        "answer:careers",
+        "answer:comparison",
+        "tool:reveal",
+    }
+    assert all(
+        "roi_tool" not in (*surface.top, *surface.more)
+        for surface in config.surfaces.values()
+    )
 
 
 def test_completed_actions_are_suppressed_without_removing_all_conversion(
@@ -278,9 +301,102 @@ def test_invalid_hot_reload_keeps_last_good_snapshot(
     with caplog.at_level("WARNING"):
         snapshot = store.reload()
 
-    assert snapshot.version == "2026-07-18-chip-ux"
+    assert snapshot.version == "2026-07-18-chip-flow-v1"
     assert snapshot.chips["fees_emi"].handler == "get_fees"
     assert "keeping last-good config" in caplog.text
+
+
+def test_flow_map_exactly_covers_configured_chip_surfaces(store: ChipMapStore) -> None:
+    flow = FlowMapStore(store, DEFAULT_FLOW_MAP_PATH, auto_reload=False).snapshot()
+    chips = store.snapshot()
+
+    assert flow is not None
+    assert flow.version == chips.version
+    assert set(flow.surfaces) == set(chips.surfaces)
+    for key, surface in chips.surfaces.items():
+        assert set(flow.surfaces[key]) == set(
+            (*surface.top, *surface.more, *surface.follow)
+        )
+
+
+def test_flow_map_rejects_an_unknown_destination(
+    tmp_path: Path,
+) -> None:
+    chip_path = tmp_path / "chip_map.json"
+    flow_path = tmp_path / "flow_map.json"
+    chip_path.write_text(DEFAULT_CHIP_MAP_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    document = json.loads(DEFAULT_FLOW_MAP_PATH.read_text(encoding="utf-8"))
+    document["surfaces"]["page:home"]["validity"] = "answer:not_real"
+    flow_path.write_text(json.dumps(document), encoding="utf-8")
+    local_store = ChipMapStore(chip_path, auto_reload=False)
+
+    with pytest.raises(FlowMapLoadError, match="unknown surface"):
+        FlowMapStore(local_store, flow_path, auto_reload=False)
+
+
+def test_invalid_flow_hot_reload_keeps_last_good_snapshot(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    chip_path = tmp_path / "chip_map.json"
+    flow_path = tmp_path / "flow_map.json"
+    chip_path.write_text(DEFAULT_CHIP_MAP_PATH.read_text(encoding="utf-8"), encoding="utf-8")
+    document = json.loads(DEFAULT_FLOW_MAP_PATH.read_text(encoding="utf-8"))
+    flow_path.write_text(json.dumps(document), encoding="utf-8")
+    local_store = ChipMapStore(chip_path, auto_reload=False)
+    flow_store = FlowMapStore(local_store, flow_path, auto_reload=False)
+
+    document["surfaces"]["page:home"]["validity"] = "answer:not_real"
+    flow_path.write_text(json.dumps(document), encoding="utf-8")
+    with caplog.at_level("WARNING"):
+        snapshot = flow_store.reload()
+
+    assert snapshot.surfaces["page:home"]["validity"] == "answer:validity"
+    assert "keeping last-good config" in caplog.text
+
+
+def test_completed_chip_advances_the_persisted_flow_pointer(
+    store: ChipMapStore,
+) -> None:
+    state = {
+        "navigation": {
+            "current_node": "page:home",
+            "completed_actions": [],
+        }
+    }
+
+    result = ChipEngine(store).lookup(
+        page_type="homepage",
+        answer_state="validity",
+        completed_chip_id="validity",
+        interaction_count=1,
+        state=state,
+    )
+
+    assert result.surface == "answer:validity"
+    assert _ids(result.chips) == ["browse_programs", "counsellor"]
+    assert state["navigation"]["current_node"] == "answer:validity"
+
+
+def test_terminal_chip_short_circuits_to_conversion_chips(
+    store: ChipMapStore,
+) -> None:
+    state = {
+        "navigation": {
+            "current_node": "page:home",
+            "completed_actions": ["counsellor"],
+        }
+    }
+
+    result = ChipEngine(store).lookup(
+        page_type="homepage",
+        completed_chip_id="counsellor",
+        interaction_count=1,
+        state=state,
+    )
+
+    assert result.funnel_stage is FunnelStage.BOTTOM
+    assert _ids(result.chips) == ["apply_now"]
 
 
 def test_chip_map_requires_a_version_bump_for_changed_content(

@@ -114,6 +114,7 @@ def sync_page_navigation(
         navigation.completed_actions.clear()
         navigation.step = PAGE_STEPS[normalized]
         navigation.surface = PAGE_SURFACES[normalized]
+        navigation.current_node = PAGE_SURFACES[normalized]
     navigation.page_type = normalized
     navigation.entity_id = next_entity_id
     if normalized in {"homepage", "pillar"}:
@@ -131,6 +132,8 @@ def sync_page_navigation(
         navigation.specialization_id = entity_id or navigation.specialization_id
     if config_version:
         navigation.config_version = config_version
+    if not navigation.current_node:
+        navigation.current_node = PAGE_SURFACES[normalized]
     return navigation
 
 

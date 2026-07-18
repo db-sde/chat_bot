@@ -232,6 +232,7 @@ class NavigationState(StateModel):
     step: NavigationStep = NavigationStep.HOMEPAGE
     page_type: str = "homepage"
     surface: str = "page:home"
+    current_node: str = "page:home"
     entity_id: str | None = None
     university_id: str | None = None
     course_id: str | None = None

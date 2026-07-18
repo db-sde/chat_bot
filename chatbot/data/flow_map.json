@@ -1,0 +1,155 @@
+{
+  "version": "2026-07-18-chip-flow-v1",
+  "surfaces": {
+    "page:home": {
+      "browse_universities": "SPLIT",
+      "browse_programs": "SPLIT",
+      "career_quiz_tool": "tool:reveal",
+      "validity": "answer:validity",
+      "compare_universities": "answer:comparison",
+      "counsellor": "TERMINAL"
+    },
+    "page:pillar": {
+      "list_providers": "SPLIT",
+      "fees_across": "answer:fees",
+      "specialization_quiz_tool": "tool:reveal",
+      "check_eligibility": "answer:eligibility_yes",
+      "compare_top": "answer:comparison",
+      "careers": "answer:careers",
+      "counsellor": "TERMINAL"
+    },
+    "page:university": {
+      "programs_here": "SPLIT",
+      "placement_support": "answer:placement",
+      "reviews": "answer:reviews",
+      "counsellor": "TERMINAL",
+      "approvals": "answer:approvals",
+      "why_choose": "answer:overview",
+      "admission_process": "answer:admissions",
+      "compare_others": "answer:comparison",
+      "average_rating": "answer:average_rating"
+    },
+    "page:course": {
+      "fees_emi": "answer:fees",
+      "eligibility": "answer:eligibility_yes",
+      "specializations": "SPLIT",
+      "reviews": "answer:reviews",
+      "careers": "answer:careers",
+      "placement_support": "answer:placement",
+      "admission_process": "answer:admissions",
+      "scholarship_tool": "tool:reveal",
+      "syllabus": "answer:syllabus",
+      "apply_now": "TERMINAL",
+      "compare_program": "answer:comparison",
+      "counsellor": "TERMINAL"
+    },
+    "page:specialization": {
+      "careers": "answer:careers",
+      "fees_emi": "answer:fees",
+      "eligibility": "answer:eligibility_yes",
+      "placement_support": "answer:placement",
+      "admission_process": "answer:admissions",
+      "reviews": "answer:reviews",
+      "scholarship_tool": "tool:reveal",
+      "compare_specializations": "answer:comparison",
+      "syllabus": "answer:syllabus",
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
+    },
+    "card:university": {
+      "programs_here": "SPLIT",
+      "approvals": "answer:approvals",
+      "reviews": "answer:reviews"
+    },
+    "card:course": {
+      "fees_emi": "answer:fees",
+      "eligibility": "answer:eligibility_yes",
+      "specializations": "SPLIT",
+      "reviews": "answer:reviews"
+    },
+    "card:specialization": {
+      "careers": "answer:careers",
+      "fees_emi": "answer:fees",
+      "eligibility": "answer:eligibility_yes",
+      "reviews": "answer:reviews"
+    },
+    "answer:fees": {
+      "eligibility": "answer:eligibility_yes",
+      "roi_tool": "tool:reveal",
+      "counsellor": "TERMINAL"
+    },
+    "answer:eligibility_yes": {
+      "admission_steps": "answer:admissions",
+      "scholarship_tool": "tool:reveal",
+      "apply_now": "TERMINAL"
+    },
+    "answer:eligibility_no": {
+      "eligible_programs": "SPLIT",
+      "counsellor": "TERMINAL"
+    },
+    "answer:eligibility_borderline": {
+      "eligible_programs": "SPLIT",
+      "counsellor": "TERMINAL"
+    },
+    "answer:careers": {
+      "see_fees": "answer:fees",
+      "roi_tool": "tool:reveal",
+      "apply_now": "TERMINAL"
+    },
+    "answer:syllabus": {
+      "careers_from_syllabus": "answer:careers",
+      "eligibility": "answer:eligibility_yes",
+      "apply_now": "TERMINAL"
+    },
+    "answer:validity": {
+      "browse_programs": "SPLIT",
+      "counsellor": "TERMINAL"
+    },
+    "answer:approvals": {
+      "see_fees": "answer:fees",
+      "eligibility": "answer:eligibility_yes",
+      "apply_now": "TERMINAL"
+    },
+    "answer:reviews": {
+      "fees_emi": "answer:fees",
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
+    },
+    "answer:average_rating": {
+      "reviews": "answer:reviews",
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
+    },
+    "answer:placement": {
+      "fees_emi": "answer:fees",
+      "apply_now": "TERMINAL"
+    },
+    "answer:overview": {
+      "reviews": "answer:reviews",
+      "compare_others": "answer:comparison",
+      "counsellor": "TERMINAL"
+    },
+    "answer:admissions": {
+      "eligibility": "answer:eligibility_yes",
+      "see_fees": "answer:fees",
+      "apply_now": "TERMINAL"
+    },
+    "answer:comparison": {
+      "roi_tool": "tool:reveal",
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
+    },
+    "answer:no_specializations": {
+      "fees_emi": "answer:fees",
+      "eligibility": "answer:eligibility_yes",
+      "admissions": "answer:admissions",
+      "careers": "answer:careers"
+    },
+    "tool:reveal": {
+      "compare": "answer:comparison",
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL",
+      "roi_tool": "tool:reveal"
+    }
+  }
+}

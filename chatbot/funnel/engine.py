@@ -14,6 +14,7 @@ from .chip_config import (
     ChipMapStore,
     FunnelStage,
 )
+from .flow_config import SPLIT, TERMINAL, FlowMapStore
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ class ChipJourneyState:
     """Small integration boundary; persistence can be added to ConversationState later."""
 
     completed_actions: frozenset[str] = field(default_factory=frozenset)
+    current_node: str = ""
 
 
 def _resolved(chip_id: str, definition: ChipDefinition) -> ResolvedChip:
@@ -149,6 +151,30 @@ def _completed_actions(state: Any) -> frozenset[str]:
             if values:
                 return frozenset(str(value) for value in values)
     return frozenset()
+
+
+def _current_node(state: Any) -> str:
+    direct = _state_value(state, "current_node")
+    if direct:
+        return str(direct)
+    navigation = _state_value(state, "navigation")
+    nested = _state_value(navigation, "current_node")
+    return str(nested or "")
+
+
+def _set_current_node(state: Any, value: str) -> None:
+    if state is None or not value:
+        return
+    navigation = _state_value(state, "navigation")
+    target = navigation if navigation is not None else state
+    if isinstance(target, dict):
+        target["current_node"] = value
+        return
+    try:
+        target.current_node = value
+    except (AttributeError, TypeError):
+        # Frozen test-state adapters remain valid read-only integration boundaries.
+        return
 
 
 def _is_completed(
@@ -290,8 +316,18 @@ class JourneyEngine:
 class ChipEngine:
     """Resolve post-card/post-answer chips and apply deterministic progression."""
 
-    def __init__(self, store: ChipMapStore) -> None:
+    def __init__(
+        self,
+        store: ChipMapStore,
+        flow_store: FlowMapStore | None = None,
+    ) -> None:
         self.store = store
+        sibling_flow_map = store.path.with_name("flow_map.json")
+        self.flow_store = flow_store or (
+            FlowMapStore(store, sibling_flow_map, auto_reload=store.auto_reload)
+            if sibling_flow_map.exists()
+            else None
+        )
 
     @staticmethod
     def _surface_key(
@@ -321,17 +357,54 @@ class ChipEngine:
         *,
         state: Any = None,
         entity_context: Mapping[str, Any] | None = None,
+        completed_chip_id: str | None = None,
     ) -> FollowupChipSet:
         """Look up one follow surface and remove unavailable catalog actions."""
         config = self.store.snapshot()
-        surface_key = self._surface_key(
+        requested_surface = self._surface_key(
             page_type=page_type,
             card_type=card_type,
             answer_state=answer_state,
         )
+        surface_key = requested_surface
+        terminal = False
+        flow = (
+            self.flow_store.snapshot(version=config.version)
+            if self.flow_store is not None
+            else None
+        )
+        current_node = _current_node(state) or requested_surface
+        if flow is not None and completed_chip_id:
+            destination = flow.surfaces.get(current_node, {}).get(completed_chip_id)
+            if destination == TERMINAL:
+                terminal = True
+            elif destination == SPLIT:
+                # Picker resolution synchronises the concrete page/card node later.
+                pass
+            elif destination:
+                definition = config.chips.get(completed_chip_id)
+                conditional_eligibility = bool(
+                    definition is not None
+                    and definition.handler == "get_eligibility"
+                    and requested_surface.startswith("answer:eligibility_")
+                )
+                surface_key = requested_surface if conditional_eligibility else destination
+
+        if flow is not None and surface_key in flow.surfaces:
+            current_node = surface_key
+            _set_current_node(state, current_node)
+            transitions = flow.surfaces[current_node]
+            terminal = terminal or bool(
+                transitions and all(destination == TERMINAL for destination in transitions.values())
+            )
+
         surface = config.surfaces.get(surface_key)
         missing = surface is None or not surface.follow
-        if missing:
+        if terminal:
+            missing = False
+            stage = FunnelStage.BOTTOM
+            base = _resolve_many(config, config.progression.conversion_chips)
+        elif missing:
             logger.warning("Missing chip surface: %s; using safe defaults", surface_key)
             stage = (
                 config.surfaces.get(_page_surface(page_type)).funnel_stage

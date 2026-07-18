@@ -193,19 +193,18 @@ def test_v3_opening_chips_follow_published_entity_capabilities(
 
     assert [chip.id for chip in nmims_opening.top] == [
         "programs_here",
-        "starting_fees",
         "placement_support",
+        "counsellor",
     ]
     assert "reviews" not in {chip.id for chip in nmims_opening.top}
     assert [chip.id for chip in (*amity_opening.top, *amity_opening.more)] == [
         "programs_here",
-        "starting_fees",
         "placement_support",
         "reviews",
+        "counsellor",
         "approvals",
         "why_choose",
         "compare_others",
-        "counsellor",
         "average_rating",
     ]
     assert "specializations" not in {chip.id for chip in course_opening.top}

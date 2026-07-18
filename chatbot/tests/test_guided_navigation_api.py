@@ -324,21 +324,3 @@ def test_guide_routes_do_not_enter_existing_chat_pipeline(guide_client: TestClie
     assert context.status_code == catalog.status_code == comparison.status_code == 200
     process_turn.assert_not_awaited()
 
-
-def test_prototype_assets_have_isolated_stable_routes(guide_client: TestClient) -> None:
-    page = guide_client.get("/widget/prototype")
-    index = guide_client.get("/widget/prototype/index.html")
-    stylesheet = guide_client.get("/widget/prototype/prototype.css")
-    script = guide_client.get("/widget/prototype/prototype.js")
-
-    assert {
-        page.status_code,
-        index.status_code,
-        stylesheet.status_code,
-        script.status_code,
-    } == {200}
-    assert [response.status_code for response in page.history] == [307]
-    assert str(page.url).endswith("/widget/prototype/")
-    assert "text/html" in page.headers["content-type"]
-    assert "text/css" in stylesheet.headers["content-type"]
-    assert "application/javascript" in script.headers["content-type"]
