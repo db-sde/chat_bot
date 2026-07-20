@@ -52,6 +52,7 @@ from presentation.chips import catalog_chip_context, followup_payload, opening_p
 from presentation.experience import (
     catalog_options,
     context_from_entity,
+    context_from_state,
     finder_results,
     resolve_page_entity,
 )
@@ -2016,28 +2017,39 @@ async def widget_context_clear_endpoint(
 ) -> ContextClearResponse:
     service: ChatbotService = request.app.state.service
     state_value = await service.session_store.get_or_create(command.session_id)
-    state_value.focus.clear()
+    flow_only = command.scope == "flow"
+    if not flow_only:
+        state_value.focus.clear()
     state_value.pending_clarification = None
     if state_value.active_flow is not None:
         active_tool = state_value.active_flow.tool
         active_version = state_value.active_flow.version
-        service.tools.abandon(state_value, reason="context_clear")
+        reason = "tool_closed" if flow_only else "context_clear"
+        service.tools.abandon(state_value, reason=reason)
         service.emit_funnel_event(
             FLOW_ABANDONED,
             state_value,
             surface=f"tool:{active_tool}",
             funnel_stage="bottom",
             content_version=active_version or "not_applicable",
-            attributes={"tool": active_tool, "reason": "context_clear"},
+            attributes={"tool": active_tool, "reason": reason},
         )
-    opening = service.journey_engine.opening("homepage")
-    sync_page_navigation(
-        state_value,
-        page_type="homepage",
-        config_version=opening.config_version,
-    )
+    if not flow_only:
+        opening = service.journey_engine.opening("homepage")
+        sync_page_navigation(
+            state_value,
+            page_type="homepage",
+            config_version=opening.config_version,
+        )
     await service.session_store.set(state_value)
-    return ContextClearResponse(session_id=command.session_id, context=ResponseContext())
+    return ContextClearResponse(
+        session_id=command.session_id,
+        context=(
+            context_from_state(state_value, service.catalog)
+            if flow_only
+            else ResponseContext()
+        ),
+    )
 
 
 @app.get("/api/widget/page-context", response_model=PageContextResponse)

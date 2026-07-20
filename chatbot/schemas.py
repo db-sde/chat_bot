@@ -226,6 +226,9 @@ class FinderResponse(TransportModel):
 
 class ContextClearRequest(TransportModel):
     session_id: str = Field(min_length=1, max_length=200)
+    # "all" clears focus and resets navigation to the homepage. "flow" abandons
+    # only an active tool, leaving the page context the user is on intact.
+    scope: Literal["all", "flow"] = "all"
 
 
 class ContextClearResponse(TransportModel):

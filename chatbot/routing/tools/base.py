@@ -216,6 +216,15 @@ def _step_for(flow: ActiveFlow, steps: Sequence[ToolStep]) -> ToolStep | None:
     return next((step for step in steps if step.id == flow.step), None)
 
 
+def _step_position(step: ToolStep, steps: Sequence[ToolStep]) -> int | None:
+    """Return the 1-based position of one step inside the configured bank."""
+
+    for position, candidate in enumerate(steps, start=1):
+        if candidate.id == step.id:
+            return position
+    return None
+
+
 def _question_turn(
     flow: ActiveFlow,
     step: ToolStep,
@@ -224,6 +233,7 @@ def _question_turn(
     nudge: str = "",
     answered_step: str | None = None,
     replaced_tool: str | None = None,
+    steps: Sequence[ToolStep] = (),
 ) -> ToolTurn:
     action_pairs = [
         (
@@ -244,6 +254,13 @@ def _question_turn(
                     "step": step.id,
                     "lifecycle": "question",
                     "version": flow.version,
+                    # The rendered text collapses entry copy, nudge and prompt
+                    # into one string. Publish the parts separately so a client
+                    # can lay them out without re-deriving them.
+                    "prompt": step.prompt,
+                    "entry_copy": entry_copy or None,
+                    "step_index": _step_position(step, steps),
+                    "step_total": len(steps) or None,
                 }
             },
         ),
@@ -421,6 +438,7 @@ def enter(
         steps[0],
         entry_copy=definition.entry_copy,
         replaced_tool=replaced_tool,
+        steps=steps,
     )
 
 
@@ -578,6 +596,7 @@ def dispatch(
             flow,
             step,
             nudge="Please choose one of the available answers.",
+            steps=steps,
         )
 
     answer_id, answer_value, value_period = validated
@@ -596,6 +615,7 @@ def dispatch(
             flow,
             steps[index + 1],
             answered_step=step.id,
+            steps=steps,
         )
 
     flow.step = "compute"
@@ -746,7 +766,7 @@ def current(
             f"Unknown tool step {flow.step!r}.",
             content_version=content_version,
         )
-    return _question_turn(flow, step)
+    return _question_turn(flow, step, steps=steps)
 
 
 def resume_view(
