@@ -1177,6 +1177,9 @@
     var tid = beginTurn(chip && chip.label ? chip.label : 'Compare');
     postJson('/api/widget/guide/compare', { entity_ids: ids.slice(0, 3) }).then(function (card) {
       state.compare = [];
+      /* Two entities are on screen now — the single-entity context pill
+         from before the comparison would misleadingly point at only one. */
+      state.context = null;
       settleTurn(tid, [compareFrom(card)], null);
       emitAnalytics('card_shown', chip, { entity: analyticsEntity() });
       return loadFollowups('comparison', chip);
@@ -1302,7 +1305,12 @@
   /* "Compare" with fewer than two options selected opens a real picker
      instead of telling the user to do something the UI gives them no way
      to do. Picking two rows here compares by entity_id, same as tapping
-     "+ Compare" on two recommendation cards. */
+     "+ Compare" on two recommendation cards.
+
+     A user who taps "Compare" while already looking at something (a
+     university/course/specialization page) means "compare THIS against
+     something else" — not "let me pick two unrelated things from scratch".
+     So the entity they're already on pre-fills as the first side. */
   function openComparePicker(chip) {
     var kind = COMPARE_PICKER_KIND[ctxPageType()] || 'uni';
     state.picker = {
@@ -1311,26 +1319,54 @@
     };
     render();
     refreshPicker('');
+    preseedCompareWithCurrentEntity();
+  }
+
+  /* Only pre-fills when the page in view is the same kind of thing the
+     picker is choosing between, there's room for it, and it isn't already
+     in the list. Never invents a comparison side that isn't the real,
+     currently-resolved catalog entity. */
+  function preseedCompareWithCurrentEntity() {
+    if (state.compare.length) return;
+    var entityId = ctxEntityId();
+    if (!entityId) return;
+    ensureGuideBundle().then(function (bundle) {
+      if (!state.picker || !state.picker.compareMode) return;
+      if (state.compare.length) return;
+      var entity = bundle && bundle.entity;
+      if (!entity || entity.id !== entityId) return;
+      state.compare = [cardFrom(entity)];
+      render();
+    }).catch(function () {});
   }
 
   function pickCompareItem(row) {
-    var chip = state.picker && state.picker.chip;
-    state.picker = null;
-    state.pickerToken++;
-
     var entry = { entityId: row.id, title: row.name, mono: row.mono, bg: row.bg };
     var key = entry.entityId || entry.title;
-    var has = state.compare.find(function (c) { return (c.entityId || c.title) === key; });
-    if (has) { state.compare = state.compare.filter(function (c) { return (c.entityId || c.title) !== key; }); }
-    else if (state.compare.length >= 2) { state.compare = [state.compare[1], entry]; }
-    else { state.compare = state.compare.concat([entry]); }
+    var wasSelected = !!state.compare.find(function (c) { return (c.entityId || c.title) === key; });
 
-    /* Two selected from the picker: compare immediately, no extra tap. */
-    if (state.compare.length >= 2) { runGuidedComparison(chip || { label: 'Compare' }); return; }
+    if (wasSelected) {
+      /* Tapping an already-picked row un-picks it. This is purely a list
+         edit — the picker stays open so the user can choose someone else. */
+      state.compare = state.compare.filter(function (c) { return (c.entityId || c.title) !== key; });
+      renderPickerList();
+      return;
+    }
 
-    var tid = beginTurn(row.name);
-    settleTurn(tid, [{ kind: 'bot', text: 'Added ' + row.name + '. Pick one more to compare.' }],
-      [chip || { label: '⚖️ Compare', handler: 'compare', message: 'Compare' }]);
+    var chip = state.picker && state.picker.chip;
+    state.compare = state.compare.length >= 2
+      ? [state.compare[1], entry]
+      : state.compare.concat([entry]);
+
+    /* Two selected: compare immediately, no extra tap. */
+    if (state.compare.length >= 2) {
+      state.picker = null;
+      state.pickerToken++;
+      runGuidedComparison(chip || { label: 'Compare' });
+      return;
+    }
+
+    renderPickerList();
   }
 
   /* Selecting a catalog row is a deterministic focus change, not a chat turn. */
@@ -1945,10 +1981,6 @@
     var filtered = live ? src : src.filter(function(r){
       return !q || r.name.toLowerCase().includes(q) || (r.short||'').toLowerCase().includes(q);
     });
-    /* Popular is a backend signal. Without it the section would just repeat
-       the head of the list under a different heading. */
-    var popular = filtered.filter(function(r){ return r.pop; });
-    if (popular.length >= filtered.length) popular = [];
     var rowHtml = function(r) {
       return btn('db-picker-row',
         div('db-picker-mono',esc(r.mono),'style="background:'+r.bg+'"') +
@@ -1956,11 +1988,32 @@
         '','data-action="pickItem" data-key="'+esc(r.name)+'" data-kind="'+p.kind+'"'
       );
     };
-    if (p.loading && !filtered.length) return div('db-picker-empty','Loading…');
-    return (!q && popular.length ? div('db-picker-section-label','⭐ Popular') + popular.map(rowHtml).join('') : '') +
+
+    /* Compare mode: show which option(s) are already chosen up top, using the
+       same row markup, and keep them out of Popular/All below so nothing is
+       listed twice. */
+    var selectedHtml = '';
+    if (p.compareMode && state.compare.length) {
+      var chosenIds = {};
+      state.compare.forEach(function (c) { chosenIds[c.entityId || c.title] = true; });
+      filtered = filtered.filter(function (r) { return !chosenIds[r.id]; });
+      selectedHtml = div('db-picker-section-label', '✓ Selected (' + state.compare.length + '/2)') +
+        state.compare.map(function (c) {
+          return rowHtml({ id: c.entityId, name: c.title, mono: c.mono, bg: c.bg, meta: 'Tap to remove' });
+        }).join('');
+    }
+
+    /* Popular is a backend signal. Without it the section would just repeat
+       the head of the list under a different heading. */
+    var popular = filtered.filter(function(r){ return r.pop; });
+    if (popular.length >= filtered.length) popular = [];
+
+    if (p.loading && !filtered.length && !selectedHtml) return div('db-picker-empty','Loading…');
+    return selectedHtml +
+      (!q && popular.length ? div('db-picker-section-label','⭐ Popular') + popular.map(rowHtml).join('') : '') +
       div('db-picker-section-label','All') +
       filtered.map(rowHtml).join('') +
-      (filtered.length===0 ? div('db-picker-empty','Nothing matched. Try a shorter search.') : '');
+      (filtered.length===0 && !p.loading ? div('db-picker-empty','Nothing matched. Try a shorter search.') : '');
   }
 
   function renderPicker() {
@@ -2254,6 +2307,14 @@
     delegate('[data-action="pickItem"]', function(el){
       var name = el.getAttribute('data-key');
       var row = pickerRows().find(function(r){return r.name===name;});
+      /* A row already shown in "✓ Selected" isn't in the catalog rows (it
+         may be the current page's own entity, never fetched as a list row),
+         so fall back to the compare list itself to resolve the tap. */
+      if (!row && state.picker && state.picker.compareMode) {
+        row = state.compare
+          .map(function (c) { return { id: c.entityId, name: c.title, mono: c.mono, bg: c.bg }; })
+          .find(function (r) { return r.name === name; });
+      }
       if (!row) return;
       if (state.picker && state.picker.compareMode) pickCompareItem(row);
       else pickItem(row);
