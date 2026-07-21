@@ -105,10 +105,10 @@ def test_widget_assets_are_served_from_stable_embed_urls() -> None:
     assert script.status_code == 200
     assert "application/javascript" in script.headers["content-type"]
     assert "AUTO-GENERATED FILE" in script.text[:300]
-    assert "script.dataset.siteKey" in script.text
+    assert 'data-site-key' in script.text
     assert stylesheet.status_code == 200
     assert "text/css" in stylesheet.headers["content-type"]
-    assert ".db-widget" in stylesheet.text
+    assert ".db-chip" in stylesheet.text
     assert demo.status_code == 200
     assert "widget.js" in demo.text
     assert source.status_code == 404
