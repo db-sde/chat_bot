@@ -194,9 +194,10 @@ def test_v3_opening_chips_follow_published_entity_capabilities(
     assert [chip.id for chip in nmims_opening.top] == [
         "programs_here",
         "placement_support",
+        "reviews",
         "counsellor",
     ]
-    assert "reviews" not in {chip.id for chip in nmims_opening.top}
+    assert "reviews" in {chip.id for chip in nmims_opening.top}
     assert [chip.id for chip in (*amity_opening.top, *amity_opening.more)] == [
         "programs_here",
         "placement_support",

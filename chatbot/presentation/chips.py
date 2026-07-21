@@ -101,6 +101,16 @@ def catalog_chip_context(entity: Any, catalog: Any) -> dict[str, bool] | None:
         if isinstance(review_count, (int, float)) and not isinstance(review_count, bool)
         else _published(reviews)
     )
+    if not has_reviews and page_type == "university":
+        uni_id = safe_get(entity, "id", None)
+        linked_courses = [
+            c
+            for c in iter_catalog_entities(catalog)
+            if entity_page_type(c) == "course"
+            and safe_get(c, "linked_university", None) == uni_id
+        ]
+        has_reviews = any(_published(safe_get(c, "reviews", None)) for c in linked_courses)
+
     direct_careers = _any_published(
         (entity,),
         "career_outcomes",
@@ -111,8 +121,10 @@ def catalog_chip_context(entity: Any, catalog: Any) -> dict[str, bool] | None:
     return {
         "programs": _any_published((entity,), "program_ids", "programs_table"),
         "reviews": has_reviews,
-        "average_rating": isinstance(average_rating, (int, float))
-        and not isinstance(average_rating, bool),
+        "average_rating": (
+            isinstance(average_rating, (int, float))
+            and not isinstance(average_rating, bool)
+        ) or (page_type == "university" and has_reviews),
         "accreditations": _any_published(
             sources,
             "accreditations",

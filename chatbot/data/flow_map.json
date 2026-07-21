@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-18-chip-flow-v1",
+  "version": "2026-07-21-chip-flow-v2",
   "surfaces": {
     "page:home": {
       "browse_universities": "SPLIT",
@@ -94,12 +94,14 @@
     "answer:careers": {
       "see_fees": "answer:fees",
       "roi_tool": "tool:reveal",
-      "apply_now": "TERMINAL"
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
     },
     "answer:syllabus": {
       "careers_from_syllabus": "answer:careers",
       "eligibility": "answer:eligibility_yes",
-      "apply_now": "TERMINAL"
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
     },
     "answer:validity": {
       "browse_programs": "SPLIT",
@@ -107,8 +109,9 @@
     },
     "answer:approvals": {
       "see_fees": "answer:fees",
-      "eligibility": "answer:eligibility_yes",
-      "apply_now": "TERMINAL"
+      "reviews": "answer:reviews",
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
     },
     "answer:reviews": {
       "fees_emi": "answer:fees",
@@ -122,7 +125,9 @@
     },
     "answer:placement": {
       "fees_emi": "answer:fees",
-      "apply_now": "TERMINAL"
+      "roi_tool": "tool:reveal",
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
     },
     "answer:overview": {
       "reviews": "answer:reviews",
@@ -132,7 +137,8 @@
     "answer:admissions": {
       "eligibility": "answer:eligibility_yes",
       "see_fees": "answer:fees",
-      "apply_now": "TERMINAL"
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
     },
     "answer:comparison": {
       "roi_tool": "tool:reveal",
@@ -141,15 +147,14 @@
     },
     "answer:no_specializations": {
       "fees_emi": "answer:fees",
-      "eligibility": "answer:eligibility_yes",
-      "admissions": "answer:admissions",
-      "careers": "answer:careers"
+      "careers": "answer:careers",
+      "apply_now": "TERMINAL",
+      "counsellor": "TERMINAL"
     },
     "tool:reveal": {
       "compare": "answer:comparison",
       "apply_now": "TERMINAL",
-      "counsellor": "TERMINAL",
-      "roi_tool": "tool:reveal"
+      "counsellor": "TERMINAL"
     }
   }
 }

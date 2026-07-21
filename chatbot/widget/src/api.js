@@ -371,7 +371,10 @@
     var name = component.name || '';
     var pills = [];
     if (component.fee) pills.push(money(component.fee));
-    else if (component.starting_fee) pills.push(money(component.starting_fee));
+    else if (component.starting_fee) {
+      var cleaned = money(component.starting_fee);
+      pills.push(cleaned.indexOf('₹') === 0 ? 'From ' + cleaned : cleaned);
+    }
     if (component.duration) pills.push(String(component.duration));
     if (component.specialization_count || component.specialization_count === 0) {
       pills.push(component.specialization_count + ' spec' + (component.specialization_count === 1 ? '' : 's'));
@@ -538,6 +541,10 @@
   function money(value, emptyCopy) {
     var text = String(value == null ? '' : value).trim();
     if (!text) return emptyCopy || 'Not published';
+    text = text.replace(/\s*\(.*?\)/g, '')
+               .replace(/\s+per\s+semester\s*$/i, '')
+               .replace(/\s+starting\s+fee\s*$/i, '')
+               .replace(/\s+total\s+fee\s*$/i, '');
     return text.replace(/\bINR\s*/gi, '₹').replace(/(\d[\d,]*)\.0+(?=\D|$)/g, '$1');
   }
 

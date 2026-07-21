@@ -93,7 +93,7 @@ def test_journey_engine_returns_only_configured_opening_sets(
 
     assert _ids(result.top) == top
     assert _ids(result.more) == more
-    assert result.config_version == "2026-07-18-chip-flow-v1"
+    assert result.config_version == "2026-07-21-chip-flow-v2"
     assert not result.missing_surface
 
 
@@ -117,8 +117,8 @@ def test_catalog_v3_chip_labels_are_short_and_action_oriented(
         ("fees", ["eligibility", "roi_tool", "counsellor"]),
         ("eligibility_yes", ["admission_steps", "scholarship_tool", "apply_now"]),
         ("eligibility_no", ["eligible_programs", "counsellor"]),
-        ("careers", ["see_fees", "roi_tool", "apply_now"]),
-        ("syllabus", ["careers_from_syllabus", "eligibility", "apply_now"]),
+        ("careers", ["see_fees", "roi_tool", "apply_now", "counsellor"]),
+        ("syllabus", ["careers_from_syllabus", "eligibility", "apply_now", "counsellor"]),
         ("validity", ["browse_programs", "counsellor"]),
         ("reviews", ["fees_emi", "apply_now", "counsellor"]),
         ("comparison", ["roi_tool", "apply_now", "counsellor"]),
@@ -196,7 +196,7 @@ def test_tool_reveal_uses_apply_counsellor_compare_priority(store: ChipMapStore)
     )
 
     assert _ids(result.chips)[:3] == ["apply_now", "counsellor", "compare"]
-    assert _ids(result.chips)[3:] == ["roi_tool"]
+    assert _ids(result.chips)[3:] == []
 
 
 def test_roi_is_only_declared_on_context_ready_followup_surfaces(
@@ -213,7 +213,7 @@ def test_roi_is_only_declared_on_context_ready_followup_surfaces(
         "answer:fees",
         "answer:careers",
         "answer:comparison",
-        "tool:reveal",
+        "answer:placement",
     }
     assert all(
         "roi_tool" not in (*surface.top, *surface.more)
@@ -249,7 +249,7 @@ def test_completed_action_suppresses_other_labels_for_the_same_handler(
     )
 
     assert "see_fees" not in _ids(result.chips)
-    assert _ids(result.chips) == ["roi_tool", "apply_now"]
+    assert _ids(result.chips) == ["roi_tool", "apply_now", "counsellor"]
 
 
 def test_no_specialization_surface_never_moves_back_to_browsing(
@@ -263,10 +263,9 @@ def test_no_specialization_surface_never_moves_back_to_browsing(
 
     assert _ids(result.chips) == [
         "fees_emi",
-        "eligibility",
-        "admissions",
         "careers",
         "apply_now",
+        "counsellor",
     ]
     assert not {"browse_programs", "browse_universities"}.intersection(_ids(result.chips))
 
@@ -301,7 +300,7 @@ def test_invalid_hot_reload_keeps_last_good_snapshot(
     with caplog.at_level("WARNING"):
         snapshot = store.reload()
 
-    assert snapshot.version == "2026-07-18-chip-flow-v1"
+    assert snapshot.version == "2026-07-21-chip-flow-v2"
     assert snapshot.chips["fees_emi"].handler == "get_fees"
     assert "keeping last-good config" in caplog.text
 

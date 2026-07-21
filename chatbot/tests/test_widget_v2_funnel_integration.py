@@ -197,7 +197,7 @@ def test_guide_context_returns_persisted_session_opening_and_navigation(
         (
             {"page_type": "university", "entity_id": "uni-nmims"},
             "page:university",
-            ["programs_here", "placement_support", "counsellor"],
+            ["programs_here", "placement_support", "reviews", "counsellor"],
         ),
         (
             {"page_type": "course", "entity_id": "course-nmims-mca"},
@@ -261,8 +261,8 @@ def test_opening_chips_are_filtered_by_catalog_v3_data(client: TestClient) -> No
         action["chip_id"]
         for action in [*specialization["top"], *specialization["more"]]
     }
-    assert "reviews" not in university_ids
-    assert "average_rating" not in university_ids
+    assert "reviews" in university_ids
+    assert "average_rating" in university_ids
     assert {"placement_support", "why_choose"}.issubset(university_ids)
     assert "starting_fees" not in university_ids
     assert "specializations" not in course_ids

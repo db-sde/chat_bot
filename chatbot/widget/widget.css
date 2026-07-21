@@ -832,8 +832,11 @@
 .db-bar-label {
   font-size: 10px;
   color: #9CA3AF;
-  width: 8px;
-  text-align: right;
+  width: 75px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .db-bar-track {
   flex: 1;

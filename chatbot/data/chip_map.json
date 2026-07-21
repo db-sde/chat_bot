@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-18-chip-flow-v1",
+  "version": "2026-07-21-chip-flow-v2",
   "chips": {
     "browse_universities": {
       "handler": "list_universities",
@@ -32,7 +32,9 @@
       "handler": "get_validity",
       "label": "🛡️ Is this degree valid?",
       "funnel_stage": "bottom",
-      "requires": ["validity"]
+      "requires": [
+        "validity"
+      ]
     },
     "compare_universities": {
       "handler": "compare",
@@ -48,19 +50,25 @@
       "handler": "compare",
       "label": "⚖️ Compare universities",
       "funnel_stage": "bottom",
-      "requires": ["comparison"]
+      "requires": [
+        "comparison"
+      ]
     },
     "compare_program": {
       "handler": "compare",
       "label": "⚖️ Compare this program",
       "funnel_stage": "bottom",
-      "requires": ["comparison"]
+      "requires": [
+        "comparison"
+      ]
     },
     "compare_specializations": {
       "handler": "compare",
       "label": "⚖️ Compare specializations",
       "funnel_stage": "bottom",
-      "requires": ["comparison"]
+      "requires": [
+        "comparison"
+      ]
     },
     "compare": {
       "handler": "compare",
@@ -71,37 +79,49 @@
       "handler": "get_fees",
       "label": "💰 Fees & EMI",
       "funnel_stage": "bottom",
-      "requires": ["fees"]
+      "requires": [
+        "fees"
+      ]
     },
     "fees_across": {
       "handler": "get_fees",
       "label": "💸 Fees across universities",
       "funnel_stage": "bottom",
-      "requires": ["fees"]
+      "requires": [
+        "fees"
+      ]
     },
     "see_fees": {
       "handler": "get_fees",
       "label": "💰 See fees",
       "funnel_stage": "bottom",
-      "requires": ["fees"]
+      "requires": [
+        "fees"
+      ]
     },
     "eligibility": {
       "handler": "get_eligibility",
       "label": "✅ Eligibility",
       "funnel_stage": "bottom",
-      "requires": ["eligibility"]
+      "requires": [
+        "eligibility"
+      ]
     },
     "check_eligibility": {
       "handler": "get_eligibility",
       "label": "✅ Check my eligibility",
       "funnel_stage": "bottom",
-      "requires": ["eligibility"]
+      "requires": [
+        "eligibility"
+      ]
     },
     "programs_here": {
       "handler": "list_programs",
       "label": "📚 Programs offered",
       "funnel_stage": "mid",
-      "requires": ["programs"]
+      "requires": [
+        "programs"
+      ]
     },
     "list_providers": {
       "handler": "list_providers",
@@ -112,79 +132,105 @@
       "handler": "get_approvals",
       "label": "🛡️ Approvals & accreditation",
       "funnel_stage": "bottom",
-      "requires": ["accreditations"]
+      "requires": [
+        "accreditations"
+      ]
     },
     "reviews": {
       "handler": "get_reviews",
       "label": "⭐ Student reviews",
       "funnel_stage": "bottom",
-      "requires": ["reviews"]
+      "requires": [
+        "reviews"
+      ]
     },
     "average_rating": {
       "handler": "get_average_rating",
       "label": "⭐ Average rating",
       "funnel_stage": "bottom",
-      "requires": ["average_rating"]
+      "requires": [
+        "average_rating"
+      ]
     },
     "placement_support": {
       "handler": "get_placement_support",
       "label": "💼 Placement support",
       "funnel_stage": "bottom",
-      "requires": ["placement_support"]
+      "requires": [
+        "placement_support"
+      ]
     },
     "why_choose": {
       "handler": "get_overview",
       "label": "✨ Why choose this university",
       "funnel_stage": "bottom",
-      "requires": ["why_choose"]
+      "requires": [
+        "why_choose"
+      ]
     },
     "admission_process": {
       "handler": "get_admission_steps",
       "label": "🎓 Admission process",
       "funnel_stage": "bottom",
-      "requires": ["admissions"]
+      "requires": [
+        "admissions"
+      ]
     },
     "admission_steps": {
       "handler": "get_admission_steps",
       "label": "📝 Admission steps",
       "funnel_stage": "bottom",
-      "requires": ["admissions"]
+      "requires": [
+        "admissions"
+      ]
     },
     "admissions": {
       "handler": "get_admission_steps",
       "label": "🎓 Admissions",
       "funnel_stage": "bottom",
-      "requires": ["admissions"]
+      "requires": [
+        "admissions"
+      ]
     },
     "specializations": {
       "handler": "get_specializations",
       "label": "🎯 Specializations",
       "funnel_stage": "bottom",
-      "requires": ["specializations"]
+      "requires": [
+        "specializations"
+      ]
     },
     "other_specs": {
       "handler": "get_specializations",
       "label": "🔄 Other specializations",
       "funnel_stage": "bottom",
-      "requires": ["other_specializations"]
+      "requires": [
+        "other_specializations"
+      ]
     },
     "careers": {
       "handler": "get_careers",
       "label": "💼 Career opportunities",
       "funnel_stage": "bottom",
-      "requires": ["careers"]
+      "requires": [
+        "careers"
+      ]
     },
     "careers_from_syllabus": {
       "handler": "get_careers",
       "label": "💼 Careers this leads to",
       "funnel_stage": "bottom",
-      "requires": ["careers"]
+      "requires": [
+        "careers"
+      ]
     },
     "syllabus": {
       "handler": "get_syllabus",
       "label": "📖 Curriculum",
       "funnel_stage": "bottom",
-      "requires": ["syllabus"]
+      "requires": [
+        "syllabus"
+      ]
     },
     "eligible_programs": {
       "handler": "get_eligible_programs",
@@ -196,14 +242,18 @@
       "tool": "roi",
       "label": "🧮 Salary & ROI calculator",
       "funnel_stage": "bottom",
-      "requires": ["roi"]
+      "requires": [
+        "roi"
+      ]
     },
     "scholarship_tool": {
       "handler": "tool_entry",
       "tool": "scholarship",
       "label": "🎓 Scholarships",
       "funnel_stage": "bottom",
-      "requires": ["scholarship"]
+      "requires": [
+        "scholarship"
+      ]
     },
     "apply_now": {
       "handler": "cta_apply",
@@ -299,88 +349,178 @@
     },
     "card:university": {
       "funnel_stage": "mid",
-      "follow": ["programs_here", "approvals", "reviews"]
+      "follow": [
+        "programs_here",
+        "approvals",
+        "reviews"
+      ]
     },
     "card:course": {
       "funnel_stage": "mid",
-      "follow": ["fees_emi", "eligibility", "specializations", "reviews"]
+      "follow": [
+        "fees_emi",
+        "eligibility",
+        "specializations",
+        "reviews"
+      ]
     },
     "card:specialization": {
       "funnel_stage": "bottom",
-      "follow": ["careers", "fees_emi", "eligibility", "reviews"]
+      "follow": [
+        "careers",
+        "fees_emi",
+        "eligibility",
+        "reviews"
+      ]
     },
     "answer:fees": {
       "funnel_stage": "bottom",
-      "follow": ["eligibility", "roi_tool", "counsellor"]
+      "follow": [
+        "eligibility",
+        "roi_tool",
+        "counsellor"
+      ]
     },
     "answer:eligibility_yes": {
       "funnel_stage": "bottom",
-      "follow": ["admission_steps", "scholarship_tool", "apply_now"]
+      "follow": [
+        "admission_steps",
+        "scholarship_tool",
+        "apply_now"
+      ]
     },
     "answer:eligibility_no": {
       "funnel_stage": "bottom",
-      "follow": ["eligible_programs", "counsellor"]
+      "follow": [
+        "eligible_programs",
+        "counsellor"
+      ]
     },
     "answer:eligibility_borderline": {
       "funnel_stage": "bottom",
-      "follow": ["eligible_programs", "counsellor"]
+      "follow": [
+        "eligible_programs",
+        "counsellor"
+      ]
     },
     "answer:careers": {
       "funnel_stage": "bottom",
-      "follow": ["see_fees", "roi_tool", "apply_now"]
+      "follow": [
+        "see_fees",
+        "roi_tool",
+        "apply_now",
+        "counsellor"
+      ]
     },
     "answer:syllabus": {
       "funnel_stage": "bottom",
-      "follow": ["careers_from_syllabus", "eligibility", "apply_now"]
+      "follow": [
+        "careers_from_syllabus",
+        "eligibility",
+        "apply_now",
+        "counsellor"
+      ]
     },
     "answer:validity": {
       "funnel_stage": "top",
-      "follow": ["browse_programs", "counsellor"]
+      "follow": [
+        "browse_programs",
+        "counsellor"
+      ]
     },
     "answer:approvals": {
       "funnel_stage": "bottom",
-      "follow": ["see_fees", "eligibility", "apply_now"]
+      "follow": [
+        "see_fees",
+        "reviews",
+        "apply_now",
+        "counsellor"
+      ]
     },
     "answer:reviews": {
       "funnel_stage": "bottom",
-      "follow": ["fees_emi", "apply_now", "counsellor"]
+      "follow": [
+        "fees_emi",
+        "apply_now",
+        "counsellor"
+      ]
     },
     "answer:average_rating": {
       "funnel_stage": "bottom",
-      "follow": ["reviews", "apply_now", "counsellor"]
+      "follow": [
+        "reviews",
+        "apply_now",
+        "counsellor"
+      ]
     },
     "answer:placement": {
       "funnel_stage": "bottom",
-      "follow": ["fees_emi", "apply_now"]
+      "follow": [
+        "fees_emi",
+        "roi_tool",
+        "apply_now",
+        "counsellor"
+      ]
     },
     "answer:overview": {
       "funnel_stage": "bottom",
-      "follow": ["reviews", "compare_others", "counsellor"]
+      "follow": [
+        "reviews",
+        "compare_others",
+        "counsellor"
+      ]
     },
     "answer:admissions": {
       "funnel_stage": "bottom",
-      "follow": ["eligibility", "see_fees", "apply_now"]
+      "follow": [
+        "eligibility",
+        "see_fees",
+        "apply_now",
+        "counsellor"
+      ]
     },
     "answer:comparison": {
       "funnel_stage": "bottom",
-      "follow": ["roi_tool", "apply_now", "counsellor"]
+      "follow": [
+        "roi_tool",
+        "apply_now",
+        "counsellor"
+      ]
     },
     "answer:no_specializations": {
       "funnel_stage": "bottom",
-      "follow": ["fees_emi", "eligibility", "admissions", "careers"]
+      "follow": [
+        "fees_emi",
+        "careers",
+        "apply_now",
+        "counsellor"
+      ]
     },
     "tool:reveal": {
       "funnel_stage": "bottom",
-      "follow": ["compare", "apply_now", "counsellor", "roi_tool"]
+      "follow": [
+        "compare",
+        "apply_now",
+        "counsellor"
+      ]
     }
   },
   "faq_chips": {
     "source": "faqs",
-    "count": 3
+    "count": 3,
+    "role": "backfill when follow-set drops below 2 non-conversion chips after dedup"
   },
   "progression": {
     "escalate_after": 3,
-    "conversion_chips": ["apply_now", "counsellor"],
-    "tool_reveal_priority": ["apply_now", "counsellor", "compare"]
+    "conversion_chips": [
+      "apply_now",
+      "counsellor"
+    ],
+    "tool_reveal_priority": [
+      "apply_now",
+      "counsellor",
+      "compare"
+    ],
+    "min_non_conversion_chips": 2
   }
 }

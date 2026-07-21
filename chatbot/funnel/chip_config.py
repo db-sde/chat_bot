@@ -109,6 +109,7 @@ class SurfaceDefinition(_FrozenModel):
 class FAQChipConfig(_FrozenModel):
     source: str = "faqs"
     count: int = Field(default=3, ge=0, le=6)
+    role: str | None = None
 
 
 class ProgressionConfig(_FrozenModel):
@@ -119,6 +120,7 @@ class ProgressionConfig(_FrozenModel):
         "counsellor",
         "compare",
     )
+    min_non_conversion_chips: int | None = None
 
 
 class ChipMapConfig(_FrozenModel):
