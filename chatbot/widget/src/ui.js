@@ -46,6 +46,7 @@
 
     /* Chip clicks */
     delegate('[data-action="chip"]', function(el){
+      if (state.busy) return;
       var idx = parseInt(el.getAttribute('data-idx'));
       if (idx===-1) { expandMore(); return; }
       var ch = state.chips[idx];

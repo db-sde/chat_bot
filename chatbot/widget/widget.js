@@ -1921,12 +1921,13 @@
   /* ── Chips ── */
   function renderChips() {
     if (!state.chips.length) return '';
+    var disabledAttr = state.busy ? ' disabled="disabled"' : '';
     return div('db-chips-area',
       (!state.started ? div('db-chips-hint','Or type your question below.') : '') +
       div('db-chip-grid', state.chips.map(function(ch,i){
-        return btn('db-chip',esc(ch.label),'','data-action="chip" data-idx="'+i+'"');
+        return btn('db-chip' + (state.busy ? ' db-chip--disabled' : ''),esc(ch.label),'','data-action="chip" data-idx="'+i+'"' + disabledAttr);
       }).join('')) +
-      (state.hasMore ? btn('db-more-btn','More ⌄','','data-action="chip" data-idx="-1"') : '')
+      (state.hasMore ? btn('db-more-btn' + (state.busy ? ' db-chip--disabled' : ''),'More ⌄','','data-action="chip" data-idx="-1"' + disabledAttr) : '')
     );
   }
 
@@ -2272,6 +2273,7 @@
 
     /* Chip clicks */
     delegate('[data-action="chip"]', function(el){
+      if (state.busy) return;
       var idx = parseInt(el.getAttribute('data-idx'));
       if (idx===-1) { expandMore(); return; }
       var ch = state.chips[idx];
