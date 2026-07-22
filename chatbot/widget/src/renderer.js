@@ -340,10 +340,11 @@
      contextual set and does not count toward the 4-chip floor, which makes a
      terminal dead end structurally impossible. */
   function renderNavRow() {
+    var hasBack = (state.historyStack && state.historyStack.length > 0) || (state.breadcrumb && state.breadcrumb.length > 1);
     return div('db-nav-row',
       btn('db-nav-btn', '🏠 Main menu', '', 'data-action="mainMenu"') +
-      btn('db-nav-btn' + (state.breadcrumb && state.breadcrumb.length > 1 ? '' : ' db-nav-btn--muted'),
-        '‹ Back', '', 'data-action="navBack"') +
+      btn('db-nav-btn' + (hasBack ? '' : ' db-nav-btn--muted'),
+        '‹ Back', '', 'data-action="navBack"' + (hasBack ? '' : ' disabled="disabled"')) +
       div('db-nav-spacer') +
       btn('db-nav-btn db-nav-btn--accent', '📞 Counsellor', '', 'data-action="navCounsellor"')
     );

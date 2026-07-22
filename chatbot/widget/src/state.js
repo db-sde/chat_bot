@@ -28,7 +28,8 @@
     moreOpen: false,          // §10 the More panel is collapsed by default
     conversionChip: null,     // §8 the reserved conversion slot
     breadcrumb: [],           // §11.4
-    recentlyViewed: [],       // §11.3,       // config-owned "More ⌄" set from /guide/context
+    recentlyViewed: [],       // §11.3
+    historyStack: [],         // Client-side navigation snapshot stack for Back button
     ready: false,          // true once the backend opening payload has landed
     guideBusy: null,       // in-flight /guide/context promise
     viewedActions: new Set(),  // chip_ids already counted as impressions

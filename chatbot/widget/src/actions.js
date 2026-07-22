@@ -77,7 +77,27 @@
     get_validity:          ['validity',       'validity']
   };
 
+  function pushHistory() {
+    if (!state.historyStack) state.historyStack = [];
+    if (state.historyStack.length >= 25) state.historyStack.shift();
+    state.historyStack.push({
+      context: state.context ? Object.assign({}, state.context) : null,
+      msgs: state.msgs.slice(),
+      chips: state.chips.slice(),
+      hasMore: state.hasMore,
+      moreChips: state.moreChips ? state.moreChips.slice() : null,
+      moreOpen: state.moreOpen,
+      conversionChip: state.conversionChip ? Object.assign({}, state.conversionChip) : null,
+      compare: state.compare.slice(),
+      details: state.details ? Object.assign({}, state.details) : null,
+      picker: state.picker ? Object.assign({}, state.picker) : null,
+      server: state.server ? Object.assign({}, state.server) : null,
+      breadcrumb: state.breadcrumb ? state.breadcrumb.slice() : []
+    });
+  }
+
   function onChip(ch) {
+    pushHistory();
     emitAnalytics('chip_tapped', ch);
     state.lastChip = ch;
 
@@ -402,6 +422,24 @@
   /* §9 Back steps one level up the breadcrumb — the entity cascade, not the
      raw message history, is what a user means by "back". */
   function goBack() {
+    if (state.historyStack && state.historyStack.length > 0) {
+      var prev = state.historyStack.pop();
+      state.context = prev.context;
+      state.msgs = prev.msgs;
+      state.chips = prev.chips;
+      state.hasMore = prev.hasMore;
+      state.moreChips = prev.moreChips;
+      state.moreOpen = prev.moreOpen;
+      state.conversionChip = prev.conversionChip;
+      state.compare = prev.compare;
+      state.details = prev.details;
+      state.picker = prev.picker;
+      if (prev.server) state.server = prev.server;
+      if (prev.breadcrumb) state.breadcrumb = prev.breadcrumb;
+      render();
+      scrollToBottom();
+      return;
+    }
     var crumbs = state.breadcrumb || [];
     if (crumbs.length < 2) return;
     switchEntity(crumbs[crumbs.length - 2]);
