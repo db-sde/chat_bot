@@ -93,7 +93,7 @@ def test_journey_engine_returns_only_configured_opening_sets(
 
     assert _ids(result.top) == top
     assert _ids(result.more) == more
-    assert result.config_version == "2026-07-21-chip-flow-v2"
+    assert result.config_version == "2026-07-22-chip-final"
     assert not result.missing_surface
 
 
@@ -300,7 +300,7 @@ def test_invalid_hot_reload_keeps_last_good_snapshot(
     with caplog.at_level("WARNING"):
         snapshot = store.reload()
 
-    assert snapshot.version == "2026-07-21-chip-flow-v2"
+    assert snapshot.version == "2026-07-22-chip-final"
     assert snapshot.chips["fees_emi"].handler == "get_fees"
     assert "keeping last-good config" in caplog.text
 
@@ -452,6 +452,7 @@ def test_fill_and_ab_schema_are_preserved_without_runtime_assignment(tmp_path: P
         "handler": "compare",
         "label": "⚖️ Compare with {rival}",
         "funnel_stage": "bottom",
+        "type": "nav_set",
         "fill": {"rival": "nearest_by_fee_band"},
         "ab": [
             {"id": "a", "label": "⚖️ Compare with {rival}"},

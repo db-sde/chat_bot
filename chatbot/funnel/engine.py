@@ -12,6 +12,7 @@ from .chip_config import (
     ChipDefinition,
     ChipMapConfig,
     ChipMapStore,
+    ChipType,
     FunnelStage,
 )
 from .flow_config import SPLIT, TERMINAL, FlowMapStore
@@ -52,6 +53,11 @@ class ResolvedChip:
     handler: str
     funnel_stage: FunnelStage
     tool: str | None = None
+    # §2 taxonomy, resolved against the active entity (§4.3).
+    type: ChipType = ChipType.NAV_SET
+    rows_visible: int | None = None
+    # §10 a demoted chip renders dimmed with a check, never disappears.
+    seen: bool = False
 
     def as_action(self) -> dict[str, str]:
         """Return a transport-neutral action dictionary for a future adapter."""
@@ -60,9 +66,14 @@ class ResolvedChip:
             "chip_id": self.id,
             "label": self.label,
             "handler": self.handler,
+            "type": self.type.value,
         }
         if self.tool:
             result["tool"] = self.tool
+        if self.rows_visible is not None:
+            result["rows_visible"] = self.rows_visible
+        if self.seen:
+            result["seen"] = True
         return result
 
 
@@ -83,6 +94,12 @@ class FollowupChipSet:
     interaction_count: int
     config_version: str
     missing_surface: bool = False
+    # §8 the conversion slot is always present and always separate from the
+    # info slots; §10 demoted chips live in `more`, never deleted.
+    more: tuple[ResolvedChip, ...] = ()
+    conversion: ResolvedChip | None = None
+    # §7 backfill tier reached; 4+ means the entity is thin on content.
+    pool_tier: int = 1
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +110,13 @@ class ChipJourneyState:
     current_node: str = ""
 
 
-def _resolved(chip_id: str, definition: ChipDefinition) -> ResolvedChip:
+def _resolved(
+    chip_id: str,
+    definition: ChipDefinition,
+    *,
+    entity_type: str | None = None,
+    seen: bool = False,
+) -> ResolvedChip:
     # Referenced definitions are guaranteed to have a base label by config validation.
     assert definition.label is not None
     return ResolvedChip(
@@ -102,6 +125,9 @@ def _resolved(chip_id: str, definition: ChipDefinition) -> ResolvedChip:
         handler=definition.handler,
         funnel_stage=definition.funnel_stage,
         tool=definition.tool,
+        type=definition.resolve_type(entity_type),
+        rows_visible=definition.resolve_rows_visible(entity_type),
+        seen=seen,
     )
 
 
@@ -124,7 +150,9 @@ def _available_chips(
         for chip in chips
         if all(
             bool(entity_context.get(requirement))
-            for requirement in config.chips[chip.id].requires
+            # Generated chips (e.g. per-entity FAQ chips) have no config entry
+            # and therefore declare no catalog requirements.
+            for requirement in getattr(config.chips.get(chip.id), "requires", ())
         )
     )
 
@@ -206,6 +234,127 @@ def _deduplicate(chips: Sequence[ResolvedChip]) -> list[ResolvedChip]:
         seen.add(chip.id)
         result.append(chip)
     return result
+
+
+# §7 the never-empty guarantee: 3 info + 1 reserved conversion.
+NAV_INFO_SLOTS = 3
+# §10 More is capped so demoted chips cannot grow without bound.
+MORE_CAP = 8
+
+
+def _pool_key(entity_type: str | None) -> str:
+    return f"entity:{_normalise_key(entity_type)}"
+
+
+def resolve_nav_pool(
+    config: ChipMapConfig,
+    *,
+    entity_type: str | None,
+    consumed: frozenset[str],
+    entity_context: Mapping[str, Any] | None = None,
+    faq_chips: Sequence[ResolvedChip] = (),
+) -> tuple[tuple[ResolvedChip, ...], int]:
+    """Fill one nav_set from the entity pool (§5) via the backfill ladder (§7).
+
+    Returns the ordered pool and the ladder tier reached, so integration can
+    emit `chip_pool_exhausted` at tier 4+ — a content-roadmap signal, not just
+    a bug signal.
+
+    Chips are never deleted for having been used: a consumed chip is demoted to
+    a strictly lower tier (§10) and climbs back only within that tier, so the
+    pool is always full and self-replenishing.
+    """
+
+    pool = config.pools.get(_pool_key(entity_type))
+    conversion_ids = set(config.progression.conversion_chips)
+
+    def build(chip_ids: Sequence[str]) -> list[ResolvedChip]:
+        resolved: list[ResolvedChip] = []
+        for chip_id in chip_ids:
+            if chip_id == "faq_chips":
+                resolved.extend(faq_chips)
+                continue
+            definition = config.chips.get(chip_id)
+            if definition is None:
+                continue
+            # Conversion chips own a reserved slot (§8); they never occupy an
+            # info slot, and are exempt from consumption (§10).
+            if chip_id in conversion_ids:
+                continue
+            resolved.append(
+                _resolved(
+                    chip_id,
+                    definition,
+                    entity_type=entity_type,
+                    seen=chip_id in consumed,
+                )
+            )
+        return _available_chips(
+            _deduplicate(resolved), config=config, entity_context=entity_context
+        )
+
+    priority = build(pool.priority) if pool is not None else []
+    unseen = [chip for chip in priority if not chip.seen]
+
+    tier = 1
+    if len(unseen) < NAV_INFO_SLOTS:
+        # Tier 2+: FAQ chips, then siblings/level-up/tools from the backfill list.
+        backfill = build(pool.backfill) if pool is not None else []
+        extra = [
+            chip
+            for chip in backfill
+            if not chip.seen and chip.id not in {c.id for c in priority}
+        ]
+        if extra:
+            tier = 2
+        unseen = unseen + extra
+        if len(unseen) < NAV_INFO_SLOTS:
+            # Tier 6: fall back on demoted chips, still rendered in seen state.
+            tier = 6
+
+    # Guard 1 (§10): never-seen strictly outranks seen. Sorting by the flag
+    # alone keeps configured priority order stable inside each tier.
+    combined = _deduplicate([*priority, *(build(pool.backfill) if pool is not None else [])])
+    ordered = sorted(combined, key=lambda chip: chip.seen)
+    return tuple(ordered), tier
+
+
+def split_nav_set(
+    pool: Sequence[ResolvedChip],
+) -> tuple[tuple[ResolvedChip, ...], tuple[ResolvedChip, ...]]:
+    """Split a resolved pool into the visible info slots and the More list (§8, §10)."""
+
+    visible = tuple(pool[:NAV_INFO_SLOTS])
+    # Guard 2 (§10): More is capped; the overflow stays reachable via Main menu.
+    more = tuple(pool[NAV_INFO_SLOTS:][:MORE_CAP])
+    return visible, more
+
+
+def reserved_conversion(
+    config: ChipMapConfig,
+    *,
+    interaction_count: int,
+    tool_reveal: bool = False,
+    entity_type: str | None = None,
+) -> ResolvedChip | None:
+    """§8 pick the chip occupying the always-present conversion slot.
+
+    Escalation changes only *which* conversion chip occupies the slot, never
+    how many info chips exist beside it.
+    """
+
+    escalate = tool_reveal or interaction_count >= config.progression.escalate_after
+    preferred = "apply_now" if escalate else "counsellor"
+    order = [preferred] + [
+        chip_id
+        for chip_id in config.progression.conversion_chips
+        if chip_id != preferred
+    ]
+    for chip_id in order:
+        definition = config.chips.get(chip_id)
+        if definition is not None:
+            return _resolved(chip_id, definition, entity_type=entity_type)
+    return None
 
 
 def apply_progression(
@@ -358,6 +507,9 @@ class ChipEngine:
         state: Any = None,
         entity_context: Mapping[str, Any] | None = None,
         completed_chip_id: str | None = None,
+        entity_type: str | None = None,
+        consumed: frozenset[str] | None = None,
+        faq_chips: Sequence[ResolvedChip] = (),
     ) -> FollowupChipSet:
         """Look up one follow surface and remove unavailable catalog actions."""
         config = self.store.snapshot()
@@ -442,6 +594,45 @@ class ChipEngine:
             completed_actions=_completed_actions(state),
             tool_reveal=surface_key == "tool:reveal",
         )
+
+        # §5 the configured `follow` list is a seed; the rendered set comes from
+        # the entity pool so it always knows what is still unexplored. Without a
+        # resolvable entity the surface list is all we have.
+        more: tuple[ResolvedChip, ...] = ()
+        tier = 1
+        pool_key = _pool_key(entity_type)
+        if entity_type and pool_key in config.pools:
+            pool, tier = resolve_nav_pool(
+                config,
+                entity_type=entity_type,
+                consumed=consumed if consumed is not None else _completed_actions(state),
+                entity_context=entity_context,
+                faq_chips=faq_chips,
+            )
+            visible, more = split_nav_set(pool)
+            selected = visible
+            if tier >= 4:
+                # A content-roadmap signal, not merely a bug signal (§13).
+                logger.info(
+                    "chip_pool_exhausted: entity_type=%s tier=%s", entity_type, tier
+                )
+
+        conversion = reserved_conversion(
+            config,
+            interaction_count=interaction_count,
+            tool_reveal=surface_key == "tool:reveal",
+            entity_type=entity_type,
+        )
+        # §7 hard invariant: a nav_set renders 3 info + 1 conversion. Fewer is a
+        # bug state, not a valid one — but only for nav_set (§2.2).
+        if len(selected) < NAV_INFO_SLOTS and entity_type:
+            logger.error(
+                "nav_set underfilled: surface=%s entity_type=%s rendered=%s",
+                surface_key,
+                entity_type,
+                len(selected),
+            )
+
         return FollowupChipSet(
             surface=surface_key,
             chips=selected,
@@ -449,10 +640,15 @@ class ChipEngine:
             interaction_count=max(0, int(interaction_count)),
             config_version=config.version,
             missing_surface=missing,
+            more=more,
+            conversion=conversion,
+            pool_tier=tier,
         )
 
 
 __all__ = [
+    "MORE_CAP",
+    "NAV_INFO_SLOTS",
     "ChipEngine",
     "ChipJourneyState",
     "FollowupChipSet",
@@ -460,4 +656,7 @@ __all__ = [
     "OpeningChipSet",
     "ResolvedChip",
     "apply_progression",
+    "reserved_conversion",
+    "resolve_nav_pool",
+    "split_nav_set",
 ]

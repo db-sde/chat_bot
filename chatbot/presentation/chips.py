@@ -7,6 +7,7 @@ from typing import Any
 
 from data.accessor import safe_get
 from funnel import FollowupChipSet, OpeningChipSet, ResolvedChip
+from funnel.chip_config import FunnelStage
 from response.cards import catalog_get_entity, entity_page_type, iter_catalog_entities
 from schemas import QuickAction
 
@@ -212,6 +213,9 @@ def resolved_chip_action(
         message=chip_message(chip),
         chip_id=chip.id,
         chip_handler=chip.handler,
+        chip_type=chip.type.value,  # type: ignore[arg-type]
+        rows_visible=chip.rows_visible,
+        seen=chip.seen,
         tool=chip.tool,  # type: ignore[arg-type]
         surface=surface,
         funnel_stage=chip.funnel_stage.value,
@@ -285,13 +289,61 @@ def opening_payload(
     }
 
 
+def faq_chips_for(
+    entity: Any,
+    config: Any,
+    consumed: frozenset[str] = frozenset(),
+) -> list[ResolvedChip]:
+    """§7 tier 2 of the backfill ladder — the deepest per-entity pool.
+
+    Published FAQ questions become nav chips so an entity with thin structured
+    data still has somewhere to go. Ids are stable so consumption sticks.
+    """
+
+    if entity is None:
+        return []
+    questions = safe_get(entity, "faqs", None) or []
+    limit = getattr(getattr(config, "faq_chips", None), "count", 3)
+    chips: list[ResolvedChip] = []
+    for index, item in enumerate(questions):
+        question = str(safe_get(item, "question", None) or "").strip()
+        if not question:
+            continue
+        chip_id = f"faq_{index}"
+        chips.append(
+            ResolvedChip(
+                id=chip_id,
+                label=f"❓ {question}",
+                handler="get_faq",
+                funnel_stage=FunnelStage.MID,
+                seen=chip_id in consumed,
+            )
+        )
+        if len(chips) >= limit:
+            break
+    return chips
+
+
 def followup_payload(
     followup: FollowupChipSet,
     *,
     correlation_id: str | None = None,
     content_version: str = "not_applicable",
 ) -> dict[str, object]:
-    return {
+    def actions(chips: Any) -> list[dict[str, object]]:
+        return [
+            action.model_dump(mode="json", exclude_none=True)
+            for action in chip_actions(
+                chips,
+                surface=followup.surface,
+                config_version=followup.config_version,
+                content_version=content_version,
+                interaction_count=followup.interaction_count,
+                correlation_id=correlation_id,
+            )
+        ]
+
+    payload: dict[str, object] = {
         "surface": followup.surface,
         "funnel_stage": followup.funnel_stage.value,
         "interaction_count": followup.interaction_count,
@@ -299,25 +351,38 @@ def followup_payload(
         "content_version": content_version,
         "correlation_id": correlation_id,
         "missing_surface": followup.missing_surface,
-        "actions": [
-            action.model_dump(mode="json", exclude_none=True)
-            for action in chip_actions(
-                followup.chips,
-                surface=followup.surface,
-                config_version=followup.config_version,
-                content_version=content_version,
-                interaction_count=followup.interaction_count,
-                correlation_id=correlation_id,
-            )
-        ],
+        "actions": actions(followup.chips),
+        # §8/§10 the More list and the reserved conversion slot are separate
+        # channels so the widget never has to reconstruct either.
+        "more": actions(followup.more),
+        "pool_tier": followup.pool_tier,
+    }
+    if followup.conversion is not None:
+        payload["conversion"] = actions([followup.conversion])[0]
+    return payload
+
+
+def session_context_payload(context: Any) -> dict[str, object]:
+    """§11.3/§11.4 breadcrumb + recently-viewed rail, straight from session state."""
+
+    def ref(item: Any) -> dict[str, str]:
+        return {"type": item.type, "id": item.id, "label": item.label, "key": item.key}
+
+    active = getattr(context, "active", None)
+    return {
+        "active": ref(active) if active is not None else None,
+        "breadcrumb": [ref(item) for item in getattr(context, "stack", [])],
+        "recently_viewed": [ref(item) for item in getattr(context, "visited", [])],
     }
 
 
 __all__ = [
     "catalog_chip_context",
+    "faq_chips_for",
     "chip_actions",
     "chip_message",
     "followup_payload",
     "opening_payload",
+    "session_context_payload",
     "resolved_chip_action",
 ]

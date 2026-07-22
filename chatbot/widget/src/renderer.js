@@ -11,6 +11,7 @@
     check: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
     checkWhite: function(w,sw){return '<svg width="'+w+'" height="'+w+'" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';},
     x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+    checkSeen: '<svg class="db-seen-tick" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
     x10: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
     back: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
     currency: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E84010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12M6 8h12M6 13h3m0 0c6.667 0 6.667-10 0-10M6 13l8.5 8"/></svg>',
@@ -228,14 +229,123 @@
   }
 
   /* ── Chips ── */
+  /* §2 the action zone renders one of two shapes. A list_set is an
+     enumeration the user scans and picks from; a nav_set is topic navigation.
+     Truncating a list to satisfy a navigation minimum is the §1.2 bug, so the
+     two paths never share sizing rules. */
   function renderChips() {
-    if (!state.chips.length) return '';
-    var disabledAttr = state.busy ? ' disabled="disabled"' : '';
-    return div('db-chips-area',
-      div('db-chip-grid', state.chips.map(function(ch,i){
-        return btn('db-chip' + (state.busy ? ' db-chip--disabled' : ''),esc(ch.label),'','data-action="chip" data-idx="'+i+'"' + disabledAttr);
+    var conv = state.conversionChip;
+    if (!state.chips.length && !conv) return '';
+    var listChips = state.chips.filter(function (c) { return c.chip_type === 'list_set'; });
+    var isList = listChips.length > 0 && listChips.length === state.chips.length;
+    return div('db-chips-area', isList ? renderListSet() : renderNavSet());
+  }
+
+  function chipAttrs(idx) {
+    return 'data-action="chip" data-idx="' + idx + '"' + (state.busy ? ' disabled="disabled"' : '');
+  }
+  function busyCls() { return state.busy ? ' db-chip--disabled' : ''; }
+
+  /* §8 [info][info][info] + [conversion] — the conversion slot is always
+     present and always separate, so escalation never costs a nav option. */
+  function renderNavSet() {
+    var conv = state.conversionChip;
+    return div('db-chip-grid',
+      state.chips.map(function (ch, i) {
+        return btn('db-chip' + busyCls(), esc(ch.label), '', chipAttrs(i));
+      }).join('') +
+      (conv ? btn('db-chip db-chip-conversion' + busyCls() + (conv.handler === 'cta_apply' ? ' db-chip-conversion--lead' : ''),
+        esc(conv.label), '', 'data-action="conversion"' + (state.busy ? ' disabled="disabled"' : '')) : '')
+    ) +
+    (state.moreOpen ? renderMorePanel() : '') +
+    (state.hasMore ? btn('db-more-btn' + busyCls(),
+      esc(state.moreOpen ? 'Less ⌃' : 'More ⌄'), '', 'data-action="toggleMore"' + (state.busy ? ' disabled="disabled"' : '')) : '');
+  }
+
+  /* §10 demoted chips stay reachable, rendered dimmed with a check so
+     re-tapping is deliberate rather than accidental. */
+  function renderMorePanel() {
+    return div('db-more-panel', state.moreChips.map(function (ch, i) {
+      return btn('db-more-item' + (ch.seen ? ' db-chip--seen' : '') + busyCls(),
+        (ch.seen ? SVG.checkSeen : '') + e('span', '', esc(ch.label)),
+        '', 'data-action="moreChip" data-idx="' + i + '"' + (state.busy ? ' disabled="disabled"' : ''));
+    }).join(''));
+  }
+
+  /* §2.2 show all at <=6 as a grid; at 7+ show the top 5 and hand overflow to
+     the picker sheet. Never backfilled, never reordered, never truncated to
+     fit a navigation minimum. */
+  function renderListSet() {
+    var conv = state.conversionChip;
+    var all = state.chips;
+    var first = all[0] || {};
+    var inlineMax = first.list_inline_max || 6;
+    var showTop = first.list_show_top || 5;
+    var grid = all.length <= inlineMax;
+    var shown = grid ? all : all.slice(0, showTop);
+    var rowHtml = function (ch, i) {
+      return btn('db-list-item' + (grid ? ' db-list-item--grid' : '') + (ch.seen ? ' db-chip--seen' : '') + busyCls(),
+        div('db-list-mono', esc(ch.mono || initialsFor(ch.label)), 'style="background:' + (ch.bg || colorFor(ch.label)) + '"') +
+        div('db-list-body',
+          div('db-list-name', (ch.seen ? SVG.checkSeen : '') + esc(ch.label)) +
+          (ch.meta ? div('db-list-meta', esc(ch.meta)) : '')),
+        '', chipAttrs(i));
+    };
+    return div(grid ? 'db-list-grid' : 'db-list-column',
+      shown.map(rowHtml).join('') +
+      (grid ? '' : (all.length > showTop
+        ? btn('db-list-showall' + busyCls(),
+            e('span', '', 'Show all ' + all.length + ' ›'), '',
+            'data-action="listShowAll"' + (state.busy ? ' disabled="disabled"' : ''))
+        : ''))
+    ) +
+    /* The conversion chip sits below a divider so it never reads as list item #6. */
+    (conv ? div('db-list-divider') + btn('db-chip db-chip-conversion db-chip-conversion--wide' + busyCls() + (conv.handler === 'cta_apply' ? ' db-chip-conversion--lead' : ''),
+      esc(conv.label), '', 'data-action="conversion"' + (state.busy ? ' disabled="disabled"' : '')) : '');
+  }
+
+  /* §11.4 breadcrumb — each segment jumps to that entity, so the cascade is
+     traversable in both directions. */
+  function renderBreadcrumb() {
+    var crumbs = state.breadcrumb || [];
+    if (!crumbs.length) return '';
+    return div('db-context-chip',
+      div('db-context-dot') +
+      div('db-crumbs', crumbs.map(function (c, i) {
+        return (i ? e('span', 'db-crumb-sep', '›') : '') +
+          btn('db-crumb' + (i === crumbs.length - 1 ? ' db-crumb--active' : ''),
+            esc(c.label), '', 'data-action="crumb" data-idx="' + i + '"');
       }).join('')) +
-      (state.hasMore ? btn('db-more-btn' + (state.busy ? ' db-chip--disabled' : ''),'More ⌄','','data-action="chip" data-idx="-1"' + disabledAttr) : '')
+      btn('db-context-clear', SVG.x10, '', 'data-action="clearContext" aria-label="Clear current context"')
+    );
+  }
+
+  /* §11.3 recently-viewed rail — returns to any entity with its consumed
+     state intact, which linear Back cannot do. */
+  function renderRail() {
+    var items = state.recentlyViewed || [];
+    if (items.length < 2) return '';
+    return div('db-rail-wrap',
+      div('db-rail-label', 'Recently viewed') +
+      div('db-rail', items.map(function (v, i) {
+        return btn('db-rail-item', 
+          div('db-rail-mono', esc(initialsFor(v.label)), 'style="background:' + colorFor(v.label) + '"') +
+          e('span', 'db-rail-name', esc(v.label)),
+          '', 'data-action="rail" data-idx="' + i + '"');
+      }).join(''))
+    );
+  }
+
+  /* §9 persistent navigation row — chrome, not content. Sits outside the
+     contextual set and does not count toward the 4-chip floor, which makes a
+     terminal dead end structurally impossible. */
+  function renderNavRow() {
+    return div('db-nav-row',
+      btn('db-nav-btn', '🏠 Main menu', '', 'data-action="mainMenu"') +
+      btn('db-nav-btn' + (state.breadcrumb && state.breadcrumb.length > 1 ? '' : ' db-nav-btn--muted'),
+        '‹ Back', '', 'data-action="navBack"') +
+      div('db-nav-spacer') +
+      btn('db-nav-btn db-nav-btn--accent', '📞 Counsellor', '', 'data-action="navCounsellor"')
     );
   }
 
@@ -482,15 +592,11 @@
       ) +
       '</div>';
 
-    /* Context chip */
-    if (state.context) {
-      html += '<div id="db-context-bar">'+
-        div('db-context-chip',
-          div('db-context-dot') +
-          esc(state.context.label) +
-          btn('db-context-clear', SVG.x10, '', 'data-action="clearContext" aria-label="Clear current context"')
-        ) +
-        '</div>';
+    /* §11.4 breadcrumb + §11.3 recently-viewed rail, both server-owned. */
+    var crumbHtml = renderBreadcrumb();
+    var railHtml = renderRail();
+    if (crumbHtml || railHtml) {
+      html += '<div id="db-context-bar">' + crumbHtml + railHtml + '</div>';
     }
 
     /* Messages */
@@ -498,7 +604,7 @@
     /* Tool widget (inline) */
     if (state.tool) msgsHtml += renderToolWidget();
     /* Chips */
-    if (state.chips.length && !state.tool) msgsHtml += renderChips();
+    if (!state.tool) msgsHtml += renderChips();
 
     html += '<div id="db-messages" aria-live="polite">'+msgsHtml+'</div>';
 
@@ -508,6 +614,9 @@
         btn('db-compare-run-btn', SVG.compare + 'Compare '+state.compare.length+' selected', '', 'data-action="runCompare"') +
         '</div>';
     }
+
+    /* §9 persistent navigation row — always present, outside the chip set. */
+    if (state.ready) html += renderNavRow();
 
     /* Overlays */
     if (state.picker) html += renderPicker();

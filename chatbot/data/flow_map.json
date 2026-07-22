@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-21-chip-flow-v2",
+  "version": "2026-07-22-chip-final",
   "surfaces": {
     "page:home": {
       "browse_universities": "SPLIT",

@@ -36,10 +36,56 @@
     /* Chip clicks */
     delegate('[data-action="chip"]', function(el){
       if (state.busy) return;
-      var idx = parseInt(el.getAttribute('data-idx'));
-      if (idx===-1) { expandMore(); return; }
-      var ch = state.chips[idx];
+      var ch = state.chips[parseInt(el.getAttribute('data-idx'))];
+      if (!ch) return;
+      /* §11.1 a list row is a catalog entity — tapping it switches context. */
+      if (ch.handler === 'list_pick' && ch.listRow) { pickItem(ch.listRow); return; }
+      onChip(ch);
+    });
+
+    /* §8 the reserved conversion slot is its own channel. */
+    delegate('[data-action="conversion"]', function(){
+      if (state.busy || !state.conversionChip) return;
+      onChip(state.conversionChip);
+    });
+
+    /* §10 More reveals the demoted pool in place; it never sends anything. */
+    delegate('[data-action="toggleMore"]', function(){
+      if (state.busy) return;
+      state.moreOpen = !state.moreOpen;
+      render(); scrollToBottom();
+    });
+    delegate('[data-action="moreChip"]', function(el){
+      if (state.busy) return;
+      var ch = state.moreChips[parseInt(el.getAttribute('data-idx'))];
       if (ch) onChip(ch);
+    });
+
+    /* §2.2 list overflow hands off to the existing picker sheet. */
+    delegate('[data-action="listShowAll"]', function(){
+      if (state.busy) return;
+      emitAnalytics('list_overflow_opened', state.lastChip);
+      openListOverflowPicker();
+    });
+
+    /* §11.4 breadcrumb jump · §11.3 rail jump */
+    delegate('[data-action="crumb"]', function(el){
+      if (state.busy) return;
+      var item = (state.breadcrumb || [])[parseInt(el.getAttribute('data-idx'))];
+      if (item) switchEntity(item);
+    });
+    delegate('[data-action="rail"]', function(el){
+      if (state.busy) return;
+      var item = (state.recentlyViewed || [])[parseInt(el.getAttribute('data-idx'))];
+      if (item) switchEntity(item);
+    });
+
+    /* §9 persistent navigation row */
+    delegate('[data-action="mainMenu"]', function(){ if (!state.busy) goMainMenu(); });
+    delegate('[data-action="navBack"]', function(){ if (!state.busy) goBack(); });
+    delegate('[data-action="navCounsellor"]', function(){
+      if (state.busy) return;
+      onChip({ label: '📞 Talk to a counsellor', handler: 'cta_callback', chip_id: 'counsellor' });
     });
 
     /* View details */

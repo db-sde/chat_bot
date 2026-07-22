@@ -117,6 +117,12 @@ class QuickAction(TransportModel):
     action: Literal["guided_command"] = "guided_command"
     chip_id: str | None = None
     chip_handler: str | None = None
+    # §2 chip taxonomy: the widget renders nav_set / list_set / content_card
+    # differently, so the resolved type travels with every action.
+    chip_type: Literal["nav_set", "list_set", "content_card"] = "nav_set"
+    rows_visible: int | None = Field(default=None, ge=1, le=20)
+    # §10 demoted chips render dimmed with a check instead of disappearing.
+    seen: bool = False
     tool: Literal["roi", "career_quiz", "scholarship"] | None = None
     surface: str | None = None
     funnel_stage: Literal["top", "mid", "bottom"] | None = None
@@ -171,7 +177,9 @@ class ContextClearRequest(TransportModel):
     session_id: str = Field(min_length=1, max_length=200)
     # "all" clears focus and resets navigation to the homepage. "flow" abandons
     # only an active tool, leaving the page context the user is on intact.
-    scope: Literal["all", "flow"] = "all"
+    # "chips" resets the active entity's consumed chips (§9 Main menu) without
+    # losing the entity, its breadcrumb, or the rail.
+    scope: Literal["all", "flow", "chips"] = "all"
 
 
 class ContextClearResponse(TransportModel):
@@ -243,6 +251,9 @@ class WidgetAnalyticsRequest(TransportModel):
         "cascade_step",
         "apply_clicked",
         "counsellor_clicked",
+        # §13 chip-map analytics additions.
+        "list_overflow_opened",
+        "chip_pool_exhausted",
     ]
     surface: str = Field(min_length=1, max_length=100)
     funnel_stage: Literal["top", "mid", "bottom"]

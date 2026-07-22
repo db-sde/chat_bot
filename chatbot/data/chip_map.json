@@ -1,32 +1,49 @@
 {
-  "version": "2026-07-21-chip-flow-v2",
+  "version": "2026-07-22-chip-final",
   "chips": {
     "browse_universities": {
       "handler": "list_universities",
       "label": "🎓 Browse universities",
-      "funnel_stage": "top"
+      "funnel_stage": "top",
+      "type": "list_set",
+      "list": {
+        "inline_max": 6,
+        "show_top": 5,
+        "overflow": "picker_sheet",
+        "order": "alpha"
+      }
     },
     "browse_programs": {
       "handler": "list_programs",
       "label": "📚 Browse programs",
-      "funnel_stage": "top"
+      "funnel_stage": "top",
+      "type": "list_set",
+      "list": {
+        "inline_max": 6,
+        "show_top": 5,
+        "overflow": "picker_sheet",
+        "order": "alpha"
+      }
     },
     "career_quiz_tool": {
       "handler": "tool_entry",
       "tool": "career_quiz",
       "label": "🎯 Help me choose",
-      "funnel_stage": "mid"
+      "funnel_stage": "mid",
+      "type": "nav_set"
     },
     "specialization_quiz_tool": {
       "handler": "tool_entry",
       "tool": "career_quiz",
       "label": "🎯 Which specialization suits me?",
-      "funnel_stage": "mid"
+      "funnel_stage": "mid",
+      "type": "nav_set"
     },
     "validity": {
       "handler": "get_validity",
       "label": "🛡️ Is an online degree valid?",
-      "funnel_stage": "bottom"
+      "funnel_stage": "bottom",
+      "type": "nav_set"
     },
     "validity_course": {
       "handler": "get_validity",
@@ -34,17 +51,20 @@
       "funnel_stage": "bottom",
       "requires": [
         "validity"
-      ]
+      ],
+      "type": "nav_set"
     },
     "compare_universities": {
       "handler": "compare",
       "label": "⚖️ Compare universities",
-      "funnel_stage": "bottom"
+      "funnel_stage": "bottom",
+      "type": "nav_set"
     },
     "compare_top": {
       "handler": "compare",
       "label": "⚖️ Compare top universities",
-      "funnel_stage": "bottom"
+      "funnel_stage": "bottom",
+      "type": "nav_set"
     },
     "compare_others": {
       "handler": "compare",
@@ -52,7 +72,8 @@
       "funnel_stage": "bottom",
       "requires": [
         "comparison"
-      ]
+      ],
+      "type": "nav_set"
     },
     "compare_program": {
       "handler": "compare",
@@ -60,7 +81,8 @@
       "funnel_stage": "bottom",
       "requires": [
         "comparison"
-      ]
+      ],
+      "type": "nav_set"
     },
     "compare_specializations": {
       "handler": "compare",
@@ -68,12 +90,14 @@
       "funnel_stage": "bottom",
       "requires": [
         "comparison"
-      ]
+      ],
+      "type": "nav_set"
     },
     "compare": {
       "handler": "compare",
       "label": "⚖️ Compare these",
-      "funnel_stage": "bottom"
+      "funnel_stage": "bottom",
+      "type": "nav_set"
     },
     "fees_emi": {
       "handler": "get_fees",
@@ -81,7 +105,20 @@
       "funnel_stage": "bottom",
       "requires": [
         "fees"
-      ]
+      ],
+      "type_by_entity": {
+        "course": {
+          "type": "content_card",
+          "rows_visible": 4
+        },
+        "specialization": {
+          "type": "content_card",
+          "rows_visible": 4
+        },
+        "university": {
+          "type": "nav_set"
+        }
+      }
     },
     "fees_across": {
       "handler": "get_fees",
@@ -89,7 +126,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "fees"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 4
     },
     "see_fees": {
       "handler": "get_fees",
@@ -97,7 +136,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "fees"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 4
     },
     "eligibility": {
       "handler": "get_eligibility",
@@ -105,7 +146,8 @@
       "funnel_stage": "bottom",
       "requires": [
         "eligibility"
-      ]
+      ],
+      "type": "nav_set"
     },
     "check_eligibility": {
       "handler": "get_eligibility",
@@ -113,7 +155,8 @@
       "funnel_stage": "bottom",
       "requires": [
         "eligibility"
-      ]
+      ],
+      "type": "nav_set"
     },
     "programs_here": {
       "handler": "list_programs",
@@ -121,12 +164,26 @@
       "funnel_stage": "mid",
       "requires": [
         "programs"
-      ]
+      ],
+      "type": "list_set",
+      "list": {
+        "inline_max": 6,
+        "show_top": 5,
+        "overflow": "picker_sheet",
+        "order": "alpha"
+      }
     },
     "list_providers": {
       "handler": "list_providers",
       "label": "🎓 Universities offering this",
-      "funnel_stage": "mid"
+      "funnel_stage": "mid",
+      "type": "list_set",
+      "list": {
+        "inline_max": 6,
+        "show_top": 5,
+        "overflow": "picker_sheet",
+        "order": "alpha"
+      }
     },
     "approvals": {
       "handler": "get_approvals",
@@ -134,7 +191,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "accreditations"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 6
     },
     "reviews": {
       "handler": "get_reviews",
@@ -142,7 +201,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "reviews"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 3
     },
     "average_rating": {
       "handler": "get_average_rating",
@@ -150,7 +211,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "average_rating"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 3
     },
     "placement_support": {
       "handler": "get_placement_support",
@@ -158,7 +221,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "placement_support"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 4
     },
     "why_choose": {
       "handler": "get_overview",
@@ -166,7 +231,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "why_choose"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 4
     },
     "admission_process": {
       "handler": "get_admission_steps",
@@ -174,7 +241,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "admissions"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 5
     },
     "admission_steps": {
       "handler": "get_admission_steps",
@@ -182,7 +251,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "admissions"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 5
     },
     "admissions": {
       "handler": "get_admission_steps",
@@ -190,7 +261,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "admissions"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 5
     },
     "specializations": {
       "handler": "get_specializations",
@@ -198,7 +271,14 @@
       "funnel_stage": "bottom",
       "requires": [
         "specializations"
-      ]
+      ],
+      "type": "list_set",
+      "list": {
+        "inline_max": 6,
+        "show_top": 5,
+        "overflow": "picker_sheet",
+        "order": "alpha"
+      }
     },
     "other_specs": {
       "handler": "get_specializations",
@@ -206,7 +286,14 @@
       "funnel_stage": "bottom",
       "requires": [
         "other_specializations"
-      ]
+      ],
+      "type": "list_set",
+      "list": {
+        "inline_max": 6,
+        "show_top": 5,
+        "overflow": "picker_sheet",
+        "order": "fee_numeric_asc"
+      }
     },
     "careers": {
       "handler": "get_careers",
@@ -214,7 +301,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "careers"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 4
     },
     "careers_from_syllabus": {
       "handler": "get_careers",
@@ -222,7 +311,9 @@
       "funnel_stage": "bottom",
       "requires": [
         "careers"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 4
     },
     "syllabus": {
       "handler": "get_syllabus",
@@ -230,12 +321,21 @@
       "funnel_stage": "bottom",
       "requires": [
         "syllabus"
-      ]
+      ],
+      "type": "content_card",
+      "rows_visible": 4
     },
     "eligible_programs": {
       "handler": "get_eligible_programs",
       "label": "🎓 Programs I'm eligible for",
-      "funnel_stage": "bottom"
+      "funnel_stage": "bottom",
+      "type": "list_set",
+      "list": {
+        "inline_max": 6,
+        "show_top": 5,
+        "overflow": "picker_sheet",
+        "order": "alpha"
+      }
     },
     "roi_tool": {
       "handler": "tool_entry",
@@ -244,7 +344,8 @@
       "funnel_stage": "bottom",
       "requires": [
         "roi"
-      ]
+      ],
+      "type": "nav_set"
     },
     "scholarship_tool": {
       "handler": "tool_entry",
@@ -253,17 +354,20 @@
       "funnel_stage": "bottom",
       "requires": [
         "scholarship"
-      ]
+      ],
+      "type": "nav_set"
     },
     "apply_now": {
       "handler": "cta_apply",
       "label": "📝 Apply now",
-      "funnel_stage": "bottom"
+      "funnel_stage": "bottom",
+      "type": "nav_set"
     },
     "counsellor": {
       "handler": "cta_callback",
       "label": "📞 Talk to a counsellor",
-      "funnel_stage": "bottom"
+      "funnel_stage": "bottom",
+      "type": "nav_set"
     }
   },
   "surfaces": {
@@ -522,5 +626,70 @@
       "compare"
     ],
     "min_non_conversion_chips": 2
+  },
+  "pools": {
+    "entity:university": {
+      "priority": [
+        "programs_here",
+        "approvals",
+        "reviews",
+        "placement_support",
+        "why_choose",
+        "admission_process",
+        "average_rating",
+        "compare_universities",
+        "roi_tool"
+      ],
+      "backfill": [
+        "faq_chips",
+        "browse_universities",
+        "career_quiz_tool",
+        "browse_programs"
+      ]
+    },
+    "entity:course": {
+      "priority": [
+        "specializations",
+        "fees_emi",
+        "eligibility",
+        "validity_course",
+        "careers",
+        "syllabus",
+        "reviews",
+        "placement_support",
+        "admission_process",
+        "compare_program",
+        "roi_tool",
+        "scholarship_tool"
+      ],
+      "backfill": [
+        "faq_chips",
+        "browse_universities",
+        "programs_here",
+        "career_quiz_tool"
+      ]
+    },
+    "entity:specialization": {
+      "priority": [
+        "other_specs",
+        "careers",
+        "fees_emi",
+        "eligibility",
+        "syllabus",
+        "validity_course",
+        "reviews",
+        "placement_support",
+        "admission_process",
+        "compare_specializations",
+        "roi_tool",
+        "scholarship_tool"
+      ],
+      "backfill": [
+        "faq_chips",
+        "specializations",
+        "browse_universities",
+        "career_quiz_tool"
+      ]
+    }
   }
 }

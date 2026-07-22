@@ -199,6 +199,8 @@ def test_only_backend_accepted_analytics_events_are_emitted() -> None:
         "cascade_step",
         "apply_clicked",
         "counsellor_clicked",
+        "list_overflow_opened",
+        "chip_pool_exhausted",
     }
     emitted = set(re.findall(r"emitAnalytics\(\s*'([a-z_]+)'", _bundle()))
     assert emitted <= accepted, f"invalid analytics events: {emitted - accepted}"

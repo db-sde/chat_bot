@@ -92,7 +92,14 @@
       return;
     }
     if (handler === 'cta_apply' || handler === 'cta_callback') { openLeadTurn(ch); return; }
-    if (PICKER_HANDLERS[handler]) { openPicker(PICKER_HANDLERS[handler], ch); return; }
+    /* §2.2 a list_set is an enumeration: render it inline so the user can scan
+       and pick. Only overflow (7+) hands off to the picker sheet. Sending every
+       list straight to a modal is what buried short lists. */
+    if (PICKER_HANDLERS[handler]) {
+      if (ch.chip_type === 'list_set') { showListSet(PICKER_HANDLERS[handler], ch); return; }
+      openPicker(PICKER_HANDLERS[handler], ch);
+      return;
+    }
     if (INFO_HANDLERS[handler]) { showInfoCard(handler, ch); return; }
 
     console.warn('DegreeBaba widget has no guided surface for chip handler', handler);
@@ -258,7 +265,7 @@
       .then(function (res) {
         adoptServerContext(res);
         var followup = (res && res.followup) || {};
-        setChips(followup.actions || [], followup.more || []);
+        setChips(followup.actions || [], followup.more || [], followup.conversion);
         render(); scrollToBottom();
         return res;
       }).catch(function (err) {
@@ -281,6 +288,140 @@
   }
 
   /* ── Catalog picker ────────────────────────────────────────── */
+  /* §2.2 fetch the enumeration and render it inline as a list_set. The rows
+     are catalog entities, so each one is a doorway to that entity (§11.1). */
+  function showListSet(spec, chip) {
+    var tid = beginTurn(chip.label);
+    listFiltersFor(spec.kind).then(function (filters) {
+      return loadGuideCatalog(spec.kind, filters);
+    }).then(function (rows) {
+      if (!rows.length) { unavailableTurn(tid, UNAVAILABLE); return null; }
+      settleTurn(tid, [{ kind: 'bot', text: listPrompt(chip, rows.length) }], null);
+      var inlineMax = chip.list_inline_max || 6;
+      var compact = rows.length <= inlineMax;
+      state.chips = rows.map(function (row) {
+        return {
+          label: row.name,
+          /* the 2-col grid has no room for the full catalog meta line */
+          meta: compact ? shortMeta(row) : row.meta,
+          mono: row.mono, bg: row.bg,
+          chip_type: 'list_set', handler: 'list_pick', listRow: row,
+          list_inline_max: chip.list_inline_max || 6,
+          list_show_top: chip.list_show_top || 5,
+          chip_id: chip.chip_id, chip_surface: chip.chip_surface
+        };
+      });
+      state.moreChips = [];
+      state.hasMore = false;
+      state.listChip = chip;
+      /* §2.2 the conversion chip keeps its reserved slot below a divider. */
+      return postGuideChips(null, chip.chip_id, cardTypeForContext())
+        .then(function (res) {
+          adoptServerContext(res);
+          var followup = (res && res.followup) || {};
+          state.conversionChip = followup.conversion ? chipFrom(followup.conversion) : null;
+          render(); scrollToBottom();
+        }).catch(function () { render(); scrollToBottom(); });
+    }).catch(function (err) {
+      console.warn('DegreeBaba widget list unavailable', err);
+      unavailableTurn(tid, UNAVAILABLE);
+    });
+  }
+
+  /* One distinguishing fact for the compact grid: fee if published, else the
+     first meta segment. Never the whole line — it cannot fit two-up. */
+  function shortMeta(row) {
+    var raw = String(row.meta || '');
+    var fee = raw.match(/(?:INR|₹)\s?[\d,]+/);
+    if (fee) return money(fee[0]);
+    var first = raw.split('·')[0];
+    return first ? first.trim() : '';
+  }
+
+  function listPrompt(chip, count) {
+    var label = String(chip.label || '').replace(/^[^A-Za-z]+/, '');
+    return count === 1
+      ? 'One option — pick it to see the details.'
+      : label + ' — ' + count + ' options. Pick one to continue.';
+  }
+
+  /* Reuse exactly the scoping refreshPicker() applies, so an inline list and
+     its picker overflow always show the same rows. */
+  function listFiltersFor(kind) {
+    var filters = {};
+    if (kind === 'spec' || kind === 'program' || kind === 'course') {
+      if (ctxUniversityId()) filters.university = ctxUniversityId();
+    }
+    if (kind === 'spec' && ctxPageType() === 'course' && ctxEntityId()) filters.course = ctxEntityId();
+    return Promise.resolve(filters);
+  }
+
+  /* §11 switching the active entity is a session action: the backend resolves
+     the entity, restores its per-entity consumed pool, and returns the
+     breadcrumb/rail. The widget only renders the result. */
+  function switchEntity(item) {
+    if (!item || !item.id) return;
+    state.guideBundle = null;
+    state.pickerCache = {};
+    var tid = beginTurn(item.label);
+    loadGuideContext(item.type || null, {
+      entityId: item.id,
+      universityId: item.type === 'university' ? item.id : ctxUniversityId()
+    }).then(function (bundle) {
+      if (!bundle || !bundle.entity) { unavailableTurn(tid, UNAVAILABLE); return; }
+      applyBundleContext(bundle);
+      settleTurn(tid, [{ kind: 'cards', cards: [cardFrom(bundle.entity)] }], null);
+      return loadFollowups(null, null);
+    }).catch(function (err) {
+      console.warn('DegreeBaba widget entity switch failed', err);
+      unavailableTurn(tid, UNAVAILABLE);
+    });
+  }
+
+  /* §9 Main menu returns to this page's opening set with chips reset to
+     unconsumed, which is also the escape hatch out of any exhausted pool. */
+  function goMainMenu() {
+    state.guideBundle = null;
+    var tid = beginTurn(null);
+    postJson('/api/widget/context/clear', Object.assign(
+      { scope: 'chips' }, state.sessionId ? { session_id: state.sessionId } : {}
+    )).catch(function () { /* the opening set below still stands */ })
+      .then(function () { return ensureGuideBundle(); })
+      .then(function (bundle) {
+        applyBundleContext(bundle);
+        var opening = bundle.opening || {};
+        settleTurn(tid, [{ kind: 'bot', text: 'Main menu — where would you like to go?' }], null);
+        setChips(opening.top || [], opening.more || [], opening.conversion);
+        render(); scrollToBottom();
+      }).catch(function (err) {
+        console.warn('DegreeBaba widget main menu unavailable', err);
+        unavailableTurn(tid, UNAVAILABLE);
+      });
+  }
+
+  /* §9 Back steps one level up the breadcrumb — the entity cascade, not the
+     raw message history, is what a user means by "back". */
+  function goBack() {
+    var crumbs = state.breadcrumb || [];
+    if (crumbs.length < 2) return;
+    switchEntity(crumbs[crumbs.length - 2]);
+  }
+
+  /* §2.2 list overflow: reuse the picker sheet the catalog browser already
+     uses, seeded with the same rows the list was rendering. */
+  function openListOverflowPicker() {
+    var chip = state.lastChip;
+    var handler = (chip && chip.handler) || '';
+    var spec = PICKER_HANDLERS[handler];
+    if (spec) { openPicker(spec, chip); return; }
+    state.picker = {
+      title: 'Choose an option', kind: 'uni', query: '',
+      rows: null, loading: true, chip: chip || null
+    };
+    render();
+    refreshPicker('');
+  }
+
   function openPicker(spec, chip) {
     state.picker = {
       title: spec.title, kind: spec.kind, query: '',

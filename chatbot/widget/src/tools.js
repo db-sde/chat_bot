@@ -167,10 +167,14 @@
   }
 
   /* The backend owns chip content and order. The widget only renders. */
-  function setChips(actions, more) {
+  /* §8 the conversion slot is a separate channel from the info slots, so the
+     widget never has to reconstruct which chip converts. */
+  function setChips(actions, more, conversion) {
     state.chips = (actions || []).map(chipFrom).filter(function (c) { return c.label; });
     state.moreChips = (more || []).map(chipFrom).filter(function (c) { return c.label; });
     state.hasMore = state.moreChips.length > 0;
+    state.moreOpen = false;
+    state.conversionChip = conversion ? chipFrom(conversion) : null;
     emitChipShown(state.chips);
   }
 

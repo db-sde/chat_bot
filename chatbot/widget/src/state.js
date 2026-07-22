@@ -24,7 +24,11 @@
     pickerCache: {},       // cacheKey -> normalized rows
     pickerToken: 0,        // guards out-of-order picker searches
     busy: false,           // a guided backend command is in flight
-    moreChips: null,       // config-owned "More ⌄" set from /guide/context
+    moreChips: null,
+    moreOpen: false,          // §10 the More panel is collapsed by default
+    conversionChip: null,     // §8 the reserved conversion slot
+    breadcrumb: [],           // §11.4
+    recentlyViewed: [],       // §11.3,       // config-owned "More ⌄" set from /guide/context
     ready: false,          // true once the backend opening payload has landed
     guideBusy: null,       // in-flight /guide/context promise
     viewedActions: new Set(),  // chip_ids already counted as impressions

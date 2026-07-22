@@ -66,7 +66,11 @@
     pickerCache: {},       // cacheKey -> normalized rows
     pickerToken: 0,        // guards out-of-order picker searches
     busy: false,           // a guided backend command is in flight
-    moreChips: null,       // config-owned "More ⌄" set from /guide/context
+    moreChips: null,
+    moreOpen: false,          // §10 the More panel is collapsed by default
+    conversionChip: null,     // §8 the reserved conversion slot
+    breadcrumb: [],           // §11.4
+    recentlyViewed: [],       // §11.3,       // config-owned "More ⌄" set from /guide/context
     ready: false,          // true once the backend opening payload has landed
     guideBusy: null,       // in-flight /guide/context promise
     viewedActions: new Set(),  // chip_ids already counted as impressions
@@ -417,6 +421,13 @@
      carries navigation/attribution metadata funnels through here, so the
      widget can never drift from the session the backend is tracking. */
   function adoptServerContext(source) {
+    /* §11 breadcrumb and rail are session state resolved by the backend; the
+       widget renders them and never derives its own navigation history. */
+    var sessionCtx = source && source.session_context;
+    if (sessionCtx) {
+      state.breadcrumb = sessionCtx.breadcrumb || [];
+      state.recentlyViewed = sessionCtx.recently_viewed || [];
+    }
     var src = source || {};
     var ctx = src.context || {};
     var meta = src.opening || src.followup || {};
@@ -563,7 +574,10 @@
       interaction_count: (typeof action.interaction_count === 'number') ? action.interaction_count : null,
       content_version: action.content_version || null,
       lead_tags: action.lead_tags || null,
-      tool: action.tool || null
+      /* §2 taxonomy + §10 seen state, both resolved by the backend. */
+      chip_type: action.chip_type || 'nav_set',
+      rows_visible: action.rows_visible || null,
+      seen: action.seen === true
     };
   }
 
@@ -812,7 +826,14 @@
       return;
     }
     if (handler === 'cta_apply' || handler === 'cta_callback') { openLeadTurn(ch); return; }
-    if (PICKER_HANDLERS[handler]) { openPicker(PICKER_HANDLERS[handler], ch); return; }
+    /* §2.2 a list_set is an enumeration: render it inline so the user can scan
+       and pick. Only overflow (7+) hands off to the picker sheet. Sending every
+       list straight to a modal is what buried short lists. */
+    if (PICKER_HANDLERS[handler]) {
+      if (ch.chip_type === 'list_set') { showListSet(PICKER_HANDLERS[handler], ch); return; }
+      openPicker(PICKER_HANDLERS[handler], ch);
+      return;
+    }
     if (INFO_HANDLERS[handler]) { showInfoCard(handler, ch); return; }
 
     console.warn('DegreeBaba widget has no guided surface for chip handler', handler);
@@ -978,7 +999,7 @@
       .then(function (res) {
         adoptServerContext(res);
         var followup = (res && res.followup) || {};
-        setChips(followup.actions || [], followup.more || []);
+        setChips(followup.actions || [], followup.more || [], followup.conversion);
         render(); scrollToBottom();
         return res;
       }).catch(function (err) {
@@ -1001,6 +1022,140 @@
   }
 
   /* ── Catalog picker ────────────────────────────────────────── */
+  /* §2.2 fetch the enumeration and render it inline as a list_set. The rows
+     are catalog entities, so each one is a doorway to that entity (§11.1). */
+  function showListSet(spec, chip) {
+    var tid = beginTurn(chip.label);
+    listFiltersFor(spec.kind).then(function (filters) {
+      return loadGuideCatalog(spec.kind, filters);
+    }).then(function (rows) {
+      if (!rows.length) { unavailableTurn(tid, UNAVAILABLE); return null; }
+      settleTurn(tid, [{ kind: 'bot', text: listPrompt(chip, rows.length) }], null);
+      var inlineMax = chip.list_inline_max || 6;
+      var compact = rows.length <= inlineMax;
+      state.chips = rows.map(function (row) {
+        return {
+          label: row.name,
+          /* the 2-col grid has no room for the full catalog meta line */
+          meta: compact ? shortMeta(row) : row.meta,
+          mono: row.mono, bg: row.bg,
+          chip_type: 'list_set', handler: 'list_pick', listRow: row,
+          list_inline_max: chip.list_inline_max || 6,
+          list_show_top: chip.list_show_top || 5,
+          chip_id: chip.chip_id, chip_surface: chip.chip_surface
+        };
+      });
+      state.moreChips = [];
+      state.hasMore = false;
+      state.listChip = chip;
+      /* §2.2 the conversion chip keeps its reserved slot below a divider. */
+      return postGuideChips(null, chip.chip_id, cardTypeForContext())
+        .then(function (res) {
+          adoptServerContext(res);
+          var followup = (res && res.followup) || {};
+          state.conversionChip = followup.conversion ? chipFrom(followup.conversion) : null;
+          render(); scrollToBottom();
+        }).catch(function () { render(); scrollToBottom(); });
+    }).catch(function (err) {
+      console.warn('DegreeBaba widget list unavailable', err);
+      unavailableTurn(tid, UNAVAILABLE);
+    });
+  }
+
+  /* One distinguishing fact for the compact grid: fee if published, else the
+     first meta segment. Never the whole line — it cannot fit two-up. */
+  function shortMeta(row) {
+    var raw = String(row.meta || '');
+    var fee = raw.match(/(?:INR|₹)\s?[\d,]+/);
+    if (fee) return money(fee[0]);
+    var first = raw.split('·')[0];
+    return first ? first.trim() : '';
+  }
+
+  function listPrompt(chip, count) {
+    var label = String(chip.label || '').replace(/^[^A-Za-z]+/, '');
+    return count === 1
+      ? 'One option — pick it to see the details.'
+      : label + ' — ' + count + ' options. Pick one to continue.';
+  }
+
+  /* Reuse exactly the scoping refreshPicker() applies, so an inline list and
+     its picker overflow always show the same rows. */
+  function listFiltersFor(kind) {
+    var filters = {};
+    if (kind === 'spec' || kind === 'program' || kind === 'course') {
+      if (ctxUniversityId()) filters.university = ctxUniversityId();
+    }
+    if (kind === 'spec' && ctxPageType() === 'course' && ctxEntityId()) filters.course = ctxEntityId();
+    return Promise.resolve(filters);
+  }
+
+  /* §11 switching the active entity is a session action: the backend resolves
+     the entity, restores its per-entity consumed pool, and returns the
+     breadcrumb/rail. The widget only renders the result. */
+  function switchEntity(item) {
+    if (!item || !item.id) return;
+    state.guideBundle = null;
+    state.pickerCache = {};
+    var tid = beginTurn(item.label);
+    loadGuideContext(item.type || null, {
+      entityId: item.id,
+      universityId: item.type === 'university' ? item.id : ctxUniversityId()
+    }).then(function (bundle) {
+      if (!bundle || !bundle.entity) { unavailableTurn(tid, UNAVAILABLE); return; }
+      applyBundleContext(bundle);
+      settleTurn(tid, [{ kind: 'cards', cards: [cardFrom(bundle.entity)] }], null);
+      return loadFollowups(null, null);
+    }).catch(function (err) {
+      console.warn('DegreeBaba widget entity switch failed', err);
+      unavailableTurn(tid, UNAVAILABLE);
+    });
+  }
+
+  /* §9 Main menu returns to this page's opening set with chips reset to
+     unconsumed, which is also the escape hatch out of any exhausted pool. */
+  function goMainMenu() {
+    state.guideBundle = null;
+    var tid = beginTurn(null);
+    postJson('/api/widget/context/clear', Object.assign(
+      { scope: 'chips' }, state.sessionId ? { session_id: state.sessionId } : {}
+    )).catch(function () { /* the opening set below still stands */ })
+      .then(function () { return ensureGuideBundle(); })
+      .then(function (bundle) {
+        applyBundleContext(bundle);
+        var opening = bundle.opening || {};
+        settleTurn(tid, [{ kind: 'bot', text: 'Main menu — where would you like to go?' }], null);
+        setChips(opening.top || [], opening.more || [], opening.conversion);
+        render(); scrollToBottom();
+      }).catch(function (err) {
+        console.warn('DegreeBaba widget main menu unavailable', err);
+        unavailableTurn(tid, UNAVAILABLE);
+      });
+  }
+
+  /* §9 Back steps one level up the breadcrumb — the entity cascade, not the
+     raw message history, is what a user means by "back". */
+  function goBack() {
+    var crumbs = state.breadcrumb || [];
+    if (crumbs.length < 2) return;
+    switchEntity(crumbs[crumbs.length - 2]);
+  }
+
+  /* §2.2 list overflow: reuse the picker sheet the catalog browser already
+     uses, seeded with the same rows the list was rendering. */
+  function openListOverflowPicker() {
+    var chip = state.lastChip;
+    var handler = (chip && chip.handler) || '';
+    var spec = PICKER_HANDLERS[handler];
+    if (spec) { openPicker(spec, chip); return; }
+    state.picker = {
+      title: 'Choose an option', kind: 'uni', query: '',
+      rows: null, loading: true, chip: chip || null
+    };
+    render();
+    refreshPicker('');
+  }
+
   function openPicker(spec, chip) {
     state.picker = {
       title: spec.title, kind: spec.kind, query: '',
@@ -1589,10 +1744,14 @@
   }
 
   /* The backend owns chip content and order. The widget only renders. */
-  function setChips(actions, more) {
+  /* §8 the conversion slot is a separate channel from the info slots, so the
+     widget never has to reconstruct which chip converts. */
+  function setChips(actions, more, conversion) {
     state.chips = (actions || []).map(chipFrom).filter(function (c) { return c.label; });
     state.moreChips = (more || []).map(chipFrom).filter(function (c) { return c.label; });
     state.hasMore = state.moreChips.length > 0;
+    state.moreOpen = false;
+    state.conversionChip = conversion ? chipFrom(conversion) : null;
     emitChipShown(state.chips);
   }
 
@@ -1614,6 +1773,7 @@
     check: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B6D11" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
     checkWhite: function(w,sw){return '<svg width="'+w+'" height="'+w+'" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';},
     x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+    checkSeen: '<svg class="db-seen-tick" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
     x10: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
     back: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
     currency: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E84010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12M6 8h12M6 13h3m0 0c6.667 0 6.667-10 0-10M6 13l8.5 8"/></svg>',
@@ -1831,14 +1991,123 @@
   }
 
   /* ── Chips ── */
+  /* §2 the action zone renders one of two shapes. A list_set is an
+     enumeration the user scans and picks from; a nav_set is topic navigation.
+     Truncating a list to satisfy a navigation minimum is the §1.2 bug, so the
+     two paths never share sizing rules. */
   function renderChips() {
-    if (!state.chips.length) return '';
-    var disabledAttr = state.busy ? ' disabled="disabled"' : '';
-    return div('db-chips-area',
-      div('db-chip-grid', state.chips.map(function(ch,i){
-        return btn('db-chip' + (state.busy ? ' db-chip--disabled' : ''),esc(ch.label),'','data-action="chip" data-idx="'+i+'"' + disabledAttr);
+    var conv = state.conversionChip;
+    if (!state.chips.length && !conv) return '';
+    var listChips = state.chips.filter(function (c) { return c.chip_type === 'list_set'; });
+    var isList = listChips.length > 0 && listChips.length === state.chips.length;
+    return div('db-chips-area', isList ? renderListSet() : renderNavSet());
+  }
+
+  function chipAttrs(idx) {
+    return 'data-action="chip" data-idx="' + idx + '"' + (state.busy ? ' disabled="disabled"' : '');
+  }
+  function busyCls() { return state.busy ? ' db-chip--disabled' : ''; }
+
+  /* §8 [info][info][info] + [conversion] — the conversion slot is always
+     present and always separate, so escalation never costs a nav option. */
+  function renderNavSet() {
+    var conv = state.conversionChip;
+    return div('db-chip-grid',
+      state.chips.map(function (ch, i) {
+        return btn('db-chip' + busyCls(), esc(ch.label), '', chipAttrs(i));
+      }).join('') +
+      (conv ? btn('db-chip db-chip-conversion' + busyCls() + (conv.handler === 'cta_apply' ? ' db-chip-conversion--lead' : ''),
+        esc(conv.label), '', 'data-action="conversion"' + (state.busy ? ' disabled="disabled"' : '')) : '')
+    ) +
+    (state.moreOpen ? renderMorePanel() : '') +
+    (state.hasMore ? btn('db-more-btn' + busyCls(),
+      esc(state.moreOpen ? 'Less ⌃' : 'More ⌄'), '', 'data-action="toggleMore"' + (state.busy ? ' disabled="disabled"' : '')) : '');
+  }
+
+  /* §10 demoted chips stay reachable, rendered dimmed with a check so
+     re-tapping is deliberate rather than accidental. */
+  function renderMorePanel() {
+    return div('db-more-panel', state.moreChips.map(function (ch, i) {
+      return btn('db-more-item' + (ch.seen ? ' db-chip--seen' : '') + busyCls(),
+        (ch.seen ? SVG.checkSeen : '') + e('span', '', esc(ch.label)),
+        '', 'data-action="moreChip" data-idx="' + i + '"' + (state.busy ? ' disabled="disabled"' : ''));
+    }).join(''));
+  }
+
+  /* §2.2 show all at <=6 as a grid; at 7+ show the top 5 and hand overflow to
+     the picker sheet. Never backfilled, never reordered, never truncated to
+     fit a navigation minimum. */
+  function renderListSet() {
+    var conv = state.conversionChip;
+    var all = state.chips;
+    var first = all[0] || {};
+    var inlineMax = first.list_inline_max || 6;
+    var showTop = first.list_show_top || 5;
+    var grid = all.length <= inlineMax;
+    var shown = grid ? all : all.slice(0, showTop);
+    var rowHtml = function (ch, i) {
+      return btn('db-list-item' + (grid ? ' db-list-item--grid' : '') + (ch.seen ? ' db-chip--seen' : '') + busyCls(),
+        div('db-list-mono', esc(ch.mono || initialsFor(ch.label)), 'style="background:' + (ch.bg || colorFor(ch.label)) + '"') +
+        div('db-list-body',
+          div('db-list-name', (ch.seen ? SVG.checkSeen : '') + esc(ch.label)) +
+          (ch.meta ? div('db-list-meta', esc(ch.meta)) : '')),
+        '', chipAttrs(i));
+    };
+    return div(grid ? 'db-list-grid' : 'db-list-column',
+      shown.map(rowHtml).join('') +
+      (grid ? '' : (all.length > showTop
+        ? btn('db-list-showall' + busyCls(),
+            e('span', '', 'Show all ' + all.length + ' ›'), '',
+            'data-action="listShowAll"' + (state.busy ? ' disabled="disabled"' : ''))
+        : ''))
+    ) +
+    /* The conversion chip sits below a divider so it never reads as list item #6. */
+    (conv ? div('db-list-divider') + btn('db-chip db-chip-conversion db-chip-conversion--wide' + busyCls() + (conv.handler === 'cta_apply' ? ' db-chip-conversion--lead' : ''),
+      esc(conv.label), '', 'data-action="conversion"' + (state.busy ? ' disabled="disabled"' : '')) : '');
+  }
+
+  /* §11.4 breadcrumb — each segment jumps to that entity, so the cascade is
+     traversable in both directions. */
+  function renderBreadcrumb() {
+    var crumbs = state.breadcrumb || [];
+    if (!crumbs.length) return '';
+    return div('db-context-chip',
+      div('db-context-dot') +
+      div('db-crumbs', crumbs.map(function (c, i) {
+        return (i ? e('span', 'db-crumb-sep', '›') : '') +
+          btn('db-crumb' + (i === crumbs.length - 1 ? ' db-crumb--active' : ''),
+            esc(c.label), '', 'data-action="crumb" data-idx="' + i + '"');
       }).join('')) +
-      (state.hasMore ? btn('db-more-btn' + (state.busy ? ' db-chip--disabled' : ''),'More ⌄','','data-action="chip" data-idx="-1"' + disabledAttr) : '')
+      btn('db-context-clear', SVG.x10, '', 'data-action="clearContext" aria-label="Clear current context"')
+    );
+  }
+
+  /* §11.3 recently-viewed rail — returns to any entity with its consumed
+     state intact, which linear Back cannot do. */
+  function renderRail() {
+    var items = state.recentlyViewed || [];
+    if (items.length < 2) return '';
+    return div('db-rail-wrap',
+      div('db-rail-label', 'Recently viewed') +
+      div('db-rail', items.map(function (v, i) {
+        return btn('db-rail-item', 
+          div('db-rail-mono', esc(initialsFor(v.label)), 'style="background:' + colorFor(v.label) + '"') +
+          e('span', 'db-rail-name', esc(v.label)),
+          '', 'data-action="rail" data-idx="' + i + '"');
+      }).join(''))
+    );
+  }
+
+  /* §9 persistent navigation row — chrome, not content. Sits outside the
+     contextual set and does not count toward the 4-chip floor, which makes a
+     terminal dead end structurally impossible. */
+  function renderNavRow() {
+    return div('db-nav-row',
+      btn('db-nav-btn', '🏠 Main menu', '', 'data-action="mainMenu"') +
+      btn('db-nav-btn' + (state.breadcrumb && state.breadcrumb.length > 1 ? '' : ' db-nav-btn--muted'),
+        '‹ Back', '', 'data-action="navBack"') +
+      div('db-nav-spacer') +
+      btn('db-nav-btn db-nav-btn--accent', '📞 Counsellor', '', 'data-action="navCounsellor"')
     );
   }
 
@@ -2085,15 +2354,11 @@
       ) +
       '</div>';
 
-    /* Context chip */
-    if (state.context) {
-      html += '<div id="db-context-bar">'+
-        div('db-context-chip',
-          div('db-context-dot') +
-          esc(state.context.label) +
-          btn('db-context-clear', SVG.x10, '', 'data-action="clearContext" aria-label="Clear current context"')
-        ) +
-        '</div>';
+    /* §11.4 breadcrumb + §11.3 recently-viewed rail, both server-owned. */
+    var crumbHtml = renderBreadcrumb();
+    var railHtml = renderRail();
+    if (crumbHtml || railHtml) {
+      html += '<div id="db-context-bar">' + crumbHtml + railHtml + '</div>';
     }
 
     /* Messages */
@@ -2101,7 +2366,7 @@
     /* Tool widget (inline) */
     if (state.tool) msgsHtml += renderToolWidget();
     /* Chips */
-    if (state.chips.length && !state.tool) msgsHtml += renderChips();
+    if (!state.tool) msgsHtml += renderChips();
 
     html += '<div id="db-messages" aria-live="polite">'+msgsHtml+'</div>';
 
@@ -2111,6 +2376,9 @@
         btn('db-compare-run-btn', SVG.compare + 'Compare '+state.compare.length+' selected', '', 'data-action="runCompare"') +
         '</div>';
     }
+
+    /* §9 persistent navigation row — always present, outside the chip set. */
+    if (state.ready) html += renderNavRow();
 
     /* Overlays */
     if (state.picker) html += renderPicker();
@@ -2163,10 +2431,56 @@
     /* Chip clicks */
     delegate('[data-action="chip"]', function(el){
       if (state.busy) return;
-      var idx = parseInt(el.getAttribute('data-idx'));
-      if (idx===-1) { expandMore(); return; }
-      var ch = state.chips[idx];
+      var ch = state.chips[parseInt(el.getAttribute('data-idx'))];
+      if (!ch) return;
+      /* §11.1 a list row is a catalog entity — tapping it switches context. */
+      if (ch.handler === 'list_pick' && ch.listRow) { pickItem(ch.listRow); return; }
+      onChip(ch);
+    });
+
+    /* §8 the reserved conversion slot is its own channel. */
+    delegate('[data-action="conversion"]', function(){
+      if (state.busy || !state.conversionChip) return;
+      onChip(state.conversionChip);
+    });
+
+    /* §10 More reveals the demoted pool in place; it never sends anything. */
+    delegate('[data-action="toggleMore"]', function(){
+      if (state.busy) return;
+      state.moreOpen = !state.moreOpen;
+      render(); scrollToBottom();
+    });
+    delegate('[data-action="moreChip"]', function(el){
+      if (state.busy) return;
+      var ch = state.moreChips[parseInt(el.getAttribute('data-idx'))];
       if (ch) onChip(ch);
+    });
+
+    /* §2.2 list overflow hands off to the existing picker sheet. */
+    delegate('[data-action="listShowAll"]', function(){
+      if (state.busy) return;
+      emitAnalytics('list_overflow_opened', state.lastChip);
+      openListOverflowPicker();
+    });
+
+    /* §11.4 breadcrumb jump · §11.3 rail jump */
+    delegate('[data-action="crumb"]', function(el){
+      if (state.busy) return;
+      var item = (state.breadcrumb || [])[parseInt(el.getAttribute('data-idx'))];
+      if (item) switchEntity(item);
+    });
+    delegate('[data-action="rail"]', function(el){
+      if (state.busy) return;
+      var item = (state.recentlyViewed || [])[parseInt(el.getAttribute('data-idx'))];
+      if (item) switchEntity(item);
+    });
+
+    /* §9 persistent navigation row */
+    delegate('[data-action="mainMenu"]', function(){ if (!state.busy) goMainMenu(); });
+    delegate('[data-action="navBack"]', function(){ if (!state.busy) goBack(); });
+    delegate('[data-action="navCounsellor"]', function(){
+      if (state.busy) return;
+      onChip({ label: '📞 Talk to a counsellor', handler: 'cta_callback', chip_id: 'counsellor' });
     });
 
     /* View details */

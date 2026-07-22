@@ -2083,3 +2083,254 @@
   font-weight: 600;
   color: #9A6412;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   CHIP TAXONOMY — nav_set, list_set, persistent nav, context
+   Values mirror the approved design prototype (design/).
+   ═══════════════════════════════════════════════════════════════ */
+
+/* §8 reserved conversion slot — always beside the info chips, never instead */
+.db-chip-conversion {
+  justify-content: center;
+  font-weight: 600;
+  border-color: #F6D3C4;
+  background: #FDF1EC;
+  color: #E84010;
+}
+.db-chip-conversion--lead {
+  background: #E84010;
+  border-color: #E84010;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(232, 64, 16, .28);
+}
+.db-chip-conversion--wide {
+  width: 100%;
+  min-height: 46px;
+}
+
+/* §10 demotion — seen chips dim and carry a tick, they never disappear */
+.db-chip--seen { opacity: .6; color: #9CA3AF; }
+.db-seen-tick { flex-shrink: 0; }
+
+.db-more-panel {
+  margin-top: 8px;
+  max-height: 188px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  padding: 8px;
+  background: #fbfbfc;
+  animation: dbFade .18s ease both;
+}
+.db-more-panel::-webkit-scrollbar { width: 0; }
+.db-more-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #F3F4F6;
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #0E1F3D;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 40px;
+  transition: background .14s ease;
+}
+.db-more-item:hover { background: #F3F4F6; }
+
+/* §2.2 list_set — an enumeration is scanned, never truncated to fit */
+.db-list-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.db-list-column {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.db-list-item {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  text-align: left;
+  /* grid children default to min-width:auto, which makes a long meta line
+     force the cell wider than its track instead of ellipsing */
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .03);
+  transition: border-color .14s ease;
+}
+.db-list-item:hover { border-color: #0E1F3D; }
+.db-list-item--grid { gap: 9px; padding: 10px 11px; min-height: 52px; }
+.db-list-mono {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.db-list-item--grid .db-list-mono { width: 26px; height: 26px; border-radius: 7px; font-size: 10px; }
+.db-list-body { flex: 1; min-width: 0; overflow: hidden; }
+.db-list-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0E1F3D;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-list-item--grid .db-list-name { font-size: 12.5px; line-height: 1.15; }
+.db-list-meta {
+  display: block;
+  font-size: 11px;
+  color: #9CA3AF;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.db-list-showall {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #F7F8FA;
+  border: 1px dashed #cfd3da;
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #0E1F3D;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background .14s ease;
+}
+.db-list-showall:hover { background: #eceef1; }
+/* the conversion chip sits below this rule so it never reads as list item #6 */
+.db-list-divider { height: 1px; background: #E5E7EB; margin: 12px 0 10px; }
+
+/* §11.4 breadcrumb — every segment is a doorway back into the cascade */
+.db-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  overflow: hidden;
+}
+.db-crumb {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: #4B5563;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 118px;
+}
+.db-crumb--active { font-weight: 600; color: #0E1F3D; cursor: default; }
+.db-crumb-sep { color: #cfd3da; font-size: 12px; flex-shrink: 0; }
+
+/* §11.3 recently-viewed rail */
+.db-rail-wrap { padding: 9px 0 3px; }
+.db-rail-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  padding: 0 14px 5px;
+}
+.db-rail {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding: 0 14px 4px;
+}
+.db-rail::-webkit-scrollbar { height: 0; }
+.db-rail-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 20px;
+  padding: 4px 12px 4px 5px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color .14s ease;
+}
+.db-rail-item:hover { border-color: #0E1F3D; }
+.db-rail-mono {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.db-rail-name { font-size: 12px; font-weight: 500; color: #0E1F3D; white-space: nowrap; }
+
+/* §9 persistent navigation row — chrome, outside the 4-chip floor */
+.db-nav-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 12px;
+  background: #F7F8FA;
+  border-top: 1px solid #eceef1;
+  flex-shrink: 0;
+}
+.db-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: none;
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #4B5563;
+  cursor: pointer;
+  border-radius: 7px;
+  transition: background .14s ease;
+}
+.db-nav-btn:hover { background: #eceef1; }
+.db-nav-btn--muted { color: #cfd3da; cursor: default; }
+.db-nav-btn--muted:hover { background: none; }
+.db-nav-btn--accent { color: #E84010; }
+.db-nav-btn--accent:hover { background: #FDF1EC; }
+.db-nav-spacer { flex: 1; }

@@ -30,11 +30,18 @@ from analytics import (
 )
 from config import Settings, get_settings
 from data.accessor import safe_get
+from response.cards import entity_label, entity_page_type
 from data.loader import SAMPLE_CATALOG_PATH, CatalogStore
 from funnel import ChipEngine, ChipMapStore, JourneyEngine
 from leads.funnel import LeadFunnel
 from leads.webhook import CRMWebhook
-from presentation.chips import catalog_chip_context, followup_payload, opening_payload
+from presentation.chips import (
+    catalog_chip_context,
+    faq_chips_for,
+    followup_payload,
+    opening_payload,
+    session_context_payload,
+)
 from presentation.experience import (
     catalog_options,
     context_from_entity,
@@ -69,7 +76,7 @@ from session.navigation import (
     navigation_payload,
     sync_page_navigation,
 )
-from session.state import ConversationState, NavigationStep
+from session.state import ConversationState, EntityRef, NavigationStep
 from session.store import SessionStore
 from widget.config import (
     InvalidSiteKeyError,
@@ -468,6 +475,16 @@ async def widget_guide_context_endpoint(
     )
     if resolved_entity_id:
         service._apply_catalog_focus(state_value, str(resolved_entity_id))
+        # §11 the landing page seeds the session context once; from then on the
+        # session owns it, so entering an entity maintains breadcrumb and rail.
+        if resolved_entity is not None:
+            state_value.session_context.enter(
+                EntityRef(
+                    type=entity_page_type(resolved_entity) or resolved_page_type,
+                    id=str(resolved_entity_id),
+                    label=entity_label(resolved_entity, default=str(resolved_entity_id)),
+                )
+            )
     elif resolved_page_type in {"homepage", "pillar"}:
         state_value.focus.clear()
     sync_page_navigation(
@@ -486,6 +503,7 @@ async def widget_guide_context_endpoint(
         "session_id": resolved_session_id,
         "opening": opening_payload(opening, correlation_id=correlation_id),
         "navigation": navigation_payload(state_value),
+        "session_context": session_context_payload(state_value.session_context),
         "active_flow": (
             {
                 "tool": current_tool.tool,
@@ -507,18 +525,15 @@ async def widget_guide_chips_endpoint(
     existing = await service.session_store.get(session_id)
     state_value = existing or ConversationState(session_id=session_id)
     current_version = service.chip_map.snapshot().version
-    mismatch = state_value.navigation.page_type != command.page_type or (
-        command.entity_id is not None and state_value.navigation.entity_id != command.entity_id
+    # §11 the session owns context: the landing page seeds it once and is never
+    # re-applied. An entity change is therefore a legitimate pivot, not stale
+    # context, so navigation re-syncs to whatever the widget is now showing.
+    sync_page_navigation(
+        state_value,
+        page_type=command.page_type,
+        entity_id=command.entity_id,
+        config_version=current_version,
     )
-    if existing is not None and mismatch:
-        raise HTTPException(status_code=409, detail="Guided context is stale")
-    if existing is None:
-        sync_page_navigation(
-            state_value,
-            page_type=command.page_type,
-            entity_id=command.entity_id,
-            config_version=current_version,
-        )
     service.record_chip_action(
         state_value,
         chip_id=command.completed_chip_id,
@@ -526,17 +541,36 @@ async def widget_guide_chips_endpoint(
         config_version=command.config_version,
     )
     advance_answer_navigation(state_value, answer_state=command.answer_state)
+
+    # §11.5 consumption is tracked per entity: exhausting one entity's pool must
+    # leave the next entity's pool full.
+    entity_id = command.entity_id or state_value.navigation.entity_id or ""
+    entity = service.catalog.get_entity(entity_id) if entity_id else None
+    entity_type = entity_page_type(entity) if entity is not None else None
+    context = state_value.session_context
+    if entity is not None and entity_type:
+        active = EntityRef(
+            type=entity_type,
+            id=entity_id,
+            label=entity_label(entity, default=entity_id),
+        )
+        if context.active is None or context.active.key != active.key:
+            context.enter(active)
+    active_key = context.active.key if context.active else ""
+    if command.completed_chip_id:
+        context.consume(active_key, command.completed_chip_id)
+
     followup = service.chip_engine.lookup(
         page_type=state_value.navigation.page_type,
         card_type=command.card_type,
         answer_state=command.answer_state,
         interaction_count=state_value.navigation.interaction_count,
         state=state_value,
-        entity_context=catalog_chip_context(
-            service.catalog.get_entity(command.entity_id or state_value.navigation.entity_id or ""),
-            service.catalog,
-        ),
+        entity_context=catalog_chip_context(entity, service.catalog),
         completed_chip_id=command.completed_chip_id,
+        entity_type=entity_type,
+        consumed=context.consumed_for(active_key),
+        faq_chips=faq_chips_for(entity, service.chip_map.snapshot(), context.consumed_for(active_key)),
     )
     state_value.navigation.surface = followup.surface
     state_value.navigation.current_node = followup.surface
@@ -549,6 +583,7 @@ async def widget_guide_chips_endpoint(
         "session_id": session_id,
         "followup": followup_payload(followup, correlation_id=correlation_id),
         "navigation": navigation_payload(state_value),
+        "session_context": session_context_payload(context),
     }
 
 
@@ -750,8 +785,22 @@ async def widget_context_clear_endpoint(
     service = _service(request)
     state_value = await service.session_store.get_or_create(command.session_id)
     flow_only = command.scope == "flow"
+    chips_only = command.scope == "chips"
+    if chips_only:
+        # §9 Main menu: the entity, breadcrumb and rail all survive; only this
+        # entity's consumed chips reset, so its full pool is available again.
+        context = state_value.session_context
+        active = context.active
+        if active is not None:
+            context.consumed[active.key] = []
+        await service.session_store.set(state_value)
+        return ContextClearResponse(
+            session_id=command.session_id,
+            context=context_from_state(state_value, service.catalog),
+        )
     if not flow_only:
         state_value.focus.clear()
+        state_value.session_context.reset()
     if state_value.active_flow is not None:
         active_tool = state_value.active_flow.tool
         version = state_value.active_flow.version

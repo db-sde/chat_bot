@@ -292,6 +292,13 @@
      carries navigation/attribution metadata funnels through here, so the
      widget can never drift from the session the backend is tracking. */
   function adoptServerContext(source) {
+    /* §11 breadcrumb and rail are session state resolved by the backend; the
+       widget renders them and never derives its own navigation history. */
+    var sessionCtx = source && source.session_context;
+    if (sessionCtx) {
+      state.breadcrumb = sessionCtx.breadcrumb || [];
+      state.recentlyViewed = sessionCtx.recently_viewed || [];
+    }
     var src = source || {};
     var ctx = src.context || {};
     var meta = src.opening || src.followup || {};
@@ -438,7 +445,10 @@
       interaction_count: (typeof action.interaction_count === 'number') ? action.interaction_count : null,
       content_version: action.content_version || null,
       lead_tags: action.lead_tags || null,
-      tool: action.tool || null
+      /* §2 taxonomy + §10 seen state, both resolved by the backend. */
+      chip_type: action.chip_type || 'nav_set',
+      rows_visible: action.rows_visible || null,
+      seen: action.seen === true
     };
   }
 

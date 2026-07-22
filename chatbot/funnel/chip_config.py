@@ -61,6 +61,31 @@ class _FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
 
 
+class ChipType(StrEnum):
+    """§2 taxonomy. The never-empty guarantee, backfill ladder and demotion
+    apply to NAV_SET only — applying them to a list truncates it (§1.2)."""
+
+    NAV_SET = "nav_set"
+    LIST_SET = "list_set"
+    CONTENT_CARD = "content_card"
+
+
+class ListBlock(_FrozenModel):
+    """§2.2 rendering budget for an entity enumeration."""
+
+    inline_max: int = Field(default=6, ge=1, le=12)
+    show_top: int = Field(default=5, ge=1, le=12)
+    overflow: str = Field(default="picker_sheet", min_length=1, max_length=40)
+    order: str = Field(default="alpha", min_length=1, max_length=40)
+
+
+class EntityChipType(_FrozenModel):
+    """§4.3 one branch of a per-entity type resolution."""
+
+    type: ChipType
+    rows_visible: int | None = Field(default=None, ge=1, le=20)
+
+
 class ABVariant(_FrozenModel):
     """Preserved for future experiment assignment; the engine does not select it."""
 
@@ -76,11 +101,45 @@ class ChipDefinition(_FrozenModel):
     fill: dict[str, str] | None = None
     requires: tuple[str, ...] = ()
     ab: tuple[ABVariant, ...] = ()
+    type: ChipType | None = None
+    type_by_entity: dict[str, EntityChipType] | None = None
+    list: ListBlock | None = None
+    rows_visible: int | None = Field(default=None, ge=1, le=20)
+
+    def resolve_type(self, entity_type: str | None) -> ChipType:
+        """§4.3 resolve against the active entity, falling back to nav_set."""
+
+        if self.type is not None:
+            return self.type
+        if self.type_by_entity:
+            branch = self.type_by_entity.get(str(entity_type or ""))
+            if branch is not None:
+                return branch.type
+        return ChipType.NAV_SET
+
+    def resolve_rows_visible(self, entity_type: str | None) -> int | None:
+        if self.type_by_entity:
+            branch = self.type_by_entity.get(str(entity_type or ""))
+            if branch is not None:
+                return branch.rows_visible
+        return self.rows_visible
 
     @model_validator(mode="after")
     def validate_renderable_definition(self) -> ChipDefinition:
         if self.label is None and not self.ab:
             raise ValueError("chip requires a label or preserved A/B variants")
+        # §4.4 exactly one typing strategy, and each type carries its own block.
+        if self.type is None and not self.type_by_entity:
+            raise ValueError("chip requires type or type_by_entity")
+        if self.type is not None and self.type_by_entity:
+            raise ValueError("chip declares both type and type_by_entity")
+        if self.type is ChipType.LIST_SET and self.list is None:
+            raise ValueError("list_set chips require a list block")
+        if self.type is ChipType.CONTENT_CARD and self.rows_visible is None:
+            raise ValueError("content_card chips require rows_visible")
+        for branch in (self.type_by_entity or {}).values():
+            if branch.type is ChipType.CONTENT_CARD and branch.rows_visible is None:
+                raise ValueError("content_card branches require rows_visible")
         if self.handler == "tool_entry" and not self.tool:
             raise ValueError("tool_entry chips require a tool id")
         if self.handler != "tool_entry" and self.tool:
@@ -123,10 +182,18 @@ class ProgressionConfig(_FrozenModel):
     min_non_conversion_chips: int | None = None
 
 
+class PoolDefinition(_FrozenModel):
+    """§5 the per-entity-type nav pool a follow-up set is filled from."""
+
+    priority: tuple[str, ...] = ()
+    backfill: tuple[str, ...] = ()
+
+
 class ChipMapConfig(_FrozenModel):
     version: str = Field(min_length=1, max_length=80)
     chips: dict[str, ChipDefinition]
     surfaces: dict[str, SurfaceDefinition]
+    pools: dict[str, PoolDefinition] = Field(default_factory=dict)
     faq_chips: FAQChipConfig = Field(default_factory=FAQChipConfig)
     progression: ProgressionConfig = Field(default_factory=ProgressionConfig)
 
@@ -138,6 +205,10 @@ class ChipMapConfig(_FrozenModel):
             referenced.update(surface.top)
             referenced.update(surface.more)
             referenced.update(surface.follow)
+        for pool in self.pools.values():
+            # faq_chips is generated per entity, not a configured chip id.
+            referenced.update(c for c in pool.priority if c != "faq_chips")
+            referenced.update(c for c in pool.backfill if c != "faq_chips")
         missing = sorted(referenced.difference(self.chips))
         if missing:
             raise ValueError(f"unknown chip id(s): {', '.join(missing)}")
