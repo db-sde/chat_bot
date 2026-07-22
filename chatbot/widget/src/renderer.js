@@ -51,6 +51,7 @@
     if (m.kind==='syllabus') return div('db-msg', renderSyllabus(m.syl, m.id));
     if (m.kind==='toolResult') return div('db-msg', renderToolResult(m.tr));
     if (m.kind==='published') return div('db-msg', renderPublished(m.info));
+    if (m.kind==='faq') return div('db-msg', renderFaq(m.faq));
     return '';
   }
   function renderCard(c, mid) {
@@ -213,6 +214,13 @@
 
   /* Published facts with no bespoke card reuse the approved .db-info-card
      surface already used by the details overlay. No new classes. */
+  /* Reuses the FAQ block already styled for the details overlay. */
+  function renderFaq(f) {
+    return div('db-info-card',
+      div('db-faq-items', div('', div('db-faq-q', esc(f.q)) + div('db-faq-a', esc(f.a))))
+    );
+  }
+
   function renderPublished(v) {
     return div('db-info-card',
       div('db-info-card-title', esc(v.title)) +

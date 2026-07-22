@@ -115,6 +115,9 @@
     /* §2.2 a list_set is an enumeration: render it inline so the user can scan
        and pick. Only overflow (7+) hands off to the picker sheet. Sending every
        list straight to a modal is what buried short lists. */
+    /* §7 tier-2 backfill chips carry a published FAQ; the answer travels in
+       the same guide bundle, so it never needs a round trip. */
+    if (handler === 'get_faq') { showFaqAnswer(ch); return; }
     if (PICKER_HANDLERS[handler]) {
       if (ch.chip_type === 'list_set') { showListSet(PICKER_HANDLERS[handler], ch); return; }
       openPicker(PICKER_HANDLERS[handler], ch);
@@ -124,6 +127,36 @@
 
     console.warn('DegreeBaba widget has no guided surface for chip handler', handler);
     loadFollowups(null, ch).catch(function () {});
+  }
+
+  /* Strip the leading glyph the chip label carries so the question text can
+     be matched against the published FAQ rows. */
+  function faqQuestionOf(chip) {
+    return String(chip.label || '').replace(/^\s*[^\w(]+\s*/, '').trim();
+  }
+
+  /* Answer a published FAQ from the bundle. Matched on question text, not on
+     chip index: the chip id counts raw catalog rows while the bundle may omit
+     unpublished ones, and an off-by-one would answer the wrong question. */
+  function showFaqAnswer(chip) {
+    var tid = beginTurn(chip.label);
+    ensureGuideBundle().then(function (bundle) {
+      var faqs = ((bundle && bundle.entity && bundle.entity.details) || {}).faqs || [];
+      var wanted = faqQuestionOf(chip).toLowerCase();
+      var match = faqs.find(function (f) {
+        return String(f.question || '').trim().toLowerCase() === wanted;
+      });
+      if (!match || !String(match.answer || '').trim()) {
+        unavailableTurn(tid, UNAVAILABLE);
+        return null;
+      }
+      settleTurn(tid, [{ kind: 'faq', faq: { q: match.question, a: match.answer } }], null);
+      emitAnalytics('card_shown', chip, { entity: analyticsEntity() });
+      return loadFollowups(null, chip);
+    }).catch(function (err) {
+      console.warn('DegreeBaba widget FAQ answer unavailable', err);
+      unavailableTurn(tid, UNAVAILABLE);
+    });
   }
 
   /* ── Guided info cards, grounded in the page bundle ─────────── */
