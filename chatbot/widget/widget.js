@@ -656,7 +656,15 @@
                .replace(/\s+per\s+semester\s*$/i, '')
                .replace(/\s+starting\s+fee\s*$/i, '')
                .replace(/\s+total\s+fee\s*$/i, '');
-    return text.replace(/\bINR\s*/gi, '₹').replace(/(\d[\d,]*)\.0+(?=\D|$)/g, '$1');
+    var formatted = text.replace(/\bINR\s*/gi, '₹').replace(/(\d[\d,]*)\.0+(?=\D|$)/g, '$1');
+    return formatted.replace(/₹\s*(\d{1,3}(?:,\d{2,3})+|\d{5,8})/g, function(match, numStr) {
+      var num = parseInt(numStr.replace(/,/g, ''), 10);
+      if (!isNaN(num) && num >= 100000) {
+        var lakhs = (num / 100000).toFixed(2).replace(/\.00$/, '');
+        return '₹' + lakhs + 'L';
+      }
+      return match;
+    });
   }
 
   function feesFromBundle(d) {
