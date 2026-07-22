@@ -1,19 +1,15 @@
 [project]
 name = "chatbot"
 version = "0.1.0"
-description = "Production-grade catalog-grounded conversational API for DegreeBaba"
+description = "Production-grade catalog-grounded guided widget API for DegreeBaba"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.139.0",
-    "google-genai[aiohttp]>=2.11.0",
-    "groq>=1.5.0",
     "httpx>=0.28.1",
-    "openai>=2.45.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "python-dotenv>=1.2.2",
-    "rapidfuzz>=3.14.5",
     "redis>=8.0.1",
     "tenacity>=9.1.4",
     "uvicorn[standard]>=0.51.0",

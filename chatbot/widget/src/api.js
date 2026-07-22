@@ -19,7 +19,6 @@
   }
 
   /* ── Transport ── */
-  var CHAT_PAGE_TYPES = ['pillar', 'university', 'course', 'specialization'];
   function apiUrl(path) { return cfg.apiBase.replace(/\/$/, '') + path; }
 
   function safeHttpUrl(value) {
@@ -58,7 +57,6 @@
       if (/^#[0-9a-f]{6}$/i.test(branding.primary_color || '')) cfg.primaryColor = branding.primary_color;
       if (branding.welcome_message) cfg.welcomeMessage = branding.welcome_message;
       cfg.avatarUrl = safeHttpUrl(branding.avatar_url);
-      cfg.showTypingIndicator = behavior.show_typing_indicator !== false;
       /* data-auto-open is an explicit per-page opt-in and outranks the tenant default. */
       if (!cfg.autoOpenPinned) cfg.autoOpen = behavior.auto_open === true;
       applyTheme(cfg.primaryColor);
@@ -77,7 +75,7 @@
     }
     var bg = ['#db-launcher', '.db-avatar', '.db-context-dot', '.db-lead-send', '.db-bar-fill',
       '.db-sub-dot', '.db-cta-primary', '.db-progress-fill', '.db-tool-start', '.db-tool-submit',
-      '.db-end-brand-badge', '.db-send-btn.active'];
+      '.db-end-brand-badge'];
     var fg = ['.db-btn-compare.db-in-compare', '.db-verdict-label', '.db-rating-stars',
       '.db-tool-icon-badge', '.db-finder-skip'];
     el.textContent =
@@ -87,49 +85,22 @@
       '#db-launcher{box-shadow:0 8px 22px ' + color + '66;}';
   }
 
-  /* POST /chat — SSE. Emits "token" (streaming text) then "response" (full payload). */
-  function requestChat(body, signal) {
-    return fetch(apiUrl('/chat'), {
-      method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify(body),
-      signal: signal
-    }).then(function (res) {
-      if (!res.ok) throw new Error('Chat request failed (' + res.status + ')');
-      return res;
+  /* POST one predefined ActiveFlow command. This endpoint accepts tool tokens,
+     not user-authored messages. */
+  function postGuideTool(command, chip) {
+    var c = chip || {};
+    return postJson('/api/widget/guide/tool', Object.assign({
+      command: command,
+      page_type: ctxPageType()
+    }, state.sessionId ? { session_id: state.sessionId } : {},
+      ctxEntityId() ? { entity_id: ctxEntityId() } : {},
+      c.chip_id ? { chip_id: c.chip_id } : {},
+      c.chip_surface ? { chip_surface: c.chip_surface } : {},
+      c.chip_config_version ? { chip_config_version: c.chip_config_version } : {}
+    )).then(function (payload) {
+      if (payload && payload.session_id) state.sessionId = payload.session_id;
+      return payload && payload.response ? payload.response : payload;
     });
-  }
-
-  function consumeSse(response, onEvent) {
-    if (!response.body) throw new Error('Streaming response is unavailable');
-    var reader = response.body.getReader();
-    var decoder = new TextDecoder();
-    var buffer = '';
-    function pump() {
-      return reader.read().then(function (chunk) {
-        buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done });
-        buffer = buffer.replace(/\r\n/g, '\n');
-        var boundary = buffer.indexOf('\n\n');
-        while (boundary >= 0) {
-          var block = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          var evt = 'message', dataLines = [];
-          block.split('\n').forEach(function (line) {
-            if (line.indexOf('event:') === 0) evt = line.slice(6).trim();
-            if (line.indexOf('data:') === 0) dataLines.push(line.slice(5).replace(/^ /, ''));
-          });
-          if (dataLines.length) {
-            try { onEvent(evt, JSON.parse(dataLines.join('\n'))); }
-            catch (err) { console.warn('DegreeBaba widget ignored malformed SSE data', err); }
-          }
-          boundary = buffer.indexOf('\n\n');
-        }
-        if (chunk.done) return;
-        return pump();
-      });
-    }
-    return pump();
   }
 
   /* Business context: the server's resolved value wins; the embed attributes

@@ -17,31 +17,26 @@ from response.cards import (
     iter_catalog_entities,
     parse_money,
 )
-from response.templates import (
+from response.catalog_facts import (
     accreditation_items,
     career_items,
     ranking_items,
     specialization_items,
 )
 from schemas import (
-    CTA,
     CardDetails,
     CardFact,
     CardFAQ,
     CardReview,
     ComparisonCard,
     ComparisonItem,
-    LeadCTAComponent,
     ProgramCard,
-    QuickAction,
-    QuickActionsComponent,
     UniversityCard,
 )
 
 from .formatter import (
     card_fact,
     catalog_strings,
-    comparison_items_from_text,
     optional_text,
     unique_facts,
 )
@@ -561,54 +556,9 @@ def build_comparison_card(
     )
 
 
-def build_comparison_card_from_text(
-    text: str,
-    *,
-    title: str = "Comparison",
-) -> ComparisonCard | None:
-    """Build a fallback card from deterministic text (only with no operands)."""
-
-    items = comparison_items_from_text(text)
-    if len(items) < 2:
-        return None
-    return ComparisonCard(
-        title=clean_text(title) or "Comparison",
-        items=items,
-        verdict=_comparison_verdict(items),
-    )
-
-
-def build_lead_cta(cta: CTA | Mapping[str, Any]) -> LeadCTAComponent:
-    typed = cta if isinstance(cta, CTA) else CTA.model_validate(cta)
-    return LeadCTAComponent(
-        label=typed.label,
-        action=typed.action,
-        url=typed.url,
-        payload=typed.payload,
-    )
-
-
-def build_quick_actions(actions: Iterable[Any]) -> QuickActionsComponent | None:
-    values: list[QuickAction] = []
-    seen: set[str] = set()
-    for action in actions:
-        rendered = clean_text(action)
-        key = rendered.casefold()
-        if not rendered or key in seen:
-            continue
-        seen.add(key)
-        values.append(QuickAction(label=rendered, message=rendered))
-        if len(values) >= 6:
-            break
-    return QuickActionsComponent(actions=values) if values else None
-
-
 __all__ = [
     "build_comparison_card",
-    "build_comparison_card_from_text",
     "build_entity_card",
-    "build_lead_cta",
     "build_program_card",
-    "build_quick_actions",
     "build_university_card",
 ]

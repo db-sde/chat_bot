@@ -20,7 +20,7 @@ from response.cards import (
     first_value,
     iter_catalog_entities,
 )
-from response.templates import accreditation_items
+from response.catalog_facts import accreditation_items
 
 from .cards import build_comparison_card, build_entity_card
 
@@ -690,6 +690,19 @@ def _overview_info(entity: Any) -> dict[str, Any]:
     }
 
 
+def _validity_info(entity: Any, catalog: Any) -> dict[str, Any]:
+    candidates = [entity] if entity is not None else _entities(catalog)
+    values = _distinct(
+        clean_text(safe_get(candidate, "validity", None))
+        for candidate in candidates
+        if candidate is not None
+    )
+    return {
+        "available": bool(values),
+        "content": values[0] if values else None,
+    }
+
+
 def _info(entity: Any, catalog: Any) -> dict[str, Any]:
     return {
         "fees": _fee_info(entity, catalog),
@@ -701,6 +714,7 @@ def _info(entity: Any, catalog: Any) -> dict[str, Any]:
         "admissions": _admission_info(entity, catalog),
         "placement": _placement_info(entity, catalog),
         "overview": _overview_info(entity),
+        "validity": _validity_info(entity, catalog),
     }
 
 
@@ -836,6 +850,7 @@ def guide_context(
                     "why_choose": None,
                     "description": None,
                 },
+                "validity": _validity_info(None, catalog),
             },
         }
 

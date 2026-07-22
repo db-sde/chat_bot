@@ -1,25 +1,8 @@
 from __future__ import annotations
 
-import json
-
 from fastapi.testclient import TestClient
 
 from main import app
-
-
-def _response_events(body: str) -> list[dict[str, object]]:
-    events: list[dict[str, object]] = []
-    for block in body.replace("\r\n", "\n").split("\n\n"):
-        event = ""
-        data = ""
-        for line in block.splitlines():
-            if line.startswith("event:"):
-                event = line.removeprefix("event:").strip()
-            elif line.startswith("data:"):
-                data = line.removeprefix("data:").strip()
-        if event == "response" and data:
-            events.append(json.loads(data))
-    return events
 
 
 def test_widget_config_endpoint_uses_nested_tenant_contract() -> None:
@@ -38,7 +21,6 @@ def test_widget_config_endpoint_uses_nested_tenant_contract() -> None:
             ),
         },
         "behavior": {
-            "show_typing_indicator": True,
             "show_avatar": True,
             "auto_open": False,
         },
@@ -57,7 +39,7 @@ def test_widget_config_endpoint_rejects_invalid_and_unknown_tenants() -> None:
 def test_widget_embed_cors_preflight_is_public_by_default() -> None:
     with TestClient(app) as client:
         response = client.options(
-            "/chat",
+            "/api/widget/guide/chips",
             headers={
                 "Origin": "https://partner.example",
                 "Access-Control-Request-Method": "POST",
@@ -69,30 +51,12 @@ def test_widget_embed_cors_preflight_is_public_by_default() -> None:
     assert response.headers["access-control-allow-origin"] == "*"
 
 
-def test_chat_transport_keeps_legacy_fields_and_adds_rich_components() -> None:
+def test_free_text_chat_endpoint_is_not_exposed() -> None:
+    removed_path = "/" + "chat"
     with TestClient(app) as client:
-        response = client.post(
-            "/chat",
-            json={
-                "message": "Tell me about NMIMS MCA",
-                "session_id": "widget-rich-program",
-                "site_key": "degreebaba",
-                "page_university_slug": "nmims",
-            },
-        )
+        response = client.post(removed_path, json={"message": "not accepted"})
 
-    assert response.status_code == 200
-    payload = _response_events(response.text)[-1]
-    assert payload["text"]
-    assert payload["message"]
-    assert payload["message"] != payload["text"]
-    component_types = {
-        component["type"]
-        for component in payload["components"]
-        if isinstance(component, dict)
-    }
-    assert {"program_card", "quick_actions"}.issubset(component_types)
-    assert payload["suggested_chips"]
+    assert response.status_code == 404
 
 
 def test_widget_assets_are_served_from_stable_embed_urls() -> None:

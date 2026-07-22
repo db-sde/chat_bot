@@ -13,19 +13,17 @@
     details: null,
     tool: null,
     endScreen: null,
-    input: '',
-    inputFocused: false,
     leadPhone: '',
     toolName: '',
     toolPhone: '',
     started: false,
     uid: 0,
     /* ── backend-bound state ── */
-    sessionId: null,       // issued by /chat or /api/widget/guide/context
+    sessionId: null,       // issued by guided widget endpoints
     guideBundle: null,     // GET /api/widget/guide/context payload
     pickerCache: {},       // cacheKey -> normalized rows
     pickerToken: 0,        // guards out-of-order picker searches
-    busy: false,           // a /chat stream is in flight
+    busy: false,           // a guided backend command is in flight
     moreChips: null,       // config-owned "More ⌄" set from /guide/context
     ready: false,          // true once the backend opening payload has landed
     guideBusy: null,       // in-flight /guide/context promise
@@ -56,7 +54,6 @@
     widgetId: null,
     entitySlug: null,
     universitySlug: null,
-    showTypingIndicator: true,
     autoOpen: false,
     autoOpenPinned: false,
     welcomeMessage: null

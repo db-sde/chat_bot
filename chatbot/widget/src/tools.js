@@ -1,5 +1,5 @@
 
-  /* ── Active tool webhooks: /chat drives every tool step ───── */
+  /* ── Active tool webhooks: the guided tool endpoint owns every step ── */
 
   /* Map the backend tool_flow lifecycle onto the .db-tool-widget phases. */
   function applyToolFlow(flow, payload) {
@@ -129,18 +129,15 @@
     if (scrollEl) setTimeout(function(){ scrollEl.scrollTop = scrollEl.scrollHeight; }, 30);
   }
 
-  /* Open one bot turn: echo the user, show the typing indicator, and hand
-     back the placeholder id so the caller can swap in the settled content. */
+  /* Open one guided turn and echo the selected action. The returned id is a
+     stable turn token for callers; it is never rendered as a placeholder. */
   function beginTurn(userLabel) {
     var items = [];
     if (userLabel) items.push({ kind: 'user', text: userLabel, id: nextId() });
     var tid = nextId();
-    if (cfg.showTypingIndicator) items.push({ kind: 'typing', id: tid });
     state.started = true;
     state.chips = [];
     state.hasMore = false;
-    state.input = '';
-    state.inputFocused = false;
     state.msgs = state.msgs.concat(items);
     render();
     scrollToBottom();

@@ -1,7 +1,6 @@
 """Public API for deterministic, persisted admissions tool flows."""
 
 from .base import (
-    EscapeSignals,
     ToolEngine,
     ToolResult,
     ToolTurn,
@@ -28,7 +27,6 @@ from .scholarship import score_scholarship
 
 __all__ = [
     "DEFAULT_TOOLS_CONTENT_PATH",
-    "EscapeSignals",
     "RewardBand",
     "RoiBucket",
     "ToolDefinition",

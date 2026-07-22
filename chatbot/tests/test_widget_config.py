@@ -21,7 +21,6 @@ def _valid_config(**overrides: object) -> dict[str, object]:
         "avatar_url": "/widget/avatar.svg",
         "primary_color": "#ff6b00",
         "welcome_message": "How can I help with your university search?",
-        "show_typing_indicator": True,
         "show_avatar": True,
         "auto_open": False,
     }
@@ -45,7 +44,6 @@ def test_bundled_site_config_loads_with_only_supported_fields() -> None:
         "avatar_url",
         "primary_color",
         "welcome_message",
-        "show_typing_indicator",
         "show_avatar",
         "auto_open",
     }
@@ -140,7 +138,6 @@ def test_payload_uses_nested_public_contract_and_resolved_site_key(tmp_path: Pat
             "welcome_message": "How can I help with your university search?",
         },
         "behavior": {
-            "show_typing_indicator": True,
             "show_avatar": True,
             "auto_open": False,
         },

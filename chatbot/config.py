@@ -69,45 +69,15 @@ class Settings(BaseSettings):
     redis_key_prefix: str = "degreebaba:session:"
     redis_timeout_seconds: float = Field(default=1.0, gt=0)
     session_ttl_seconds: int = Field(default=30 * 60, ge=1)
-    history_limit: int = Field(default=12, ge=1, le=100)
-    session_history_limit: int = Field(default=12, ge=1, le=100)
-
-    groq_api_key: str | None = None
-    groq_model: str = "llama-3.1-8b-instant"
-    groq_synthesis_model: str = "llama-3.3-70b-versatile"
-    openai_api_key: str | None = None
-    openai_model: str = "gpt-4.1-mini"
-    openai_synthesis_model: str = "gpt-4.1-mini"
-    gemini_api_key: str | None = None
-    gemini_model: str = "gemini-3.1-flash-lite"
-    gemini_intent_timeout_ms: int = Field(default=1400, ge=100, le=10_000)
-    # Deterministic catalog templates are the production default. Narrative
-    # synthesis is opt-in so provider latency cannot delay ordinary lookups.
-    enable_answer_synthesis: bool = False
-    intent_timeout_seconds: float = Field(default=2.5, gt=0)
-    synthesis_timeout_seconds: float = Field(default=5.0, gt=0)
-    llm_failure_threshold: int = Field(default=3, ge=1)
-    llm_failure_window_seconds: int = Field(default=60, ge=1)
-    llm_cooldown_seconds: int = Field(default=60, ge=1)
-    llm_synthesis_timeout_seconds: float = Field(default=5.0, gt=0)
-    llm_circuit_failure_threshold: int = Field(default=3, ge=1)
-    llm_circuit_cooldown_seconds: float = Field(default=30.0, gt=0)
-
     crm_webhook_url: str | None = None
     crm_webhook_secret: str | None = None
     webhook_timeout_seconds: float = Field(default=5.0, gt=0)
-    lead_nudge_after_turns: int = Field(default=3, ge=0)
     dead_letter_path: Path = Path("var/lead_dead_letters.jsonl")
     analytics_webhook_url: str | None = None
     analytics_webhook_secret: str | None = None
     analytics_timeout_seconds: float = Field(default=1.0, gt=0, le=10)
     analytics_dead_letter_path: Path = Path("var/analytics_dead_letters.jsonl")
     analytics_queue_size: int = Field(default=2_048, ge=16, le=100_000)
-    # Retained for environment/session compatibility. The isolated lead flow is
-    # now explicit and does not auto-prompt from ordinary catalog turns.
-    lead_prompt_after_turn: int = Field(default=3, ge=0)
-    lead_prompt_interval: int = Field(default=2, ge=1)
-
     admin_api_key: str | None = None
 
 

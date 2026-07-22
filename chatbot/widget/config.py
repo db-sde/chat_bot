@@ -71,7 +71,6 @@ class WidgetConfig(BaseModel):
     avatar_url: str | None = Field(default=None, max_length=2048)
     primary_color: str = Field(pattern=_HEX_COLOR_RE.pattern)
     welcome_message: str = Field(min_length=1, max_length=500)
-    show_typing_indicator: StrictBool
     show_avatar: StrictBool
     auto_open: StrictBool
 
@@ -227,7 +226,6 @@ class WidgetConfigStore:
                 "welcome_message": config.welcome_message,
             },
             "behavior": {
-                "show_typing_indicator": config.show_typing_indicator,
                 "show_avatar": config.show_avatar,
                 "auto_open": config.auto_open,
             },

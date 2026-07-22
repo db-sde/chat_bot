@@ -23,7 +23,7 @@ LOGGER = logging.getLogger(__name__)
 
 ToolId = Literal["roi", "career_quiz", "scholarship"]
 KNOWN_TOOLS = frozenset({"roi", "career_quiz", "scholarship"})
-DEFAULT_TOOLS_CONTENT_PATH = Path(__file__).resolve().parents[2] / "data" / "tools_content.json"
+DEFAULT_TOOLS_CONTENT_PATH = Path(__file__).resolve().parent.parent / "data" / "tools_content.json"
 TOOLS_CONTENT_PATH_ENV = "TOOLS_CONTENT_PATH"
 
 

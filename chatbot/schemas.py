@@ -2,55 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+import re
+
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PageType = Literal["pillar", "university", "course", "specialization"]
-SlotType = Literal["university", "course", "specialization"]
-Intent = Literal[
-    "factual",
-    "comparison",
-    "advisory",
-    "discovery",
-    "chitchat",
-    "unrelated",
-]
-Confidence = Literal["HIGH", "MEDIUM"]
 
 
 class TransportModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-class ChatRequest(TransportModel):
-    model_config = ConfigDict(extra="ignore")
-
-    message: str = Field(min_length=1, max_length=4000)
-    session_id: str | None = Field(default=None, min_length=1, max_length=200)
-    site_key: str | None = Field(default=None)
-    page_type: PageType | None = None
-    page_entity_slug: str | None = Field(default=None)
-    page_university_slug: str | None = Field(default=None)
-    chip_id: str | None = Field(default=None, max_length=100)
-    chip_surface: str | None = Field(default=None, max_length=100)
-    chip_config_version: str | None = Field(default=None, max_length=80)
-    chip_correlation_id: str | None = Field(default=None, max_length=200)
-
-    @field_validator("message")
-    @classmethod
-    def message_must_not_be_blank(cls, value: str) -> str:
-        value = value.strip()
-        if not value:
-            raise ValueError("message must not be blank")
-        return value
-
-
-class CTA(TransportModel):
-    label: str
-    action: str = "start_lead_capture"
-    url: str | None = None
-    payload: dict[str, Any] | None = None
 
 
 class CardFact(TransportModel):
@@ -149,24 +111,10 @@ class ComparisonCard(TransportModel):
     verdict: str | None = None
 
 
-class CardListComponent(TransportModel):
-    type: Literal["card_list"] = "card_list"
-    title: str | None = None
-    items: list[UniversityCard | ProgramCard] = Field(min_length=1, max_length=3)
-
-
-class LeadCTAComponent(TransportModel):
-    type: Literal["lead_cta"] = "lead_cta"
-    label: str = Field(min_length=1)
-    action: str = "start_lead_capture"
-    url: str | None = None
-    payload: dict[str, Any] | None = None
-
-
 class QuickAction(TransportModel):
     label: str = Field(min_length=1)
     message: str = Field(min_length=1)
-    action: Literal["send_message"] = "send_message"
+    action: Literal["guided_command"] = "guided_command"
     chip_id: str | None = None
     chip_handler: str | None = None
     tool: Literal["roi", "career_quiz", "scholarship"] | None = None
@@ -177,11 +125,6 @@ class QuickAction(TransportModel):
     interaction_count: int | None = Field(default=None, ge=0)
     correlation_id: str | None = None
     lead_tags: dict[str, Any] | None = None
-
-
-class QuickActionsComponent(TransportModel):
-    type: Literal["quick_actions"] = "quick_actions"
-    actions: list[QuickAction] = Field(min_length=1, max_length=6)
 
 
 class ResponseContext(TransportModel):
@@ -266,6 +209,31 @@ class GuidedChipRequest(TransportModel):
     answer_state: str | None = Field(default=None, max_length=100)
 
 
+class GuidedToolRequest(TransportModel):
+    """One server-issued command for the guided ActiveFlow engine."""
+
+    session_id: str | None = Field(default=None, min_length=1, max_length=200)
+    command: str = Field(min_length=1, max_length=500)
+    page_type: str = Field(default="homepage", min_length=1, max_length=40)
+    entity_id: str | None = Field(default=None, max_length=200)
+    chip_id: str | None = Field(default=None, max_length=100)
+    chip_surface: str | None = Field(default=None, max_length=100)
+    chip_config_version: str | None = Field(default=None, max_length=80)
+
+    @field_validator("command")
+    @classmethod
+    def command_must_be_a_tool_token(cls, value: str) -> str:
+        token = value.strip()
+        if token in {
+            "tool:roi",
+            "tool:career_quiz",
+            "tool:scholarship",
+            "tool:continue",
+        } or re.fullmatch(r"tool:answer:[^:]+:.+", token, flags=re.IGNORECASE):
+            return token
+        raise ValueError("command must be a supported guided tool token")
+
+
 class WidgetAnalyticsRequest(TransportModel):
     session_id: str | None = Field(default=None, min_length=1, max_length=200)
     event: Literal[
@@ -296,23 +264,9 @@ class PageContextResponse(TransportModel):
     context: ResponseContext = Field(default_factory=ResponseContext)
 
 
-ResponseComponent = Annotated[
-    UniversityCard
-    | ProgramCard
-    | ComparisonCard
-    | CardListComponent
-    | LeadCTAComponent
-    | QuickActionsComponent,
-    Field(discriminator="type"),
-]
-
-
 class ResponsePayload(TransportModel):
     text: str
     message: str | None = None
-    suggested_chips: list[str] = Field(default_factory=list)
-    cta: CTA | None = None
-    components: list[ResponseComponent] = Field(default_factory=list)
     quick_actions: list[QuickAction] = Field(default_factory=list)
     context: ResponseContext = Field(default_factory=ResponseContext)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -324,10 +278,6 @@ class ResponsePayload(TransportModel):
         if self.message is None:
             self.message = self.text
         return self
-
-
-class ChatResponse(ResponsePayload):
-    session_id: str | None = None
 
 
 class HealthResponse(TransportModel):

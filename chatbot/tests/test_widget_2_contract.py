@@ -125,13 +125,28 @@ def test_backend_endpoints_used_as_designed() -> None:
         "/api/widget/guide/context",
         "/api/widget/guide/catalog/",
         "/api/widget/guide/chips",
+        "/api/widget/guide/tool",
         "/api/widget/guide/compare",
         "/api/widget/lead",
         "/api/widget/context/clear",
         "/api/widget/analytics",
-        "/chat",
     ):
         assert endpoint in bundle, f"endpoint no longer used: {endpoint}"
+
+
+def test_free_form_composer_is_not_in_the_production_bundle() -> None:
+    bundle = _bundle()
+    for marker in (
+        "db-input-el",
+        "db-send-btn-el",
+        "onSendText",
+        "Type your question",
+        "renderStreaming",
+        "requestChat",
+        "consumeSse",
+    ):
+        assert marker not in bundle, f"free-form chat path remains: {marker}"
+    assert "dispatchGuidedCommand" in bundle
 
 
 # ── Handler coverage ────────────────────────────────────────────────
@@ -144,10 +159,7 @@ def test_every_published_chip_handler_has_a_frontend_surface() -> None:
     published = {chip["handler"] for chip in chip_map["chips"].values()}
     bundle = _bundle()
 
-    # get_validity intentionally routes through the deterministic /chat
-    # template answer, so the guide bundle carries no surface for it.
-    routed_via_chat = {"get_validity"}
-    for handler in sorted(published - routed_via_chat):
+    for handler in sorted(published):
         assert f"{handler}" in bundle, (
             f"chip handler with no frontend surface: {handler}"
         )
@@ -207,8 +219,6 @@ def test_every_rendered_class_exists_in_the_approved_stylesheet() -> None:
         "db-fonts",
         "db-theme",
         "db-close-btn-el",
-        "db-input-el",
-        "db-send-btn-el",
     }
     missing = used - styled - js_only
     assert not missing, f"renderer emits unstyled classes: {sorted(missing)}"

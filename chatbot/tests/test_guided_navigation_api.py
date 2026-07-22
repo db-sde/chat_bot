@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from unittest.mock import AsyncMock
-
 import pytest
 from fastapi.testclient import TestClient
 
@@ -20,9 +18,6 @@ def guide_client(
         catalog_url=None,
         catalog_path=SAMPLE_CATALOG_PATH,
         redis_url=None,
-        openai_api_key=None,
-        groq_api_key=None,
-        gemini_api_key=None,
         crm_webhook_url=None,
         dead_letter_path=temporary / "lead-dead-letters.jsonl",
         lead_prompt_after_turn=100,
@@ -51,7 +46,12 @@ def test_homepage_context_has_no_catalog_entity(guide_client: TestClient) -> Non
         "label": None,
     }
     assert payload["entity"] is None
-    assert all(not value["available"] for value in payload["info"].values())
+    assert payload["info"]["validity"]["available"] is True
+    assert all(
+        not value["available"]
+        for key, value in payload["info"].items()
+        if key != "validity"
+    )
 
 
 @pytest.mark.parametrize(
@@ -368,23 +368,47 @@ def test_context_validation_reports_invalid_and_unknown_inputs(guide_client: Tes
     assert unknown_parent.status_code == 404
 
 
-def test_guide_routes_do_not_enter_existing_chat_pipeline(guide_client: TestClient) -> None:
-    process_turn = AsyncMock(side_effect=AssertionError("chat pipeline must not run"))
-    service = guide_client.app.state.service
-    original = service.process_turn
-    service.process_turn = process_turn
-    try:
-        context = guide_client.get(
-            "/api/widget/guide/context",
-            params={"page_type": "course", "university": "nmims", "course": "mca"},
-        )
-        catalog = guide_client.get("/api/widget/guide/catalog/programs")
-        comparison = guide_client.post(
-            "/api/widget/guide/compare",
-            json={"entity_ids": ["course-lpu-mca", "course-nmims-mca"]},
-        )
-    finally:
-        service.process_turn = original
+def test_application_exposes_no_free_text_chat_route(guide_client: TestClient) -> None:
+    removed_path = "/" + "chat"
+    assert all(route.path != removed_path for route in guide_client.app.routes)
 
-    assert context.status_code == catalog.status_code == comparison.status_code == 200
-    process_turn.assert_not_awaited()
+
+def test_guided_tool_endpoint_accepts_only_activeflow_tokens(
+    guide_client: TestClient,
+) -> None:
+    context = guide_client.get(
+        "/api/widget/guide/context",
+        params={"page_type": "course", "entity_id": "course-nmims-mca"},
+    ).json()
+    session_id = context["session_id"]
+
+    started = guide_client.post(
+        "/api/widget/guide/tool",
+        json={
+            "session_id": session_id,
+            "command": "tool:roi",
+            "page_type": "course",
+            "entity_id": "course-nmims-mca",
+        },
+    )
+    assert started.status_code == 200
+    payload = started.json()["response"]
+    assert payload["metadata"]["tool_flow"]["tool"] == "roi"
+    answer = next(
+        action["message"]
+        for action in payload["quick_actions"]
+        if action["message"].startswith("tool:answer:")
+    )
+
+    advanced = guide_client.post(
+        "/api/widget/guide/tool",
+        json={"session_id": session_id, "command": answer, "page_type": "course"},
+    )
+    assert advanced.status_code == 200
+    assert advanced.json()["response"]["metadata"]["tool_flow"]["tool"] == "roi"
+
+    rejected = guide_client.post(
+        "/api/widget/guide/tool",
+        json={"session_id": session_id, "command": "Tell me about NMIMS"},
+    )
+    assert rejected.status_code == 422

@@ -5,7 +5,7 @@
  *
  * Config (optional):
  *   window.DegreeBabaWidget.init({
- *     apiUrl:       "https://your-api.com/chat",
+ *     apiBase:      "https://your-api.com",
  *     botName:      "DegreeBaba Assistant",
  *     primaryColor: "#E84010",
  *     position:     "right",   // "right" | "left"
@@ -56,7 +56,7 @@
       if (options.entitySlug)     cfg.entitySlug = options.entitySlug;
       if (options.universitySlug) cfg.universitySlug = options.universitySlug;
     }
-    /* apiUrl may point at the /chat endpoint; the API base is its origin. */
+    /* Keep the legacy apiUrl option as an origin alias for existing embeds. */
     if (!cfg.apiBase && cfg.apiUrl) {
       try { cfg.apiBase = new URL(cfg.apiUrl, window.location.href).origin; }
       catch (err) { cfg.apiBase = ''; }

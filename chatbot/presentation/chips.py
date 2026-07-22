@@ -193,7 +193,7 @@ def chip_message(chip: ResolvedChip) -> str:
     if chip.handler == "cta_callback":
         return "Talk to a counsellor"
     # Labels are deterministic config content and every non-tool handler already
-    # has a matching guided-widget adapter or ordinary NLU phrase.
+    # has a matching guided-widget adapter.
     return chip.label
 
 

@@ -14,7 +14,7 @@ import httpx
 from pydantic import BaseModel, ConfigDict
 
 from config import Settings, get_settings
-from taxonomy.index_builder import normalize_category
+from data.accessor import normalize_category
 
 from .models import CatalogEntity, Course, Specialization, University, parse_entity
 

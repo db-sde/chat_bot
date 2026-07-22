@@ -56,18 +56,6 @@ class ToolResult(BaseModel):
 
 
 @dataclass(frozen=True, slots=True)
-class EscapeSignals:
-    """Strong intent signals computed by the existing callback/matcher layers."""
-
-    callback_request: bool = False
-    high_confidence_catalog_mention: bool = False
-
-    @property
-    def should_escape(self) -> bool:
-        return self.callback_request or self.high_confidence_catalog_mention
-
-
-@dataclass(frozen=True, slots=True)
 class ToolTurn:
     """One tool transition plus its normal ``ResponsePayload`` transport."""
 
@@ -449,7 +437,7 @@ def abandon(state: Any, *, reason: str = "new_intent") -> ToolTurn | None:
     _set_flow(state, None)
     return ToolTurn(
         response=_response(
-            "Tool closed. Your message can continue through the normal advisor.",
+            "Tool closed. You can continue with the guided options.",
             metadata={
                 "tool_flow": {
                     "tool": flow.tool,
@@ -474,7 +462,6 @@ def dispatch(
     catalog: Any = None,
     *,
     content_store: ToolsContentStore | None = None,
-    escape: EscapeSignals | None = None,
     entity_resolver: EntityResolver | None = None,
     program_lookup: ProgramLookup | None = None,
     lead_complete: bool = False,
@@ -507,8 +494,6 @@ def dispatch(
     if flow.step == "partial_reveal":
         valid_continue = message.strip().casefold() in _CONTINUE_TOKENS
         if not valid_continue:
-            if escape is not None and escape.should_escape:
-                return abandon(state, reason="new_intent")
             result = ToolResult.model_validate(flow.payload.get("result", {}))
             return ToolTurn(
                 response=_response(
@@ -549,8 +534,6 @@ def dispatch(
         )
 
     if flow.step == "await_lead":
-        if escape is not None and escape.should_escape:
-            return abandon(state, reason="new_intent")
         if lead_cancelled:
             return abandon(state, reason="lead_cancelled")
         if not lead_complete:
@@ -590,8 +573,6 @@ def dispatch(
         entity_resolver=entity_resolver,
     )
     if validated is None:
-        if escape is not None and escape.should_escape:
-            return abandon(state, reason="new_intent")
         return _question_turn(
             flow,
             step,
@@ -808,7 +789,7 @@ def resume_after_lead(
 
 
 class ToolEngine:
-    """Dependency-bound facade suitable for ``ChatbotService`` wiring."""
+    """Dependency-bound facade for the guided widget service."""
 
     def __init__(
         self,
@@ -846,7 +827,6 @@ class ToolEngine:
         state: Any,
         message: str,
         *,
-        escape: EscapeSignals | None = None,
         lead_complete: bool = False,
         lead_cancelled: bool = False,
     ) -> ToolTurn | None:
@@ -855,7 +835,6 @@ class ToolEngine:
             message,
             self.catalog,
             content_store=self.content_store,
-            escape=escape,
             entity_resolver=self.entity_resolver,
             program_lookup=self.program_lookup,
             lead_complete=lead_complete,
@@ -885,7 +864,6 @@ class ToolEngine:
 
 
 __all__ = [
-    "EscapeSignals",
     "ToolEngine",
     "ToolResult",
     "ToolTurn",

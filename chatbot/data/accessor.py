@@ -8,6 +8,7 @@ Malformed input always resolves to the supplied default.
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Iterable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -16,6 +17,44 @@ from pydantic import BaseModel
 
 _BRACKET_TOKEN = re.compile(r"\[\s*(?:'([^']*)'|\"([^\"]*)\"|([^\]]+))\s*\]")
 _MISSING = object()
+
+_CATEGORY_DELIVERY_TOKENS = {
+    "course", "degree", "distance", "learning", "mode", "online", "program", "programme"
+}
+_CATEGORY_CONNECTIVES = {"and", "in", "of", "s", "the"}
+_DEGREE_LEADS = {
+    "associate", "bachelor", "certificate", "diploma", "doctor", "doctoral",
+    "graduate", "master", "postgraduate", "undergraduate",
+}
+
+
+def normalize_category(value: object) -> str:
+    """Derive a stable catalog category without a text-recognition dependency."""
+
+    raw = str(value or "").strip()
+    text = unicodedata.normalize("NFKD", raw)
+    text = "".join(char for char in text if not unicodedata.combining(char))
+    normalized = " ".join(re.findall(r"[a-z0-9]+", text.casefold().replace("&", " and ")))
+    if not normalized:
+        return ""
+    tokens = [token for token in normalized.split() if token not in _CATEGORY_DELIVERY_TOKENS]
+    if not tokens:
+        return normalized
+    for match in re.finditer(r"\b[A-Z][A-Z0-9&-]{1,11}\b", raw):
+        code = "".join(re.findall(r"[a-z0-9]+", match.group(0).casefold()))
+        if code and code not in _CATEGORY_DELIVERY_TOKENS:
+            return code
+    if "." in raw and 2 <= len(tokens) <= 4:
+        return "".join(tokens)
+    lead = tokens[0].removesuffix("s")
+    compound = len(tokens) > 1 and (tokens[0], tokens[1]) in {
+        ("post", "graduate"), ("under", "graduate")
+    }
+    if lead in _DEGREE_LEADS or compound:
+        initials = "".join(token[0] for token in tokens if token not in _CATEGORY_CONNECTIVES)
+        if len(initials) >= 2:
+            return initials
+    return tokens[0] if len(tokens) == 1 else " ".join(tokens)
 
 
 def _parts(path: str | int | Sequence[str | int] | None) -> list[str | int]:

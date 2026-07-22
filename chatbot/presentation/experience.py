@@ -10,7 +10,6 @@ from response.cards import (
     catalog_get_entity,
     clean_text,
     entity_fee,
-    entity_heading,
     entity_label,
     entity_page_type,
     entity_university,
@@ -18,9 +17,9 @@ from response.cards import (
     iter_catalog_entities,
     parse_money,
 )
-from response.templates import accreditation_items, topic_from_message
-from schemas import CatalogOption, ProgramCard, QuickAction, ResponseContext
-from taxonomy.index_builder import normalize_category
+from response.catalog_facts import accreditation_items
+from schemas import CatalogOption, ProgramCard, ResponseContext
+from data.accessor import normalize_category
 
 from .cards import build_program_card
 
@@ -149,108 +148,6 @@ def resolve_page_entity(catalog: Any, reference: str, page_type: str | None = No
     if entity is not None and page_type and entity_page_type(entity) != page_type:
         return None
     return entity
-
-
-def _compact_action_label(value: str, *, limit: int = 24) -> str:
-    """Visually shorten a label without changing the message sent on selection."""
-
-    if len(value) <= limit:
-        return value
-    return value[: limit - 1].rstrip(" .,:;!?-") + "…"
-
-
-def _faq_actions(entity: Any) -> list[tuple[str, str, frozenset[str]]]:
-    result: list[tuple[str, str, frozenset[str]]] = []
-    for faq in safe_get(entity, "faqs", []) or []:
-        question = clean_text(safe_get(faq, "question", None))
-        if question:
-            result.append(
-                (_compact_action_label(question), question, frozenset({"faq"}))
-            )
-        if len(result) >= 3:
-            break
-    return result
-
-
-def quick_actions_for_response(
-    *,
-    entity: Any = None,
-    message: str = "",
-    route: str = "",
-) -> list[QuickAction]:
-    """Return exactly three compact actions, ending with the counsellor escape hatch."""
-
-    page_type = entity_page_type(entity) if entity is not None else ""
-    subject = entity_heading(entity) if entity is not None else ""
-    answered = "comparison" if route == "comparison" else topic_from_message(message)
-    banks: dict[str, list[tuple[str, str, frozenset[str]]]] = {
-        "university": [
-            ("Show me programs", f"{subject} programs", frozenset({"programs"})),
-            ("See accreditations", f"{subject} accreditations", frozenset({"accreditation"})),
-            ("Read student reviews", f"{subject} student reviews", frozenset({"reviews"})),
-            ("Compare my options", f"Compare {subject}", frozenset({"comparison"})),
-        ],
-        "course": [
-            ("Show fees & EMI", f"{subject} fees and EMI", frozenset({"fee", "emi"})),
-            ("Am I eligible?", f"{subject} eligibility", frozenset({"eligibility"})),
-            ("Show specializations", f"{subject} specializations", frozenset({"specializations"})),
-            ("Compare my options", f"Compare {subject}", frozenset({"comparison"})),
-        ],
-        "specialization": [
-            ("Show career & salary", f"{subject} career and salary", frozenset({"jobs"})),
-            ("Show me the syllabus", f"{subject} syllabus", frozenset({"syllabus"})),
-            (
-                "Show other specialties",
-                f"{subject} other specializations",
-                frozenset({"specializations"}),
-            ),
-            ("Compare my options", f"Compare {subject}", frozenset({"comparison"})),
-        ],
-        "": [
-            ("Show me universities", "Browse universities", frozenset({"universities"})),
-            ("Show me programs", "Browse course categories", frozenset({"programs"})),
-            ("Compare my options", "Compare universities", frozenset({"comparison"})),
-        ],
-    }
-    bank = banks.get(page_type, banks[""])
-    faq_actions = _faq_actions(entity) if entity else []
-    # An overview has no more-specific answered topic, so page FAQs are the most
-    # grounded next questions. Topic-specific answers retain their curated bank.
-    candidates = (
-        [*faq_actions, *bank]
-        if faq_actions and answered == "about"
-        else [*bank, *faq_actions]
-    )
-    actions: list[QuickAction] = []
-    seen: set[str] = set()
-    answered_message = clean_text(message).casefold()
-    for label, action_message, topics in candidates:
-        key = label.casefold()
-        if (
-            answered in topics
-            or action_message.casefold() == answered_message
-            or len(label) > 24
-            or key in seen
-        ):
-            continue
-        actions.append(QuickAction(label=label, message=action_message))
-        seen.add(key)
-        if len(actions) == 2:
-            break
-    for label, action_message in (
-        ("Show me programs", "Browse course categories"),
-        ("Compare my options", "Compare universities"),
-        ("Show me universities", "Browse universities"),
-    ):
-        if len(actions) == 2:
-            break
-        if label.casefold() not in seen and not (
-            answered == "comparison" and label == "Compare my options"
-        ):
-            actions.append(QuickAction(label=label, message=action_message))
-            seen.add(label.casefold())
-    actions.append(QuickAction(label="Talk to a counsellor", message="Talk to a counsellor"))
-    return actions[:3]
 
 
 def _option_meta(entity: Any) -> str | None:
@@ -617,6 +514,5 @@ __all__ = [
     "context_from_entity",
     "context_from_state",
     "finder_results",
-    "quick_actions_for_response",
     "resolve_page_entity",
 ]

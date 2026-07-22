@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from routing.tools import (
+from tools import (
     DEFAULT_TOOLS_CONTENT_PATH,
-    EscapeSignals,
     ToolDefinition,
     ToolEngine,
     ToolsContentStore,
@@ -229,23 +228,6 @@ def test_current_view_is_read_only_and_uses_the_flow_pinned_snapshot(tmp_path: P
     assert current.response.metadata["tool_flow"]["version"] == "pinned-v1"
     assert "Please choose" not in current.response.text
     assert state.model_dump(mode="json") == before
-
-
-def test_invalid_tool_answer_escapes_for_strong_new_intent(tmp_path: Path) -> None:
-    path = tmp_path / "tools.json"
-    _write_json(path, _content_document())
-    engine = ToolEngine(ToolsContentStore(path, auto_reload=False))
-    state = ConversationState(session_id="escape")
-    engine.enter(state, "career_quiz")
-
-    turn = engine.dispatch(
-        state,
-        "Tell me about NMIMS",
-        escape=EscapeSignals(high_confidence_catalog_mention=True),
-    )
-
-    assert turn is not None and turn.escaped and not turn.consumed
-    assert state.active_flow is None
 
 
 def test_entering_another_tool_replaces_the_active_flow(tmp_path: Path) -> None:

@@ -12,7 +12,6 @@
     checkWhite: function(w,sw){return '<svg width="'+w+'" height="'+w+'" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';},
     x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
     x10: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
-    send: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
     back: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
     currency: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E84010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12M6 8h12M6 13h3m0 0c6.667 0 6.667-10 0-10M6 13l8.5 8"/></svg>',
     compare: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M8 3H3v5m0 8v5h5m8 0h5v-5"/></svg>',
@@ -39,7 +38,6 @@
 
   /* ── Message renderers ── */
   function renderMsg(m) {
-    if (m.kind==='typing') return div('db-msg', div('db-typing', div('db-dot')+''+div('db-dot')+''+div('db-dot')));
     if (m.kind==='user') return div('db-msg', div('db-bubble-user', esc(m.text)));
     if (m.kind==='bot') return div('db-msg', div('db-bubble-bot', esc(m.text)));
     if (m.kind==='cards') return div('db-msg', m.cards.map(function(c){ return renderCard(c,m.id); }).join(''));
@@ -234,7 +232,6 @@
     if (!state.chips.length) return '';
     var disabledAttr = state.busy ? ' disabled="disabled"' : '';
     return div('db-chips-area',
-      (!state.started ? div('db-chips-hint','Or type your question below.') : '') +
       div('db-chip-grid', state.chips.map(function(ch,i){
         return btn('db-chip' + (state.busy ? ' db-chip--disabled' : ''),esc(ch.label),'','data-action="chip" data-idx="'+i+'"' + disabledAttr);
       }).join('')) +
@@ -278,7 +275,7 @@
         div('db-tool-opts',optsHtml) +
         '';
     } else if (t.phase==='loading') {
-      body = div('db-typing', div('db-dot')+div('db-dot')+div('db-dot'));
+      body = div('db-tool-promise','Loading…');
     } else if (t.phase==='partial') {
       body = div('db-tool-partial-box',
           div('db-tool-partial-check',SVG.checkWhite(14,2.8)) +
@@ -511,17 +508,6 @@
         btn('db-compare-run-btn', SVG.compare + 'Compare '+state.compare.length+' selected', '', 'data-action="runCompare"') +
         '</div>';
     }
-
-    /* Input bar */
-    var sendActive = (state.input||'').trim().length>0;
-    var inputBorder = state.inputFocused ? '#0E1F3D' : '#E5E7EB';
-    html += '<div id="db-input-bar">'+
-      div('db-input-wrapper'+(state.inputFocused?' focused':''),
-        e('input','db-input','','placeholder="Type your question…" aria-label="Type your question" id="db-input-el" value="'+esc(state.input)+'" autocomplete="off"'),
-        'style="border-color:'+inputBorder+'"'
-      ) +
-      btn('db-send-btn'+(sendActive?' active':''), SVG.send, 'db-send-btn-el', 'aria-label="Send message"') +
-      '</div>';
 
     /* Overlays */
     if (state.picker) html += renderPicker();

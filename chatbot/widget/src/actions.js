@@ -1,90 +1,33 @@
   
 
-  /* ── The chat bridge ──────────────────────────────────────── */
+  /* ── Guided-command bridge ────────────────────────────────── */
 
-  /* Send one turn to /chat and stream it into the message list. */
-  function send(message, opts) {
+  /* ActiveFlow tools use a dedicated guided endpoint. Only predefined tool
+     tokens reach this function; no user-authored text is accepted. */
+  function dispatchGuidedCommand(message, opts) {
     var options = opts || {};
     var userLabel = options.echo === false ? null : (options.label || message);
 
     var items = [];
     if (userLabel) items.push({ kind: 'user', text: userLabel, id: nextId() });
     var tid = nextId();
-    if (cfg.showTypingIndicator) items.push({ kind: 'typing', id: tid });
     state.started = true;
     state.chips = [];
     state.hasMore = false;
-    state.input = '';
-    state.inputFocused = false;
     state.busy = true;
     state.msgs = state.msgs.concat(items);
     render();
     scrollToBottom();
 
-    /* ChatRequest.page_type accepts pillar/university/course/specialization
-       only — "homepage" has no entity context, so send no page_type at all. */
-    var body = { message: message, site_key: cfg.siteKey };
-    if (CHAT_PAGE_TYPES.indexOf(ctxPageType()) >= 0) body.page_type = ctxPageType();
-    if (state.sessionId) body.session_id = state.sessionId;
-    if (ctxEntityId()) body.page_entity_slug = ctxEntityId();
-    if (ctxUniversityId()) body.page_university_slug = ctxUniversityId();
-    if (options.chip) {
-      if (options.chip.chip_id) body.chip_id = options.chip.chip_id;
-      if (options.chip.chip_surface) body.chip_surface = options.chip.chip_surface;
-      if (options.chip.chip_config_version) body.chip_config_version = options.chip.chip_config_version;
-      if (options.chip.chip_correlation_id) body.chip_correlation_id = options.chip.chip_correlation_id;
-    }
-
-    var streamed = '';
-    var settled = null;
-
-    function dropTyping() {
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid; });
-    }
-
-    return requestChat(body).then(function (response) {
-      var headerSession = response.headers.get('x-session-id');
-      if (headerSession) state.sessionId = headerSession;
-      return consumeSse(response, function (evt, data) {
-        if (data && data.session_id) state.sessionId = data.session_id;
-        if (evt === 'token') {
-          streamed += data.token || '';
-          /* Live-type into a single bot bubble, replacing the typing dots. */
-          var existing = state.msgs.find(function (m) { return m.id === tid + '-t'; });
-          if (existing) { existing.text = streamed; }
-          else { dropTyping(); state.msgs = state.msgs.concat([{ kind: 'bot', text: streamed, id: tid + '-t' }]); }
-          renderStreaming();
-          return;
-        }
-        if (evt === 'response') { settled = data; }
-      });
-    }).then(function () {
-      dropTyping();
-      /* The final payload is authoritative — drop the streamed placeholder. */
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid + '-t'; });
-      if (!settled) throw new Error('No response payload received');
-      applyPayload(settled, options);
-      return settled;
+    return postGuideTool(message, options.chip).then(function (payload) {
+      applyPayload(payload, options);
+      return payload;
     }).catch(function (err) {
       console.warn('DegreeBaba widget falling back to local content', err);
-      dropTyping();
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid + '-t'; });
       state.busy = false;
       if (options.onFail) options.onFail(err);
       else settleTurn(tid, [{ kind: 'bot', text: UNAVAILABLE }], null);
       return null;
-    });
-  }
-
-  /* Tokens arrive faster than the DOM needs rebuilding — coalesce to one
-     repaint per frame instead of a full re-render per token. */
-  var streamFrame = 0;
-  function renderStreaming() {
-    if (streamFrame) return;
-    streamFrame = requestAnimationFrame(function () {
-      streamFrame = 0;
-      render();
-      if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
     });
   }
 
@@ -130,10 +73,8 @@
     get_approvals:         ['accreditations', 'approvals'],
     get_placement_support: ['placement',      'placement'],
     get_overview:          ['overview',       'overview'],
-    get_admission_steps:   ['admissions',     'admissions']
-    /* get_validity is deliberately absent: the guide bundle has no `validity`
-       info key. The knowledge handler behind /chat answers it deterministically
-       (see routing/knowledge_handler.py), so it falls through to send() below. */
+    get_admission_steps:   ['admissions',     'admissions'],
+    get_validity:          ['validity',       'validity']
   };
 
   function onChip(ch) {
@@ -154,8 +95,8 @@
     if (PICKER_HANDLERS[handler]) { openPicker(PICKER_HANDLERS[handler], ch); return; }
     if (INFO_HANDLERS[handler]) { showInfoCard(handler, ch); return; }
 
-    /* No deterministic handler published: this is a conversational chip. */
-    send(ch.message || ch.label, { label: ch.label, chip: ch });
+    console.warn('DegreeBaba widget has no guided surface for chip handler', handler);
+    loadFollowups(null, ch).catch(function () {});
   }
 
   /* ── Guided info cards, grounded in the page bundle ─────────── */
@@ -174,6 +115,25 @@
       return loadFollowups(answerStateFor(handler, data), chip);
     }).catch(function (err) {
       console.warn('DegreeBaba widget guided card unavailable', err);
+      unavailableTurn(tid, UNAVAILABLE);
+    });
+  }
+
+  /* A recommendation card may describe an entity other than the current page.
+     Resolve that exact catalog id through the guided context endpoint before
+     showing its fee card; never turn the card title into a text query. */
+  function showEntityFees(entityId, chip) {
+    var tid = beginTurn(chip.label);
+    loadGuideContext(null, { entityId: entityId }).then(function (bundle) {
+      applyBundleContext(bundle);
+      var data = bundle && bundle.info && bundle.info.fees;
+      if (!data || !data.available) { unavailableTurn(tid, UNAVAILABLE); return; }
+      settleTurn(tid, infoCardMsgs('get_fees', 'fees', data), null);
+      var opening = bundle.opening || {};
+      setChips(opening.top || [], opening.more || []);
+      render(); scrollToBottom();
+    }).catch(function (err) {
+      console.warn('DegreeBaba widget entity fees unavailable', err);
       unavailableTurn(tid, UNAVAILABLE);
     });
   }
@@ -491,8 +451,8 @@
         kind: 'course', query: '', rows: null, loading: true,
         chip: chip, course: row.id
       };
-      /* beginTurn() cleared the chips row for the "typing" moment above. The
-         picker is an overlay, not a replacement for the chat underneath, so
+      /* beginTurn() clears the chips row while the picker opens. The picker
+         is an overlay, not a replacement for the guided surface, so
          refill it now — otherwise closing this picker without picking leaves
          the user with nothing. */
       loadFollowups(null, chip).catch(function () {});
@@ -586,7 +546,7 @@
     state.chips = []; state.hasMore = false; state.started = true;
     render(); scrollToBottom();
 
-    send('tool:' + TOOL_TOKEN_BY_KIND[kind], {
+    dispatchGuidedCommand('tool:' + TOOL_TOKEN_BY_KIND[kind], {
       echo: false,
       onFail: function () { closeTool('unavailable'); }
     });
@@ -602,7 +562,7 @@
       phase: 'loading'
     });
     render();
-    send(remote.message, { echo: false, onFail: function () { closeTool('transport_error'); } });
+    dispatchGuidedCommand(remote.message, { echo: false, onFail: function () { closeTool('transport_error'); } });
   }
 
   /* The partial → lead gate: `tool:continue` moves the flow to await_lead. */
@@ -611,7 +571,7 @@
     if (!t) return;
     state.tool = Object.assign({}, t, { phase: 'loading' });
     render();
-    send('tool:continue', { echo: false, onFail: function () { closeTool('transport_error'); } });
+    dispatchGuidedCommand('tool:continue', { echo: false, onFail: function () { closeTool('transport_error'); } });
   }
 
   function toolSubmit() {
@@ -671,14 +631,7 @@
 
   function onEndPrograms() {
     state.endScreen = null;
-    send('Show me matching programs', { echo: false });
-  }
-
-  /* Free text always goes to the backend. The widget does no intent guessing. */
-  function onSendText() {
-    var t = (state.input || '').trim();
-    if (!t || state.busy || !state.ready) return;
-    send(t);
+    openPicker({ kind: 'program', title: 'Browse programs' }, state.lastChip);
   }
   /* Clearing context must clear the backend session too, otherwise later turns
      keep resolving against the entity the user just dismissed. */
@@ -716,7 +669,7 @@
     state.compare = []; state.acc = {};
     state.context = null;
     state.picker = null; state.details = null; state.tool = null; state.endScreen = null;
-    state.input = ''; state.inputFocused = false; state.leadPhone = ''; state.toolName = ''; state.toolPhone = '';
+    state.leadPhone = ''; state.toolName = ''; state.toolPhone = '';
     state.started = false; state.ready = false;
     state.guideBundle = null; state.guideBusy = null; state.busy = false;
     state.viewedActions = new Set();
@@ -727,10 +680,7 @@
 
   function loadOpening() {
     if (!cfg.apiBase) { state.ready = true; render(); return; }
-    var tid = nextId();
-    if (cfg.showTypingIndicator) { state.msgs = [{ kind: 'typing', id: tid }]; render(); }
     ensureGuideBundle().then(function (bundle) {
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid; });
       applyBundleContext(bundle);
       var opening = bundle.opening || {};
       var greeting = opening.message || opening.greeting || cfg.welcomeMessage;
@@ -745,8 +695,7 @@
       render(); scrollToBottom();
     }).catch(function (err) {
       console.warn('DegreeBaba widget opening unavailable', err);
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid; })
-        .concat([{ kind: 'bot', text: UNAVAILABLE, id: nextId() }]);
+      state.msgs = state.msgs.concat([{ kind: 'bot', text: UNAVAILABLE, id: nextId() }]);
       state.ready = true;
       render(); scrollToBottom();
     });

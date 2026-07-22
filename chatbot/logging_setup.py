@@ -1,9 +1,7 @@
-"""Structured per-turn logging for the DegreeBaba chatbot.
+"""Structured request logging for the DegreeBaba guided widget.
 
-Provides named loggers for each pipeline layer and configurable formatters for
-local development (human-readable text) and production (JSON).  Every log line
-for a ``/chat`` turn carries a short correlation id so a full turn trace can be
-grepped out of a busy terminal.
+Provides configurable text and JSON formatting. Guided requests carry a short
+correlation id so a funnel trace can be followed without exposing raw session ids.
 """
 
 from __future__ import annotations
@@ -15,11 +13,7 @@ from typing import Any
 
 # Named loggers — one per pipeline layer so levels can be tuned independently.
 LOGGERS = {
-    "chatbot.nlu": logging.getLogger("chatbot.nlu"),
-    "chatbot.resolver": logging.getLogger("chatbot.resolver"),
-    "chatbot.routing": logging.getLogger("chatbot.routing"),
     "chatbot.leads": logging.getLogger("chatbot.leads"),
-    "chatbot.llm": logging.getLogger("chatbot.llm"),
     "chatbot.catalog": logging.getLogger("chatbot.catalog"),
 }
 

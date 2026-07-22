@@ -29,13 +29,10 @@ Widget shell
 │   │   ├── published metadata badges
 │   │   └── clear control
 │   ├── grouped assistant messages
-│   ├── content-sized user messages
+│   ├── guided-selection messages
 │   ├── cards / comparisons / guided answers
 │   ├── quick-action chips
-│   └── typing indicator
-├── Compact composer
-│   ├── question input
-│   └── aligned send action
+│   └── guided responses
 └── Privacy reassurance
 ```
 
@@ -44,15 +41,14 @@ Widget shell
 - 400 px floating panel with a 650 px maximum height.
 - Conversation rows use an 8 px stream gap and 10 px message separation.
 - Assistant bubbles use a white surface, thin divider, subtle shadow, and 18 px radius.
-- User bubbles size to their content and cap only when messages become long.
+- Guided selections size to their content and remain visually distinct.
 - Context is a compact white card rather than a large orange pill.
-- Composer controls are 40 px high to preserve conversation space.
 
 ## Mobile layout
 
 - Full-viewport sheet below 560 px.
 - Reduced 6 px stream gap and 8 px message separation.
-- Safe-area-aware composer and footer.
+- Safe-area-aware guided controls and footer.
 - Starter choices collapse to one column below 360 px.
 - Follow-up chips wrap instead of hiding important options off-screen.
 
@@ -80,8 +76,7 @@ Widget shell
 ## Interaction states
 
 - **Hover:** neutral actions move to orange-soft; high-intent actions become solid orange.
-- **Focus:** navy input border and a restrained focus ring.
-- **Typing:** existing animated three-dot state remains visible beside the assistant identity.
+- **Focus:** guided controls use a navy border and restrained focus ring.
 - **Loading/error:** existing grounded loading and retry states keep their current behavior.
 - **Grouped messages:** only the first message in a consecutive assistant group shows an avatar.
 - **Context clear:** removes navigation focus without deleting rendered conversation history.
@@ -90,7 +85,7 @@ Widget shell
 ## UX rationale
 
 - Reduced row spacing exposes more conversation history without shrinking readable text.
-- Content-sized user bubbles prevent short values such as `BCOM` from wrapping.
+- Content-sized guided selections prevent short values from wrapping.
 - Avatar grouping preserves identity while removing repetitive visual noise.
 - The context card separates institution, program, and trust metadata so scope is scannable.
 - Orange is reserved for AI accents and conversion moments, improving hierarchy and trust.

@@ -1,4 +1,4 @@
-"""Conversation state persistence."""
+"""Guided widget state persistence."""
 
 from .state import (
     ActiveFlow,
@@ -7,7 +7,6 @@ from .state import (
     LeadState,
     NavigationState,
     NavigationStep,
-    PendingClarification,
     SessionState,
 )
 from .store import MemorySessionStore, RedisSessionStore, SessionStore
@@ -20,7 +19,6 @@ __all__ = [
     "MemorySessionStore",
     "NavigationState",
     "NavigationStep",
-    "PendingClarification",
     "RedisSessionStore",
     "SessionState",
     "SessionStore",

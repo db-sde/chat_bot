@@ -13,7 +13,7 @@
  *
  * Config (optional):
  *   window.DegreeBabaWidget.init({
- *     apiUrl:       "https://your-api.com/chat",
+ *     apiBase:      "https://your-api.com",
  *     botName:      "DegreeBaba Assistant",
  *     primaryColor: "#E84010",
  *     position:     "right",   // "right" | "left"
@@ -55,19 +55,17 @@
     details: null,
     tool: null,
     endScreen: null,
-    input: '',
-    inputFocused: false,
     leadPhone: '',
     toolName: '',
     toolPhone: '',
     started: false,
     uid: 0,
     /* ── backend-bound state ── */
-    sessionId: null,       // issued by /chat or /api/widget/guide/context
+    sessionId: null,       // issued by guided widget endpoints
     guideBundle: null,     // GET /api/widget/guide/context payload
     pickerCache: {},       // cacheKey -> normalized rows
     pickerToken: 0,        // guards out-of-order picker searches
-    busy: false,           // a /chat stream is in flight
+    busy: false,           // a guided backend command is in flight
     moreChips: null,       // config-owned "More ⌄" set from /guide/context
     ready: false,          // true once the backend opening payload has landed
     guideBusy: null,       // in-flight /guide/context promise
@@ -98,7 +96,6 @@
     widgetId: null,
     entitySlug: null,
     universitySlug: null,
-    showTypingIndicator: true,
     autoOpen: false,
     autoOpenPinned: false,
     welcomeMessage: null
@@ -147,7 +144,6 @@
   }
 
   /* ── Transport ── */
-  var CHAT_PAGE_TYPES = ['pillar', 'university', 'course', 'specialization'];
   function apiUrl(path) { return cfg.apiBase.replace(/\/$/, '') + path; }
 
   function safeHttpUrl(value) {
@@ -186,7 +182,6 @@
       if (/^#[0-9a-f]{6}$/i.test(branding.primary_color || '')) cfg.primaryColor = branding.primary_color;
       if (branding.welcome_message) cfg.welcomeMessage = branding.welcome_message;
       cfg.avatarUrl = safeHttpUrl(branding.avatar_url);
-      cfg.showTypingIndicator = behavior.show_typing_indicator !== false;
       /* data-auto-open is an explicit per-page opt-in and outranks the tenant default. */
       if (!cfg.autoOpenPinned) cfg.autoOpen = behavior.auto_open === true;
       applyTheme(cfg.primaryColor);
@@ -205,7 +200,7 @@
     }
     var bg = ['#db-launcher', '.db-avatar', '.db-context-dot', '.db-lead-send', '.db-bar-fill',
       '.db-sub-dot', '.db-cta-primary', '.db-progress-fill', '.db-tool-start', '.db-tool-submit',
-      '.db-end-brand-badge', '.db-send-btn.active'];
+      '.db-end-brand-badge'];
     var fg = ['.db-btn-compare.db-in-compare', '.db-verdict-label', '.db-rating-stars',
       '.db-tool-icon-badge', '.db-finder-skip'];
     el.textContent =
@@ -215,49 +210,22 @@
       '#db-launcher{box-shadow:0 8px 22px ' + color + '66;}';
   }
 
-  /* POST /chat — SSE. Emits "token" (streaming text) then "response" (full payload). */
-  function requestChat(body, signal) {
-    return fetch(apiUrl('/chat'), {
-      method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-      body: JSON.stringify(body),
-      signal: signal
-    }).then(function (res) {
-      if (!res.ok) throw new Error('Chat request failed (' + res.status + ')');
-      return res;
+  /* POST one predefined ActiveFlow command. This endpoint accepts tool tokens,
+     not user-authored messages. */
+  function postGuideTool(command, chip) {
+    var c = chip || {};
+    return postJson('/api/widget/guide/tool', Object.assign({
+      command: command,
+      page_type: ctxPageType()
+    }, state.sessionId ? { session_id: state.sessionId } : {},
+      ctxEntityId() ? { entity_id: ctxEntityId() } : {},
+      c.chip_id ? { chip_id: c.chip_id } : {},
+      c.chip_surface ? { chip_surface: c.chip_surface } : {},
+      c.chip_config_version ? { chip_config_version: c.chip_config_version } : {}
+    )).then(function (payload) {
+      if (payload && payload.session_id) state.sessionId = payload.session_id;
+      return payload && payload.response ? payload.response : payload;
     });
-  }
-
-  function consumeSse(response, onEvent) {
-    if (!response.body) throw new Error('Streaming response is unavailable');
-    var reader = response.body.getReader();
-    var decoder = new TextDecoder();
-    var buffer = '';
-    function pump() {
-      return reader.read().then(function (chunk) {
-        buffer += decoder.decode(chunk.value || new Uint8Array(), { stream: !chunk.done });
-        buffer = buffer.replace(/\r\n/g, '\n');
-        var boundary = buffer.indexOf('\n\n');
-        while (boundary >= 0) {
-          var block = buffer.slice(0, boundary);
-          buffer = buffer.slice(boundary + 2);
-          var evt = 'message', dataLines = [];
-          block.split('\n').forEach(function (line) {
-            if (line.indexOf('event:') === 0) evt = line.slice(6).trim();
-            if (line.indexOf('data:') === 0) dataLines.push(line.slice(5).replace(/^ /, ''));
-          });
-          if (dataLines.length) {
-            try { onEvent(evt, JSON.parse(dataLines.join('\n'))); }
-            catch (err) { console.warn('DegreeBaba widget ignored malformed SSE data', err); }
-          }
-          boundary = buffer.indexOf('\n\n');
-        }
-        if (chunk.done) return;
-        return pump();
-      });
-    }
-    return pump();
   }
 
   /* Business context: the server's resolved value wins; the embed attributes
@@ -752,91 +720,34 @@
     };}
   
 
-  /* ── The chat bridge ──────────────────────────────────────── */
+  /* ── Guided-command bridge ────────────────────────────────── */
 
-  /* Send one turn to /chat and stream it into the message list. */
-  function send(message, opts) {
+  /* ActiveFlow tools use a dedicated guided endpoint. Only predefined tool
+     tokens reach this function; no user-authored text is accepted. */
+  function dispatchGuidedCommand(message, opts) {
     var options = opts || {};
     var userLabel = options.echo === false ? null : (options.label || message);
 
     var items = [];
     if (userLabel) items.push({ kind: 'user', text: userLabel, id: nextId() });
     var tid = nextId();
-    if (cfg.showTypingIndicator) items.push({ kind: 'typing', id: tid });
     state.started = true;
     state.chips = [];
     state.hasMore = false;
-    state.input = '';
-    state.inputFocused = false;
     state.busy = true;
     state.msgs = state.msgs.concat(items);
     render();
     scrollToBottom();
 
-    /* ChatRequest.page_type accepts pillar/university/course/specialization
-       only — "homepage" has no entity context, so send no page_type at all. */
-    var body = { message: message, site_key: cfg.siteKey };
-    if (CHAT_PAGE_TYPES.indexOf(ctxPageType()) >= 0) body.page_type = ctxPageType();
-    if (state.sessionId) body.session_id = state.sessionId;
-    if (ctxEntityId()) body.page_entity_slug = ctxEntityId();
-    if (ctxUniversityId()) body.page_university_slug = ctxUniversityId();
-    if (options.chip) {
-      if (options.chip.chip_id) body.chip_id = options.chip.chip_id;
-      if (options.chip.chip_surface) body.chip_surface = options.chip.chip_surface;
-      if (options.chip.chip_config_version) body.chip_config_version = options.chip.chip_config_version;
-      if (options.chip.chip_correlation_id) body.chip_correlation_id = options.chip.chip_correlation_id;
-    }
-
-    var streamed = '';
-    var settled = null;
-
-    function dropTyping() {
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid; });
-    }
-
-    return requestChat(body).then(function (response) {
-      var headerSession = response.headers.get('x-session-id');
-      if (headerSession) state.sessionId = headerSession;
-      return consumeSse(response, function (evt, data) {
-        if (data && data.session_id) state.sessionId = data.session_id;
-        if (evt === 'token') {
-          streamed += data.token || '';
-          /* Live-type into a single bot bubble, replacing the typing dots. */
-          var existing = state.msgs.find(function (m) { return m.id === tid + '-t'; });
-          if (existing) { existing.text = streamed; }
-          else { dropTyping(); state.msgs = state.msgs.concat([{ kind: 'bot', text: streamed, id: tid + '-t' }]); }
-          renderStreaming();
-          return;
-        }
-        if (evt === 'response') { settled = data; }
-      });
-    }).then(function () {
-      dropTyping();
-      /* The final payload is authoritative — drop the streamed placeholder. */
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid + '-t'; });
-      if (!settled) throw new Error('No response payload received');
-      applyPayload(settled, options);
-      return settled;
+    return postGuideTool(message, options.chip).then(function (payload) {
+      applyPayload(payload, options);
+      return payload;
     }).catch(function (err) {
       console.warn('DegreeBaba widget falling back to local content', err);
-      dropTyping();
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid + '-t'; });
       state.busy = false;
       if (options.onFail) options.onFail(err);
       else settleTurn(tid, [{ kind: 'bot', text: UNAVAILABLE }], null);
       return null;
-    });
-  }
-
-  /* Tokens arrive faster than the DOM needs rebuilding — coalesce to one
-     repaint per frame instead of a full re-render per token. */
-  var streamFrame = 0;
-  function renderStreaming() {
-    if (streamFrame) return;
-    streamFrame = requestAnimationFrame(function () {
-      streamFrame = 0;
-      render();
-      if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
     });
   }
 
@@ -882,10 +793,8 @@
     get_approvals:         ['accreditations', 'approvals'],
     get_placement_support: ['placement',      'placement'],
     get_overview:          ['overview',       'overview'],
-    get_admission_steps:   ['admissions',     'admissions']
-    /* get_validity is deliberately absent: the guide bundle has no `validity`
-       info key. The knowledge handler behind /chat answers it deterministically
-       (see routing/knowledge_handler.py), so it falls through to send() below. */
+    get_admission_steps:   ['admissions',     'admissions'],
+    get_validity:          ['validity',       'validity']
   };
 
   function onChip(ch) {
@@ -906,8 +815,8 @@
     if (PICKER_HANDLERS[handler]) { openPicker(PICKER_HANDLERS[handler], ch); return; }
     if (INFO_HANDLERS[handler]) { showInfoCard(handler, ch); return; }
 
-    /* No deterministic handler published: this is a conversational chip. */
-    send(ch.message || ch.label, { label: ch.label, chip: ch });
+    console.warn('DegreeBaba widget has no guided surface for chip handler', handler);
+    loadFollowups(null, ch).catch(function () {});
   }
 
   /* ── Guided info cards, grounded in the page bundle ─────────── */
@@ -926,6 +835,25 @@
       return loadFollowups(answerStateFor(handler, data), chip);
     }).catch(function (err) {
       console.warn('DegreeBaba widget guided card unavailable', err);
+      unavailableTurn(tid, UNAVAILABLE);
+    });
+  }
+
+  /* A recommendation card may describe an entity other than the current page.
+     Resolve that exact catalog id through the guided context endpoint before
+     showing its fee card; never turn the card title into a text query. */
+  function showEntityFees(entityId, chip) {
+    var tid = beginTurn(chip.label);
+    loadGuideContext(null, { entityId: entityId }).then(function (bundle) {
+      applyBundleContext(bundle);
+      var data = bundle && bundle.info && bundle.info.fees;
+      if (!data || !data.available) { unavailableTurn(tid, UNAVAILABLE); return; }
+      settleTurn(tid, infoCardMsgs('get_fees', 'fees', data), null);
+      var opening = bundle.opening || {};
+      setChips(opening.top || [], opening.more || []);
+      render(); scrollToBottom();
+    }).catch(function (err) {
+      console.warn('DegreeBaba widget entity fees unavailable', err);
       unavailableTurn(tid, UNAVAILABLE);
     });
   }
@@ -1243,8 +1171,8 @@
         kind: 'course', query: '', rows: null, loading: true,
         chip: chip, course: row.id
       };
-      /* beginTurn() cleared the chips row for the "typing" moment above. The
-         picker is an overlay, not a replacement for the chat underneath, so
+      /* beginTurn() clears the chips row while the picker opens. The picker
+         is an overlay, not a replacement for the guided surface, so
          refill it now — otherwise closing this picker without picking leaves
          the user with nothing. */
       loadFollowups(null, chip).catch(function () {});
@@ -1338,7 +1266,7 @@
     state.chips = []; state.hasMore = false; state.started = true;
     render(); scrollToBottom();
 
-    send('tool:' + TOOL_TOKEN_BY_KIND[kind], {
+    dispatchGuidedCommand('tool:' + TOOL_TOKEN_BY_KIND[kind], {
       echo: false,
       onFail: function () { closeTool('unavailable'); }
     });
@@ -1354,7 +1282,7 @@
       phase: 'loading'
     });
     render();
-    send(remote.message, { echo: false, onFail: function () { closeTool('transport_error'); } });
+    dispatchGuidedCommand(remote.message, { echo: false, onFail: function () { closeTool('transport_error'); } });
   }
 
   /* The partial → lead gate: `tool:continue` moves the flow to await_lead. */
@@ -1363,7 +1291,7 @@
     if (!t) return;
     state.tool = Object.assign({}, t, { phase: 'loading' });
     render();
-    send('tool:continue', { echo: false, onFail: function () { closeTool('transport_error'); } });
+    dispatchGuidedCommand('tool:continue', { echo: false, onFail: function () { closeTool('transport_error'); } });
   }
 
   function toolSubmit() {
@@ -1423,14 +1351,7 @@
 
   function onEndPrograms() {
     state.endScreen = null;
-    send('Show me matching programs', { echo: false });
-  }
-
-  /* Free text always goes to the backend. The widget does no intent guessing. */
-  function onSendText() {
-    var t = (state.input || '').trim();
-    if (!t || state.busy || !state.ready) return;
-    send(t);
+    openPicker({ kind: 'program', title: 'Browse programs' }, state.lastChip);
   }
   /* Clearing context must clear the backend session too, otherwise later turns
      keep resolving against the entity the user just dismissed. */
@@ -1468,7 +1389,7 @@
     state.compare = []; state.acc = {};
     state.context = null;
     state.picker = null; state.details = null; state.tool = null; state.endScreen = null;
-    state.input = ''; state.inputFocused = false; state.leadPhone = ''; state.toolName = ''; state.toolPhone = '';
+    state.leadPhone = ''; state.toolName = ''; state.toolPhone = '';
     state.started = false; state.ready = false;
     state.guideBundle = null; state.guideBusy = null; state.busy = false;
     state.viewedActions = new Set();
@@ -1479,10 +1400,7 @@
 
   function loadOpening() {
     if (!cfg.apiBase) { state.ready = true; render(); return; }
-    var tid = nextId();
-    if (cfg.showTypingIndicator) { state.msgs = [{ kind: 'typing', id: tid }]; render(); }
     ensureGuideBundle().then(function (bundle) {
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid; });
       applyBundleContext(bundle);
       var opening = bundle.opening || {};
       var greeting = opening.message || opening.greeting || cfg.welcomeMessage;
@@ -1497,14 +1415,13 @@
       render(); scrollToBottom();
     }).catch(function (err) {
       console.warn('DegreeBaba widget opening unavailable', err);
-      state.msgs = state.msgs.filter(function (m) { return m.id !== tid; })
-        .concat([{ kind: 'bot', text: UNAVAILABLE, id: nextId() }]);
+      state.msgs = state.msgs.concat([{ kind: 'bot', text: UNAVAILABLE, id: nextId() }]);
       state.ready = true;
       render(); scrollToBottom();
     });
   }
 
-  /* ── Active tool webhooks: /chat drives every tool step ───── */
+  /* ── Active tool webhooks: the guided tool endpoint owns every step ── */
 
   /* Map the backend tool_flow lifecycle onto the .db-tool-widget phases. */
   function applyToolFlow(flow, payload) {
@@ -1634,18 +1551,15 @@
     if (scrollEl) setTimeout(function(){ scrollEl.scrollTop = scrollEl.scrollHeight; }, 30);
   }
 
-  /* Open one bot turn: echo the user, show the typing indicator, and hand
-     back the placeholder id so the caller can swap in the settled content. */
+  /* Open one guided turn and echo the selected action. The returned id is a
+     stable turn token for callers; it is never rendered as a placeholder. */
   function beginTurn(userLabel) {
     var items = [];
     if (userLabel) items.push({ kind: 'user', text: userLabel, id: nextId() });
     var tid = nextId();
-    if (cfg.showTypingIndicator) items.push({ kind: 'typing', id: tid });
     state.started = true;
     state.chips = [];
     state.hasMore = false;
-    state.input = '';
-    state.inputFocused = false;
     state.msgs = state.msgs.concat(items);
     render();
     scrollToBottom();
@@ -1701,7 +1615,6 @@
     checkWhite: function(w,sw){return '<svg width="'+w+'" height="'+w+'" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';},
     x: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
     x10: '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>',
-    send: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
     back: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>',
     currency: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E84010" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12M6 8h12M6 13h3m0 0c6.667 0 6.667-10 0-10M6 13l8.5 8"/></svg>',
     compare: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M8 3H3v5m0 8v5h5m8 0h5v-5"/></svg>',
@@ -1728,7 +1641,6 @@
 
   /* ── Message renderers ── */
   function renderMsg(m) {
-    if (m.kind==='typing') return div('db-msg', div('db-typing', div('db-dot')+''+div('db-dot')+''+div('db-dot')));
     if (m.kind==='user') return div('db-msg', div('db-bubble-user', esc(m.text)));
     if (m.kind==='bot') return div('db-msg', div('db-bubble-bot', esc(m.text)));
     if (m.kind==='cards') return div('db-msg', m.cards.map(function(c){ return renderCard(c,m.id); }).join(''));
@@ -1923,7 +1835,6 @@
     if (!state.chips.length) return '';
     var disabledAttr = state.busy ? ' disabled="disabled"' : '';
     return div('db-chips-area',
-      (!state.started ? div('db-chips-hint','Or type your question below.') : '') +
       div('db-chip-grid', state.chips.map(function(ch,i){
         return btn('db-chip' + (state.busy ? ' db-chip--disabled' : ''),esc(ch.label),'','data-action="chip" data-idx="'+i+'"' + disabledAttr);
       }).join('')) +
@@ -1967,7 +1878,7 @@
         div('db-tool-opts',optsHtml) +
         '';
     } else if (t.phase==='loading') {
-      body = div('db-typing', div('db-dot')+div('db-dot')+div('db-dot'));
+      body = div('db-tool-promise','Loading…');
     } else if (t.phase==='partial') {
       body = div('db-tool-partial-box',
           div('db-tool-partial-check',SVG.checkWhite(14,2.8)) +
@@ -2201,17 +2112,6 @@
         '</div>';
     }
 
-    /* Input bar */
-    var sendActive = (state.input||'').trim().length>0;
-    var inputBorder = state.inputFocused ? '#0E1F3D' : '#E5E7EB';
-    html += '<div id="db-input-bar">'+
-      div('db-input-wrapper'+(state.inputFocused?' focused':''),
-        e('input','db-input','','placeholder="Type your question…" aria-label="Type your question" id="db-input-el" value="'+esc(state.input)+'" autocomplete="off"'),
-        'style="border-color:'+inputBorder+'"'
-      ) +
-      btn('db-send-btn'+(sendActive?' active':''), SVG.send, 'db-send-btn-el', 'aria-label="Send message"') +
-      '</div>';
-
     /* Overlays */
     if (state.picker) html += renderPicker();
     if (state.details) html += renderDetails();
@@ -2238,17 +2138,6 @@
     var closeBtn = windowEl.querySelector('#db-close-btn-el');
     if (closeBtn) closeBtn.addEventListener('click', function(){ state.open = false; render(); });
 
-    /* Input field */
-    var inputEl = windowEl.querySelector('#db-input-el');
-    if (inputEl) {
-      inputEl.addEventListener('focus', function(){ state.inputFocused = true; updateInputBorder(); });
-      inputEl.addEventListener('blur', function(){ state.inputFocused = false; updateInputBorder(); });
-      inputEl.addEventListener('input', function(){ state.input = inputEl.value; updateSendBtn(); });
-      inputEl.addEventListener('keydown', function(ev){ if(ev.key==='Enter') onSendText(); });
-    }
-    /* Send btn */
-    var sendBtn = windowEl.querySelector('#db-send-btn-el');
-    if (sendBtn) sendBtn.addEventListener('click', onSendText);
   }
 
   /* One-time: delegated handlers live on windowEl, which survives every render.
@@ -2330,7 +2219,7 @@
       var value = el.value;
       state.picker = Object.assign({},state.picker,{query:value});
       renderPickerList();
-      /* Debounce the catalog query so typing doesn't fan out one call per key. */
+      /* Debounce picker search so one edit does not fan out one call per key. */
       clearTimeout(pickerDebounce);
       pickerDebounce = setTimeout(function(){ refreshPicker(value.trim()); }, 220);
     }, 'input');
@@ -2373,12 +2262,11 @@
       var d = state.details;
       state.details = null;
       /* The grounded fees card only describes the entity the session is
-         focused on. A details card from anywhere else routes through chat,
-         where the backend resolves the entity from the name. */
+         focused on. Resolve any other card by its exact catalog id. */
       if (d && d.entityId && d.entityId === ctxEntityId()) {
         showInfoCard('get_fees', { label: '💰 Fees & EMI', handler: 'get_fees' });
       } else if (d) {
-        send('What are the fees for ' + (d.queryName || d.title) + '?', { label: '💰 Fees & EMI' });
+        showEntityFees(d.entityId, { label: '💰 Fees & EMI', handler: 'get_fees' });
       } else {
         render();
       }
@@ -2397,18 +2285,6 @@
     }, true);
   }
 
-  function updateInputBorder() {
-    var wrap = windowEl && windowEl.querySelector('.db-input-wrapper');
-    if (!wrap) return;
-    if (state.inputFocused) { wrap.classList.add('focused'); wrap.style.borderColor = '#0E1F3D'; }
-    else { wrap.classList.remove('focused'); wrap.style.borderColor = '#E5E7EB'; }
-  }
-  function updateSendBtn() {
-    var btn2 = windowEl && windowEl.querySelector('#db-send-btn-el');
-    if (!btn2) return;
-    if ((state.input||'').trim().length > 0) { btn2.classList.add('active'); }
-    else { btn2.classList.remove('active'); }
-  }
   function renderPickerList() {
     /* lightweight re-render of just the list (avoids full re-render on each keypress) */
     if (!state.picker || !windowEl) return;
@@ -2515,7 +2391,7 @@
       if (options.entitySlug)     cfg.entitySlug = options.entitySlug;
       if (options.universitySlug) cfg.universitySlug = options.universitySlug;
     }
-    /* apiUrl may point at the /chat endpoint; the API base is its origin. */
+    /* Keep the legacy apiUrl option as an origin alias for existing embeds. */
     if (!cfg.apiBase && cfg.apiUrl) {
       try { cfg.apiBase = new URL(cfg.apiUrl, window.location.href).origin; }
       catch (err) { cfg.apiBase = ''; }

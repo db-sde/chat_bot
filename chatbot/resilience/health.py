@@ -22,8 +22,8 @@ async def _probe(name: str, call: Any, timeout: float = 1.0) -> tuple[str, Any]:
         return name, {"status": "down", "detail": type(exc).__name__}
 
 
-async def dependency_health(session_store: Any, catalog: Any, llm: Any) -> dict[str, Any]:
-    """Check dependencies independently; optional providers are reported explicitly."""
+async def dependency_health(session_store: Any, catalog: Any) -> dict[str, Any]:
+    """Check only dependencies used by the guided widget."""
 
     async def redis_health() -> dict[str, str]:
         if getattr(session_store, "using_memory", False):
@@ -54,7 +54,6 @@ async def dependency_health(session_store: Any, catalog: Any, llm: Any) -> dict[
     probes = await asyncio.gather(
         _probe("redis", redis_health),
         _probe("database", catalog_health),
-        _probe("llm", llm.health),
     )
     dependencies = dict(probes)
     statuses = [

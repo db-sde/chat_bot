@@ -11,17 +11,6 @@
     var closeBtn = windowEl.querySelector('#db-close-btn-el');
     if (closeBtn) closeBtn.addEventListener('click', function(){ state.open = false; render(); });
 
-    /* Input field */
-    var inputEl = windowEl.querySelector('#db-input-el');
-    if (inputEl) {
-      inputEl.addEventListener('focus', function(){ state.inputFocused = true; updateInputBorder(); });
-      inputEl.addEventListener('blur', function(){ state.inputFocused = false; updateInputBorder(); });
-      inputEl.addEventListener('input', function(){ state.input = inputEl.value; updateSendBtn(); });
-      inputEl.addEventListener('keydown', function(ev){ if(ev.key==='Enter') onSendText(); });
-    }
-    /* Send btn */
-    var sendBtn = windowEl.querySelector('#db-send-btn-el');
-    if (sendBtn) sendBtn.addEventListener('click', onSendText);
   }
 
   /* One-time: delegated handlers live on windowEl, which survives every render.
@@ -103,7 +92,7 @@
       var value = el.value;
       state.picker = Object.assign({},state.picker,{query:value});
       renderPickerList();
-      /* Debounce the catalog query so typing doesn't fan out one call per key. */
+      /* Debounce picker search so one edit does not fan out one call per key. */
       clearTimeout(pickerDebounce);
       pickerDebounce = setTimeout(function(){ refreshPicker(value.trim()); }, 220);
     }, 'input');
@@ -146,12 +135,11 @@
       var d = state.details;
       state.details = null;
       /* The grounded fees card only describes the entity the session is
-         focused on. A details card from anywhere else routes through chat,
-         where the backend resolves the entity from the name. */
+         focused on. Resolve any other card by its exact catalog id. */
       if (d && d.entityId && d.entityId === ctxEntityId()) {
         showInfoCard('get_fees', { label: '💰 Fees & EMI', handler: 'get_fees' });
       } else if (d) {
-        send('What are the fees for ' + (d.queryName || d.title) + '?', { label: '💰 Fees & EMI' });
+        showEntityFees(d.entityId, { label: '💰 Fees & EMI', handler: 'get_fees' });
       } else {
         render();
       }
@@ -170,18 +158,6 @@
     }, true);
   }
 
-  function updateInputBorder() {
-    var wrap = windowEl && windowEl.querySelector('.db-input-wrapper');
-    if (!wrap) return;
-    if (state.inputFocused) { wrap.classList.add('focused'); wrap.style.borderColor = '#0E1F3D'; }
-    else { wrap.classList.remove('focused'); wrap.style.borderColor = '#E5E7EB'; }
-  }
-  function updateSendBtn() {
-    var btn2 = windowEl && windowEl.querySelector('#db-send-btn-el');
-    if (!btn2) return;
-    if ((state.input||'').trim().length > 0) { btn2.classList.add('active'); }
-    else { btn2.classList.remove('active'); }
-  }
   function renderPickerList() {
     /* lightweight re-render of just the list (avoids full re-render on each keypress) */
     if (!state.picker || !windowEl) return;
