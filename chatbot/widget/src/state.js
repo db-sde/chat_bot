@@ -14,6 +14,8 @@
     tool: null,
     endScreen: null,
     leadPhone: '',
+    leadName: '',
+    lead: null,            // §4 {captured, name} once the session has a lead
     toolName: '',
     toolPhone: '',
     started: false,

@@ -90,6 +90,8 @@
       div('db-compare-verdict', e('span','db-verdict-label','Verdict&nbsp;') + esc(m.verdict))
     );
   }
+  /* §3 inline lead form — Name + Mobile, both required, Submit disabled until
+     both pass client-side validation (§3.2/§3.3). Matches the approved card. */
   function renderLead(m) {
     if (m.leadDone) {
       return div('db-lead',
@@ -99,17 +101,42 @@
         )
       );
     }
+    var valid = leadNameValid(state.leadName) && leadPhoneValid(state.leadPhone);
+    var disabled = m.leadBusy || !valid;
     return div('db-lead',
       div('db-lead-text', esc(m.text)) +
-      div('db-lead-form',
-        div('db-phone-wrapper',
-          e('span','db-phone-prefix','+91') +
-          e('input','db-phone-input','','type="tel" placeholder="Your number" data-action="leadPhoneInput" data-mid="'+m.id+'" value="'+esc(state.leadPhone)+'"')
+      div('db-lead-fields',
+        div('db-lead-field',
+          e('label','db-lead-label','Name','for="db-lead-name-'+m.id+'"') +
+          e('input','db-name-input','','id="db-lead-name-'+m.id+'" type="text" placeholder="Your name" autocomplete="name" data-action="leadNameInput" data-mid="'+m.id+'" value="'+esc(state.leadName)+'"')
         ) +
-        btn('db-lead-send', m.leadBusy ? 'Sending…' : 'Send','','data-action="submitLead" data-mid="'+m.id+'"'+(m.leadBusy?' disabled':''))
+        div('db-lead-field',
+          e('label','db-lead-label','Mobile','for="db-lead-phone-'+m.id+'"') +
+          div('db-phone-wrapper',
+            e('span','db-phone-prefix','+91') +
+            e('input','db-phone-input','','id="db-lead-phone-'+m.id+'" type="tel" inputmode="numeric" maxlength="10" placeholder="10-digit number" autocomplete="tel" data-action="leadPhoneInput" data-mid="'+m.id+'" value="'+esc(state.leadPhone)+'"')
+          )
+        )
       ) +
+      btn('db-lead-submit' + (disabled ? ' db-lead-submit--disabled' : ''),
+        m.leadBusy ? 'Sending…' : 'Submit', '',
+        'data-action="submitLead" data-mid="'+m.id+'"' + (disabled ? ' disabled' : '')) +
       div('db-lead-note', m.leadError ? esc(m.leadError) : 'No spam. One call, today\'s offer.')
     );
+  }
+
+  /* §3.3 name: 2+ chars, letters/space/apostrophe/hyphen/period, no digits. */
+  function leadNameValid(name) {
+    var n = String(name || '').trim();
+    return n.length >= 2 && /^[A-Za-z][A-Za-z .'-]*$/.test(n);
+  }
+  /* §3.2 phone: normalise, then Indian mobile ^[6-9]\d{9}$. */
+  function leadPhoneValid(phone) {
+    return /^[6-9]\d{9}$/.test(normalisePhone(phone));
+  }
+  function normalisePhone(phone) {
+    var d = String(phone || '').replace(/[\s()-]/g, '').replace(/^\+?91/, '').replace(/^0/, '');
+    return d.replace(/\D/g, '');
   }
   function renderFees(f) {
     return div('db-fees',

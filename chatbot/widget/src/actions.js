@@ -111,6 +111,10 @@
       runGuidedComparison(ch);
       return;
     }
+    if (handler === 'change_number') { reopenLeadForm(); return; }
+    if (handler === 'compare_view') { if (ch.entityRef) switchEntity({ type: ch.entityRef.type || ctxPageType(), id: ch.entityRef.entityId, label: ch.entityRef.title }); return; }
+    if (handler === 'compare_again') { openComparePicker(ch, ch.entityRef); return; }
+    if (handler === 'compare_explore') { openPicker(COMPARE_PICKER_KIND[ctxPageType()] === 'uni' ? PICKER_HANDLERS.list_universities : { kind: COMPARE_PICKER_KIND[ctxPageType()], title: 'Explore another option' }, ch); return; }
     if (handler === 'cta_apply' || handler === 'cta_callback') { openLeadTurn(ch); return; }
     /* §2.2 a list_set is an enumeration: render it inline so the user can scan
        and pick. Only overflow (7+) hands off to the picker sheet. Sending every
@@ -267,15 +271,24 @@
     /* Any caller landing here with fewer than two resolvable ids gets routed
        into the real selection flow instead of a dead-end message. */
     if (ids.length < 2) { openComparePicker(chip); return; }
+    var sides = state.compare.slice(0, 2);
     var tid = beginTurn(chip && chip.label ? chip.label : 'Compare');
     postJson('/api/widget/guide/compare', { entity_ids: ids.slice(0, 3) }).then(function (card) {
       state.compare = [];
       /* Two entities are on screen now — the single-entity context pill
          from before the comparison would misleadingly point at only one. */
       state.context = null;
-      settleTurn(tid, [compareFrom(card)], null);
+      var view = compareFrom(card);
+      settleTurn(tid, [view], null);
       emitAnalytics('card_shown', chip, { entity: analyticsEntity() });
-      return loadFollowups('comparison', chip);
+      /* §2 post-comparison chips: act on either side, or pivot to a third.
+         Use the card's resolved names so the two "View" chips are distinct
+         even when both programmes share a name. */
+      if (sides[0]) sides[0].viewLabel = view.aName;
+      if (sides[1]) sides[1].viewLabel = view.bName;
+      return loadFollowups('comparison', chip).then(function () {
+        prependComparisonChips(sides);
+      });
     }).catch(function (err) {
       console.warn('DegreeBaba widget comparison unavailable', err);
       state.compare = [];
@@ -288,20 +301,33 @@
   function openLeadTurn(chip) {
     var tid = beginTurn(chip.label);
     emitAnalytics(chip.handler === 'cta_apply' ? 'apply_clicked' : 'counsellor_clicked', chip);
-    var copy = chip.handler === 'cta_apply'
-      ? 'Happy to help you apply. Share your number and a counsellor will guide you through it — no spam.'
-      : 'Happy to connect you. Just your number and a counsellor will call within 30 minutes — no spam.';
+    var captured = state.lead && state.lead.captured;
+    var copy = captured
+      /* §4 already captured: acknowledge quietly, offer a change-number path,
+         never re-render the form. */
+      ? ('Thanks' + (state.lead.name ? ', ' + state.lead.name : '') +
+         ' — a counsellor will call the number you shared. No spam.')
+      : (chip.handler === 'cta_apply'
+        ? 'Happy to help you apply. Share your details and a counsellor will guide you through it — no spam.'
+        : 'Happy to connect you. Share your details and a counsellor will call within 30 minutes — no spam.');
+    var body = captured
+      ? [{ kind: 'bot', text: copy }]
+      : [{ kind: 'lead', text: copy }];
+    if (!captured) emitAnalytics('lead_form_shown', chip);
     postGuideChips(null, chip.chip_id, cardTypeForContext())
       .then(function (res) {
         adoptServerContext(res);
         var followup = (res && res.followup) || {};
-        settleTurn(tid, [{ kind: 'lead', text: copy }], null);
-        setChips(followup.actions || [], followup.more || []);
+        var chips = (followup.actions || []).slice();
+        if (captured) chips.unshift({ label: '✏️ Change number', handler: 'change_number', chip_id: 'change_number' });
+        settleTurn(tid, body, null);
+        setChips(chips, followup.more || [], followup.conversion);
         render(); scrollToBottom();
       })
       .catch(function (err) {
         console.warn('DegreeBaba widget could not persist the conversion chip', err);
-        settleTurn(tid, [{ kind: 'lead', text: copy }], null);
+        settleTurn(tid, body, null);
+        if (captured) setChips([{ label: '✏️ Change number', handler: 'change_number', chip_id: 'change_number' }], []);
       });
   }
 
@@ -433,14 +459,24 @@
 
   /* §9 Main menu returns to this page's opening set with chips reset to
      unconsumed, which is also the escape hatch out of any exhausted pool. */
+  /* Delta §6: Main Menu returns the homepage chip set. The active entity and
+     breadcrumb reset; the recently-viewed rail, per-entity consumed chips and
+     the captured lead all survive (backend `main_menu` scope). */
   function goMainMenu() {
-    state.guideBundle = null;
     var tid = beginTurn(null);
+    /* Clear only the client's view of the active entity; the rail and lead are
+       re-adopted from the server response. */
+    cfg.page = 'homepage'; cfg.entitySlug = null; cfg.universitySlug = null;
+    state.server.pageType = 'homepage';
+    state.server.entityId = null;
+    state.server.universityId = null;
+    state.guideBundle = null;
     postJson('/api/widget/context/clear', Object.assign(
-      { scope: 'chips' }, state.sessionId ? { session_id: state.sessionId } : {}
-    )).catch(function () { /* the opening set below still stands */ })
-      .then(function () { return ensureGuideBundle(); })
+      { scope: 'main_menu' }, state.sessionId ? { session_id: state.sessionId } : {}
+    )).catch(function () { /* the homepage load below still stands */ })
+      .then(function () { return loadGuideContext('homepage', { entityId: null, universityId: null }); })
       .then(function (bundle) {
+        adoptServerContext(bundle);
         applyBundleContext(bundle);
         var opening = bundle.opening || {};
         settleTurn(tid, [{ kind: 'bot', text: 'Main menu — where would you like to go?' }], null);
@@ -520,7 +556,17 @@
        universities by design — the category is the only filter. */
     if (p.kind === 'course' && p.course) filters = query ? { q: query, course: p.course } : { course: p.course };
 
-    loadGuideCatalog(p.kind, filters).then(function (rows) {
+    /* §1.2 comparison opponents come from the backend validity-filtered set. */
+    var source = p.opponentsFor
+      ? loadOpponents(p.opponentsFor).then(function (rows) {
+          if (query) {
+            var q = query.toLowerCase();
+            return rows.filter(function (r) { return r.name.toLowerCase().indexOf(q) >= 0; });
+          }
+          return rows;
+        })
+      : loadGuideCatalog(p.kind, filters);
+    source.then(function (rows) {
       if (token !== state.pickerToken || !state.picker) return;
       state.picker = Object.assign({}, state.picker, { rows: rows, loading: false });
       renderPickerList();
@@ -560,33 +606,49 @@
      university/course/specialization page) means "compare THIS against
      something else" — not "let me pick two unrelated things from scratch".
      So the entity they're already on pre-fills as the first side. */
-  function openComparePicker(chip) {
-    var kind = COMPARE_PICKER_KIND[ctxPageType()] || 'uni';
-    state.picker = {
-      title: COMPARE_PICKER_TITLE[kind], kind: kind, query: '',
-      rows: null, loading: true, chip: chip || null, compareMode: true
-    };
-    render();
+  /* §2 render the post-comparison action set: view either side, compare A
+     again, or explore another entity of the same type. Prepended ahead of the
+     server\'s comparison follow-ups so the pivot actions lead. */
+  function prependComparisonChips(sides) {
+    if (!sides || sides.length < 2) return;
+    var a = sides[0], b = sides[1];
+    var aLabel = a.viewLabel || a.title, bLabel = b.viewLabel || b.title;
+    var typeLabel = { university: 'university', course: 'program', specialization: 'specialization' }[ctxPageType()] || 'option';
+    var pivot = [
+      { label: '📇 View ' + aLabel, handler: 'compare_view', entityRef: a, chip_id: 'compare_view_a' },
+      { label: '📇 View ' + bLabel, handler: 'compare_view', entityRef: b, chip_id: 'compare_view_b' },
+      { label: '⚖️ Compare ' + aLabel + ' with another', handler: 'compare_again', entityRef: a, chip_id: 'compare_again' },
+      { label: '🔄 Explore another ' + typeLabel, handler: 'compare_explore', chip_id: 'compare_explore' }
+    ];
+    var existing = {};
+    state.chips.forEach(function (c) { existing[c.chip_id || c.label] = true; });
+    state.chips = pivot.concat(state.chips.filter(function (c) { return !existing[c.chip_id]; }));
+    render(); scrollToBottom();
+  }
 
-    /* The bundle supplies both halves of the setup: the current entity
-       pre-fills as the first side (a user on a page comparing means
-       "compare THIS against something else"), and on a course page its
-       category scopes the list to the same programme at other
-       universities — comparing one university's MCA against its own BCom
-       is not what anyone means by "compare this program". */
+  /* §1.2/§2 the opponent list is validity-filtered by the backend and keyed to
+     the entity being compared. `fixedSide` (from "Compare A with another")
+     keeps A fixed and picks a fresh B. */
+  function openComparePicker(chip, fixedSide) {
+    var kind = COMPARE_PICKER_KIND[ctxPageType()] || 'uni';
+    var side = fixedSide || (state.compare.length ? state.compare[0] : null);
+    render();
     ensureGuideBundle().then(function (bundle) {
-      var p = state.picker;
-      if (!p || !p.compareMode) return;
       var entity = (bundle && bundle.entity) || null;
-      if (kind === 'course' && entity && entity.category) {
-        state.picker = p = Object.assign({}, p, { course: String(entity.category) });
-      }
-      if (!state.compare.length && entity && entity.id === ctxEntityId()) {
-        state.compare = [cardFrom(entity)];
-      }
-      refreshPicker(p.query || '');
-    }).catch(function () {
+      /* Anchor: an explicit fixed side, else the entity in view. */
+      var anchor = side || (entity && entity.id === ctxEntityId() ? cardFrom(entity) : null);
+      var anchorId = anchor && anchor.entityId;
+      if (!anchorId) { unavailableTurn(beginTurn(chip && chip.label), UNAVAILABLE); return; }
+      state.compare = [anchor];
+      state.picker = {
+        title: COMPARE_PICKER_TITLE[kind], kind: kind, query: '',
+        rows: null, loading: true, chip: chip || null, compareMode: true,
+        opponentsFor: anchorId
+      };
+      render();
       refreshPicker('');
+    }).catch(function () {
+      unavailableTurn(beginTurn(chip && chip.label), UNAVAILABLE);
     });
   }
 
@@ -610,6 +672,10 @@
 
     /* Two selected: compare immediately, no extra tap. */
     if (state.compare.length >= 2) {
+      /* §8 which pairing the user actually chose. */
+      emitAnalytics('compare_opponent_selected', chip, {
+        attributes: { a: state.compare[0].entityId, b: state.compare[1].entityId }
+      });
       state.picker = null;
       state.pickerToken++;
       runGuidedComparison(chip || { label: 'Compare' });
@@ -705,21 +771,69 @@
   }
   /* Never claim success before the backend confirms it. */
   function submitLead(id) {
-    if ((state.leadPhone || '').replace(/\D/g, '').length < 10) return;
     if (!cfg.apiBase) return;
     var mark = function (patch) {
       state.msgs = state.msgs.map(function (m) { return m.id === id ? Object.assign({}, m, patch) : m; });
       render();
     };
+    var msg = state.msgs.find(function (m) { return m.id === id; });
+    if (msg && msg.leadBusy) return;   // §5.1 inert while a submit is in flight
+
+    /* §3.2/§3.3 client validation. On failure, re-prompt with the offending
+       field and record which field drove the drop-off (§8). */
+    if (!leadNameValid(state.leadName)) {
+      emitAnalytics('lead_form_validation_failed', state.lastChip, { attributes: { field: 'name' } });
+      mark({ leadError: 'Please enter your name (letters only).' });
+      return;
+    }
+    if (!leadPhoneValid(state.leadPhone)) {
+      emitAnalytics('lead_form_validation_failed', state.lastChip, { attributes: { field: 'phone' } });
+      mark({ leadError: 'Enter a valid 10-digit mobile number.' });
+      return;
+    }
+
+    /* §5.2 one request id per submission attempt; a retry of the same tap is
+       idempotent on the backend. */
+    if (!msg.leadRequestId) msg.leadRequestId = 'lead-' + nextId() + '-' + Date.now();
     mark({ leadBusy: true, leadError: '' });
-    postLead(state.leadPhone, null, 'widget_inline', state.lastChip).then(function (res) {
-      state.leadPhone = '';
+    var name = state.leadName, phone = normalisePhone(state.leadPhone);
+    postLead(phone, name, 'widget_inline', state.lastChip, msg.leadRequestId).then(function (res) {
+      emitAnalytics('lead_form_submitted', state.lastChip);
+      /* §4 remember the capture for the rest of the session. */
+      state.lead = { captured: true, name: name };
+      state.leadPhone = ''; state.leadName = '';
       mark({ leadBusy: false, leadDone: true });
       if (res && res.response) applyPayload(res.response, { toolAware: false });
     }).catch(function (err) {
       console.warn('DegreeBaba widget lead capture failed', err);
-      mark({ leadBusy: false, leadDone: false, leadError: 'That did not go through. Please try again.' });
+      var soft = err && err.status === 422;
+      mark({ leadBusy: false, leadError: soft
+        ? 'That number looks off — please check and try again.'
+        : 'That did not go through. Please try again.' });
     });
+  }
+
+  /* §5.1 flip the Submit button without a full re-render, so typing keeps
+     focus. Called on every keystroke in the form. */
+  function updateLeadSubmit(el) {
+    var form = el.closest ? el.closest('.db-lead') : null;
+    if (!form) return;
+    var submit = form.querySelector('.db-lead-submit');
+    if (!submit) return;
+    var ok = leadNameValid(state.leadName) && leadPhoneValid(state.leadPhone);
+    submit.disabled = !ok;
+    if (ok) submit.classList.remove('db-lead-submit--disabled');
+    else submit.classList.add('db-lead-submit--disabled');
+  }
+
+  /* §4 the only path back to the form once a lead exists. */
+  function reopenLeadForm() {
+    state.lead = null;
+    state.leadName = ''; state.leadPhone = '';
+    var tid = beginTurn(null);
+    settleTurn(tid, [{ kind: 'lead', text: 'Prefer a different number? Enter it below.' }], null);
+    emitAnalytics('lead_form_shown', state.lastChip);
+    loadFollowups(null, state.lastChip).catch(function () {});
   }
   /* The details overlay renders the backend CardDetails payload. Sections with
      no published content are omitted rather than filled with sample copy. */

@@ -2334,3 +2334,56 @@
 .db-nav-btn--accent { color: #E84010; }
 .db-nav-btn--accent:hover { background: #FDF1EC; }
 .db-nav-spacer { flex: 1; }
+
+/* ═══ Delta §3 inline lead form — stacked Name + Mobile, matches the card ═══ */
+.db-lead-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 13px;
+}
+.db-lead-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.db-lead-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4B5563;
+  letter-spacing: .01em;
+}
+.db-name-input {
+  border: 1.5px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 11px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #111827;
+  outline: none;
+  background: #fff;
+  transition: border-color .15s ease;
+}
+.db-name-input:focus { border-color: #0E1F3D; }
+.db-lead-submit {
+  width: 100%;
+  margin-top: 13px;
+  background: #E84010;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  min-height: 44px;
+  transition: background .15s ease;
+}
+.db-lead-submit:hover { background: #c93509; }
+.db-lead-submit--disabled {
+  background: #E5E7EB;
+  color: #9CA3AF;
+  cursor: not-allowed;
+}
+.db-lead-submit--disabled:hover { background: #E5E7EB; }

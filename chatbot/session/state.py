@@ -34,6 +34,14 @@ class LeadState(StateModel):
     name: str | None = None
     phone: str | None = None
     conversion_recorded: bool = False
+    # §4 set once on first successful capture; its presence is the "already
+    # captured" flag that stops any later trigger re-rendering the form. Cleared
+    # only when the session (and its whole state) expires from the store.
+    captured_at: str | None = None
+
+    @property
+    def captured(self) -> bool:
+        return bool(self.phone and self.captured_at)
 
 
 class NavigationStep(StrEnum):

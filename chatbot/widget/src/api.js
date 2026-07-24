@@ -156,6 +156,18 @@
       });
   }
 
+  /* §1.2 valid comparison opponents, resolved and validity-filtered by the
+     backend. The widget renders whatever comes back — an invalid pair can
+     never appear because it is never generated. */
+  function loadOpponents(entityId) {
+    return fetchJson('/api/widget/guide/opponents/' + encodeURIComponent(entityId))
+      .then(function (payload) {
+        var raw = (payload && payload.items) || [];
+        return raw.map(function (item) { return normalizeCatalogRow(item, 'opponent'); })
+          .filter(function (r) { return r.name; });
+      });
+  }
+
   function normalizeCatalogRow(item, kind) {
     if (typeof item === 'string') {
       return { mono: initialsFor(item), bg: colorFor(item), name: item, short: item, meta: '', pop: false, id: item };
@@ -189,12 +201,13 @@
   }
 
   /* POST /api/widget/lead */
-  function postLead(phone, name, source, chip) {
+  function postLead(phone, name, source, chip, requestId) {
     var c = chip || {};
     return postJson('/api/widget/lead', Object.assign({
       phone: String(phone || '').replace(/\s+/g, ''),
       source: source || 'widget'
     }, state.sessionId ? { session_id: state.sessionId } : {},
+      requestId ? { request_id: requestId } : {},
       (name && String(name).trim().length >= 2) ? { name: String(name).trim() } : {},
       c.chip_id ? { chip_id: c.chip_id } : {},
       c.chip_surface ? { chip_surface: c.chip_surface } : {},
@@ -259,6 +272,7 @@
       item.chip_id ? { chip_id: String(item.chip_id) } : {},
       item.handler ? { chip_handler: String(item.handler) } : {},
       item.lead_tags ? { lead_tags: item.lead_tags } : {},
+      more.attributes ? { attributes: more.attributes } : {},
       Array.isArray(more.chips) ? { chips: more.chips } : {});
     void fetch(apiUrl('/api/widget/analytics'), {
       method: 'POST', mode: 'cors', keepalive: true,
@@ -298,6 +312,9 @@
     if (sessionCtx) {
       state.breadcrumb = sessionCtx.breadcrumb || [];
       state.recentlyViewed = sessionCtx.recently_viewed || [];
+      /* §4 the once-per-session lead flag is server-owned and survives reload;
+         never remove it here — a missing key just means unchanged. */
+      if (sessionCtx.lead) state.lead = sessionCtx.lead;
     }
     var src = source || {};
     var ctx = src.context || {};

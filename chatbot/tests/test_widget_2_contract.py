@@ -201,6 +201,11 @@ def test_only_backend_accepted_analytics_events_are_emitted() -> None:
         "counsellor_clicked",
         "list_overflow_opened",
         "chip_pool_exhausted",
+        # Delta §8
+        "lead_form_shown",
+        "lead_form_submitted",
+        "lead_form_validation_failed",
+        "compare_opponent_selected",
     }
     emitted = set(re.findall(r"emitAnalytics\(\s*'([a-z_]+)'", _bundle()))
     assert emitted <= accepted, f"invalid analytics events: {emitted - accepted}"
@@ -221,6 +226,9 @@ def test_every_rendered_class_exists_in_the_approved_stylesheet() -> None:
         "db-fonts",
         "db-theme",
         "db-close-btn-el",
+        # dynamic label-for ids on the inline lead form inputs (§3), not classes
+        "db-lead-name-",
+        "db-lead-phone-",
     }
     missing = used - styled - js_only
     assert not missing, f"renderer emits unstyled classes: {sorted(missing)}"

@@ -980,9 +980,88 @@ def guide_catalog(
     return _card_list(entities, catalog, limit=250)
 
 
+
+_NAAC_RANK = {"a++": 0, "a+": 1, "a": 2, "b++": 3, "b+": 4, "b": 5}
+
+
+def _naac_rank(entity: Any) -> int:
+    grade = str(safe_get(entity, "naac_grade", "") or "").strip().casefold()
+    return _NAAC_RANK.get(grade, 99)
+
+
+def _fee_key(entity: Any) -> float:
+    for path in ("total_fee_numeric", "fee_numeric", "starting_fee_numeric"):
+        value = safe_get(entity, path, None)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+    return float("inf")
+
+
+def _program_term(entity: Any) -> str:
+    return _normalise(first_value(entity, "program_name", "category", default=None))
+
+
+def _specialization_term(entity: Any) -> str:
+    return _normalise(first_value(entity, "specialization_name", "spec_name", default=None))
+
+
+def resolve_opponents(catalog: Any, entity_id: str) -> dict[str, Any] | None:
+    """Delta §1.2 — valid comparison opponents for one entity, or None if unknown.
+
+    Validity (§1.1) is enforced at generation time: only same-type, same-term
+    partners that pass the per-type constraint are ever returned, so an invalid
+    pair cannot be selected.
+    """
+
+    active = catalog.get_entity(entity_id) if hasattr(catalog, "get_entity") else None
+    if active is None:
+        active = getattr(catalog, "entities", {}).get(entity_id)
+    if active is None:
+        return None
+    page_type = entity_page_type(active)
+    active_id = _entity_id(active)
+
+    if page_type == "university":
+        opponents = [
+            e for e in _entities(catalog, "university") if _entity_id(e) != active_id
+        ]
+        opponents.sort(key=lambda e: (_naac_rank(e), _entity_sort_name(e).casefold()))
+    elif page_type == "course":
+        term = _program_term(active)
+        active_uni = _entity_id(_parent_university(active, catalog))
+        opponents = [
+            e
+            for e in _entities(catalog, "course")
+            if _entity_id(e) != active_id
+            and term
+            and _program_term(e) == term
+            and _entity_id(_parent_university(e, catalog)) != active_uni
+        ]
+        opponents.sort(key=lambda e: (_fee_key(e), _entity_sort_name(e).casefold()))
+    elif page_type == "specialization":
+        term = _specialization_term(active)
+        active_course = _entity_id(_parent_course(active, catalog))
+        opponents = [
+            e
+            for e in _entities(catalog, "specialization")
+            if _entity_id(e) != active_id
+            and term
+            and _specialization_term(e) == term
+            and _entity_id(_parent_course(e, catalog)) != active_course
+        ]
+        opponents.sort(key=lambda e: (_fee_key(e), _entity_sort_name(e).casefold()))
+    else:
+        return None
+
+    return {
+        "active": {"type": page_type, "id": active_id},
+        "items": [_card(e, catalog) for e in opponents[:100]],
+    }
+
+
 def guide_comparison(catalog: Any, entity_ids: Iterable[str]) -> dict[str, Any] | None:
     card = build_comparison_card(entity_ids, catalog, title="Compare catalog options")
     return card.model_dump(mode="json") if card is not None else None
 
 
-__all__ = ["guide_catalog", "guide_comparison", "guide_context"]
+__all__ = ["guide_catalog", "guide_comparison", "guide_context", "resolve_opponents"]

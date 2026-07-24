@@ -112,8 +112,17 @@
       submitLead(el.getAttribute('data-mid'));
     });
     delegate('[data-action="leadPhoneInput"]', function(el){
-      state.leadPhone = el.value;
+      /* §3.1 digits only, capped at 10. */
+      var digits = el.value.replace(/\D/g, '').slice(0, 10);
+      if (el.value !== digits) el.value = digits;
+      state.leadPhone = digits;
+      updateLeadSubmit(el);
     }, 'input');
+    delegate('[data-action="leadNameInput"]', function(el){
+      state.leadName = el.value;
+      updateLeadSubmit(el);
+    }, 'input');
+    delegate('[data-action="changeNumber"]', function(){ if (!state.busy) reopenLeadForm(); });
 
     /* Syllabus accordion */
     delegate('[data-action="toggleAcc"]', function(el){

@@ -12,6 +12,15 @@ from leads.webhook import CRMWebhook
 
 PHONE_RE = re.compile(r"(?<!\d)(?:\+?91[\s-]?)?([6-9]\d{9})(?!\d)")
 NAME_RE = re.compile(r"^[A-Za-z][A-Za-z .'-]{1,49}$")
+# §3.2 obvious placeholders: all-identical digits, or a strict ascending/
+# descending run. Soft-blocked with a re-prompt, not a hard rejection.
+_SEQUENTIAL = ("0123456789", "9876543210")
+
+
+def _looks_fake(digits: str) -> bool:
+    if len(set(digits)) == 1:
+        return True
+    return any(digits in run for run in _SEQUENTIAL)
 
 
 class LeadFunnel:
@@ -55,6 +64,40 @@ class LeadFunnel:
             context["widget_source"] = source
         self._schedule_push(state, changed, context or None)
         return state.lead.phone
+
+    def submit(
+        self,
+        state: Any,
+        *,
+        name: str,
+        phone: str,
+        source: str | None = None,
+        extra_context: Mapping[str, Any] | None = None,
+    ) -> str:
+        """§3.4 single-payload entry point for the inline form.
+
+        Reuses capture_phone_only's normalisation, dedupe, CRM envelope, webhook
+        dispatch, retry and dead-letter path unchanged; only adds the placeholder
+        soft-block and the §4 captured_at stamp.
+        """
+
+        compact = re.sub(r"[()\s-]", "", str(phone or ""))
+        match = PHONE_RE.fullmatch(compact)
+        if match is not None and _looks_fake(match.group(1)):
+            raise ValueError("that number looks like a placeholder — please re-enter your mobile")
+        captured = self.capture_phone_only(
+            state,
+            phone,
+            name=name,
+            require_name=True,
+            source=source,
+            extra_context=extra_context,
+        )
+        if state.lead.captured_at is None:
+            from datetime import datetime, timezone
+
+            state.lead.captured_at = datetime.now(timezone.utc).isoformat()
+        return captured
 
     def _schedule_push(
         self,

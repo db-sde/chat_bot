@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections import OrderedDict
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -49,7 +50,12 @@ from presentation.experience import (
     finder_results,
     resolve_page_entity,
 )
-from presentation.guided_navigation import guide_catalog, guide_comparison, guide_context
+from presentation.guided_navigation import (
+    guide_catalog,
+    guide_comparison,
+    guide_context,
+    resolve_opponents,
+)
 from resilience.health import dependency_health
 from tools import ToolEngine, ToolResult, ToolsContentStore
 from schemas import (
@@ -124,6 +130,28 @@ class GuidedWidgetService:
             program_lookup=self._lookup_tool_programs,
         )
         self.reindex_lock = asyncio.Lock()
+        # §5.2 request-id idempotency: a duplicate tap within the window returns
+        # the cached response instead of re-executing. Bounded FIFO, in-memory —
+        # a tap only needs guarding for the few seconds a double-tap spans.
+        self._idempotency: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    _IDEMPOTENCY_CAP = 512
+
+    def idempotent_hit(self, request_id: str | None) -> dict[str, Any] | None:
+        if not request_id:
+            return None
+        cached = self._idempotency.get(request_id)
+        if cached is not None:
+            self._idempotency.move_to_end(request_id)
+        return cached
+
+    def idempotent_store(self, request_id: str | None, response: dict[str, Any]) -> None:
+        if not request_id:
+            return
+        self._idempotency[request_id] = response
+        self._idempotency.move_to_end(request_id)
+        while len(self._idempotency) > self._IDEMPOTENCY_CAP:
+            self._idempotency.popitem(last=False)
 
     @classmethod
     async def create(
@@ -214,6 +242,24 @@ class GuidedWidgetService:
         focus.university = metadata.id if metadata.page_type == "university" else None
         focus.category = metadata.category
         focus.specialization = metadata.specialization_name
+
+    def emit_duplicate_suppressed(self, session_id: str, surface: str) -> None:
+        """§8 confirms the idempotency guard fired."""
+        try:
+            event = build_event(
+                "duplicate_request_suppressed",
+                session_id=session_id,
+                correlation_id=logging_setup.correlation_id(session_id, 1),
+                surface=surface,
+                funnel_stage="bottom",
+                interaction_count=0,
+                entity=None,
+                config_version=self.chip_map.snapshot().version,
+                content_version="not_applicable",
+            )
+        except ValueError:
+            return
+        self.analytics.emit(event)
 
     def emit_funnel_event(
         self,
@@ -503,7 +549,7 @@ async def widget_guide_context_endpoint(
         "session_id": resolved_session_id,
         "opening": opening_payload(opening, correlation_id=correlation_id),
         "navigation": navigation_payload(state_value),
-        "session_context": session_context_payload(state_value.session_context),
+        "session_context": session_context_payload(state_value.session_context, state_value.lead),
         "active_flow": (
             {
                 "tool": current_tool.tool,
@@ -583,7 +629,7 @@ async def widget_guide_chips_endpoint(
         "session_id": session_id,
         "followup": followup_payload(followup, correlation_id=correlation_id),
         "navigation": navigation_payload(state_value),
-        "session_context": session_context_payload(context),
+        "session_context": session_context_payload(context, state_value.lead),
     }
 
 
@@ -593,6 +639,11 @@ async def widget_guide_tool_endpoint(
 ) -> dict[str, Any]:
     service = _service(request)
     session_id = command.session_id or str(uuid4())
+    # §5.2 a duplicate tap must not advance the ActiveFlow twice.
+    cached = service.idempotent_hit(command.request_id)
+    if cached is not None:
+        service.emit_duplicate_suppressed(session_id, f"tool:{command.command}")
+        return cached
     state_value = await service.session_store.get_or_create(session_id)
     entry_tools = {
         "tool:roi": "roi",
@@ -635,11 +686,13 @@ async def widget_guide_tool_endpoint(
             )
     service.emit_tool_turn(state_value, turn)
     await service.session_store.set(state_value)
-    return {
+    tool_response = {
         "session_id": session_id,
         "response": turn.response.model_dump(mode="json", exclude_none=True),
         "navigation": navigation_payload(state_value),
     }
+    service.idempotent_store(command.request_id, tool_response)
+    return tool_response
 
 
 @app.post("/api/widget/analytics")
@@ -666,6 +719,8 @@ async def widget_analytics_endpoint(
         attributes["catalog_v3"] = dimensions
     if command.lead_tags:
         attributes["lead_tags"] = command.lead_tags
+    if command.attributes:
+        attributes.update(command.attributes)
     try:
         event = (
             build_chip_shown(command.chips, attributes=attributes or None, **key_block)
@@ -704,6 +759,26 @@ async def widget_guide_catalog_endpoint(
     return {"items": items}
 
 
+def _comparison_pair_is_valid(catalog: Any, entity_ids: list[str]) -> bool:
+    base = resolve_opponents(catalog, entity_ids[0])
+    if base is None:
+        return False
+    valid_ids = {item.get("id") for item in base.get("items", [])}
+    return all(other in valid_ids for other in entity_ids[1:])
+
+
+@app.get("/api/widget/guide/opponents/{entity_id}")
+async def widget_guide_opponents_endpoint(
+    entity_id: str, request: Request
+) -> dict[str, Any]:
+    """Delta §1.2 — valid comparison opponents for one entity."""
+    service = _service(request)
+    result = resolve_opponents(service.catalog, entity_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Entity cannot be compared")
+    return result
+
+
 @app.post("/api/widget/guide/compare")
 async def widget_guide_compare_endpoint(
     request: Request, payload: Any = Body(...)
@@ -722,6 +797,10 @@ async def widget_guide_compare_endpoint(
     unknown = [entity_id for entity_id in entity_ids if entity_id not in service.catalog.entities]
     if unknown:
         raise HTTPException(status_code=404, detail=f"Catalog entity not found: {unknown[0]}")
+    # §1.1 a valid pair is same-type, same-term. Reject anything else instead of
+    # rendering a meaningless side-by-side.
+    if not _comparison_pair_is_valid(service.catalog, entity_ids):
+        raise HTTPException(status_code=422, detail="These entities cannot be compared")
     comparison = guide_comparison(service.catalog, entity_ids)
     if comparison is None:
         raise HTTPException(status_code=400, detail="Selected entities cannot be compared")
@@ -786,9 +865,10 @@ async def widget_context_clear_endpoint(
     state_value = await service.session_store.get_or_create(command.session_id)
     flow_only = command.scope == "flow"
     chips_only = command.scope == "chips"
+    main_menu = command.scope == "main_menu"
     if chips_only:
-        # §9 Main menu: the entity, breadcrumb and rail all survive; only this
-        # entity's consumed chips reset, so its full pool is available again.
+        # Legacy scope kept for compatibility: reset just the active entity's
+        # consumed chips.
         context = state_value.session_context
         active = context.active
         if active is not None:
@@ -797,6 +877,25 @@ async def widget_context_clear_endpoint(
         return ContextClearResponse(
             session_id=command.session_id,
             context=context_from_state(state_value, service.catalog),
+        )
+    if main_menu:
+        # Delta §6: Main Menu returns the homepage. Active context and the
+        # breadcrumb stack reset; the recently-viewed rail, every entity's
+        # consumed chip state, and the captured lead all survive.
+        context = state_value.session_context
+        context.active = None
+        context.stack.clear()
+        state_value.focus.clear()
+        opening = service.journey_engine.opening("homepage")
+        sync_page_navigation(
+            state_value,
+            page_type="homepage",
+            config_version=opening.config_version,
+        )
+        await service.session_store.set(state_value)
+        return ContextClearResponse(
+            session_id=command.session_id,
+            context=ResponseContext(),
         )
     if not flow_only:
         state_value.focus.clear()
@@ -866,7 +965,22 @@ async def widget_lead_endpoint(
 ) -> WidgetLeadResponse:
     service = _service(request)
     session_id = lead.session_id or str(uuid4())
+    # §5.2 a duplicate submission id returns the cached response — never a
+    # second CRM record.
+    cached = service.idempotent_hit(lead.request_id)
+    if cached is not None:
+        service.emit_duplicate_suppressed(session_id, "lead_form")
+        return WidgetLeadResponse.model_validate(cached)
     state_value = await service.session_store.get_or_create(session_id)
+    # §4 once captured, never re-capture: acknowledge and pass straight through.
+    if state_value.lead.captured:
+        response = WidgetLeadResponse(
+            session_id=session_id,
+            message="We'll use the number you shared.",
+            already_captured=True,
+        )
+        service.idempotent_store(lead.request_id, response.model_dump(mode="json"))
+        return response
     tool_lead_tags: dict[str, Any] = {}
     active_flow = state_value.active_flow
     awaiting_tool_lead = active_flow is not None and active_flow.step == "await_lead"
@@ -877,14 +991,17 @@ async def widget_lead_endpoint(
                 tool_lead_tags = ToolResult.model_validate(raw_result).lead_tags
             except ValueError:
                 LOGGER.warning("Tool lead tags are invalid for session %s", session_id)
+    active = state_value.session_context.active
+    lead_context = dict(tool_lead_tags)
+    if active is not None:
+        lead_context["active_entity"] = {"type": active.type, "id": active.id}
     try:
-        service.lead_funnel.capture_phone_only(
+        service.lead_funnel.submit(
             state_value,
-            lead.phone,
-            name=lead.name,
-            require_name=awaiting_tool_lead,
+            name=lead.name or "",
+            phone=lead.phone,
             source=lead.source,
-            extra_context=tool_lead_tags,
+            extra_context=lead_context or None,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -936,7 +1053,7 @@ async def widget_lead_endpoint(
                 attributes={"tool": active_tool, "reason": "lead_capture"},
             )
     await service.session_store.set(state_value)
-    return WidgetLeadResponse(
+    result = WidgetLeadResponse(
         session_id=session_id,
         message="Thanks — a DegreeBaba counsellor can contact you shortly.",
         response=(
@@ -945,6 +1062,8 @@ async def widget_lead_endpoint(
             else None
         ),
     )
+    service.idempotent_store(lead.request_id, result.model_dump(mode="json"))
+    return result
 
 
 @app.get("/health", response_model=HealthResponse)

@@ -362,18 +362,25 @@ def followup_payload(
     return payload
 
 
-def session_context_payload(context: Any) -> dict[str, object]:
-    """§11.3/§11.4 breadcrumb + recently-viewed rail, straight from session state."""
+def session_context_payload(context: Any, lead: Any = None) -> dict[str, object]:
+    """§11.3/§11.4 breadcrumb + recently-viewed rail, plus the §4 lead flag.
+
+    Only the captured/name signal is exposed — never the phone number, which the
+    widget never needs and should not hold.
+    """
 
     def ref(item: Any) -> dict[str, str]:
         return {"type": item.type, "id": item.id, "label": item.label, "key": item.key}
 
     active = getattr(context, "active", None)
-    return {
+    payload: dict[str, object] = {
         "active": ref(active) if active is not None else None,
         "breadcrumb": [ref(item) for item in getattr(context, "stack", [])],
         "recently_viewed": [ref(item) for item in getattr(context, "visited", [])],
     }
+    if lead is not None and getattr(lead, "captured", False):
+        payload["lead"] = {"captured": True, "name": getattr(lead, "name", None)}
+    return payload
 
 
 __all__ = [

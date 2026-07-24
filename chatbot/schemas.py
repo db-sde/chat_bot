@@ -179,7 +179,7 @@ class ContextClearRequest(TransportModel):
     # only an active tool, leaving the page context the user is on intact.
     # "chips" resets the active entity's consumed chips (§9 Main menu) without
     # losing the entity, its breadcrumb, or the rail.
-    scope: Literal["all", "flow", "chips"] = "all"
+    scope: Literal["all", "flow", "chips", "main_menu"] = "all"
 
 
 class ContextClearResponse(TransportModel):
@@ -191,6 +191,8 @@ class WidgetLeadRequest(TransportModel):
     session_id: str | None = Field(default=None, min_length=1, max_length=200)
     name: str | None = Field(default=None, min_length=2, max_length=50)
     phone: str = Field(min_length=10, max_length=24)
+    # §5.2 client-generated; a duplicate id returns the cached response.
+    request_id: str | None = Field(default=None, min_length=1, max_length=100)
     source: str | None = Field(default=None, max_length=100)
     chip_id: str | None = Field(default=None, max_length=100)
     chip_surface: str | None = Field(default=None, max_length=100)
@@ -203,6 +205,8 @@ class WidgetLeadResponse(TransportModel):
     session_id: str
     message: str
     response: dict[str, Any] | None = None
+    # §4 true when the form was skipped because a lead already exists this session.
+    already_captured: bool = False
 
 
 class GuidedChipRequest(TransportModel):
@@ -227,6 +231,8 @@ class GuidedToolRequest(TransportModel):
     chip_id: str | None = Field(default=None, max_length=100)
     chip_surface: str | None = Field(default=None, max_length=100)
     chip_config_version: str | None = Field(default=None, max_length=80)
+    # §5.2 client-generated; a duplicate id returns the cached response.
+    request_id: str | None = Field(default=None, min_length=1, max_length=100)
 
     @field_validator("command")
     @classmethod
@@ -254,6 +260,12 @@ class WidgetAnalyticsRequest(TransportModel):
         # §13 chip-map analytics additions.
         "list_overflow_opened",
         "chip_pool_exhausted",
+        # Delta §8 new events.
+        "lead_form_shown",
+        "lead_form_submitted",
+        "lead_form_validation_failed",
+        "compare_opponent_selected",
+        "duplicate_request_suppressed",
     ]
     surface: str = Field(min_length=1, max_length=100)
     funnel_stage: Literal["top", "mid", "bottom"]
@@ -266,6 +278,9 @@ class WidgetAnalyticsRequest(TransportModel):
     chips: list[dict[str, Any]] = Field(default_factory=list, max_length=12)
     correlation_id: str | None = Field(default=None, max_length=200)
     lead_tags: dict[str, Any] | None = None
+    # Delta §8: small free-form dimensions — the validation `field`, the
+    # compared entity ids. One extensible channel, not a parallel event system.
+    attributes: dict[str, Any] | None = None
 
 
 class PageContextResponse(TransportModel):
