@@ -781,14 +781,13 @@
 
     /* §3.2/§3.3 client validation. On failure, re-prompt with the offending
        field and record which field drove the drop-off (§8). */
-    if (!leadNameValid(state.leadName)) {
-      emitAnalytics('lead_form_validation_failed', state.lastChip, { attributes: { field: 'name' } });
-      mark({ leadError: 'Please enter your name (letters only).' });
-      return;
-    }
-    if (!leadPhoneValid(state.leadPhone)) {
-      emitAnalytics('lead_form_validation_failed', state.lastChip, { attributes: { field: 'phone' } });
-      mark({ leadError: 'Enter a valid 10-digit mobile number.' });
+    if (!leadNameValid(state.leadName) || !leadPhoneValid(state.leadPhone)) {
+      /* Spec §5: fire only on a submit attempt, so the count reflects real
+         friction rather than typing-in-progress. */
+      var field = leadNameValid(state.leadName) ? 'phone' : 'name';
+      emitAnalytics('lead_form_validation_failed', state.lastChip, { attributes: { field: field } });
+      msg.leadTouched = { name: true, phone: true };
+      mark({ leadError: '' });
       return;
     }
 
@@ -813,6 +812,16 @@
     });
   }
 
+  /* Record that a field has been focused-then-blurred, then refresh just the
+     error line — a full re-render here would steal focus from the next field. */
+  function markLeadTouched(mid, field) {
+    var msg = state.msgs.find(function (m) { return m.id === mid; });
+    if (!msg) return;
+    msg.leadTouched = Object.assign({}, msg.leadTouched, { [field]: true });
+    var node = windowEl && windowEl.querySelector('.db-lead-error');
+    if (node) node.textContent = msg.leadError || leadFieldError(msg);
+  }
+
   /* §5.1 flip the Submit button without a full re-render, so typing keeps
      focus. Called on every keystroke in the form. */
   function updateLeadSubmit(el) {
@@ -824,6 +833,11 @@
     submit.disabled = !ok;
     if (ok) submit.classList.remove('db-lead-submit--disabled');
     else submit.classList.add('db-lead-submit--disabled');
+    /* Spec: clear the error the instant the field becomes valid. */
+    var mid = el.getAttribute && el.getAttribute('data-mid');
+    var msg = mid && state.msgs.find(function (m) { return m.id === mid; });
+    var node = form.querySelector('.db-lead-error');
+    if (node && msg) node.textContent = leadFieldError(msg);
   }
 
   /* §4 the only path back to the form once a lead exists. */

@@ -122,6 +122,13 @@
       state.leadName = el.value;
       updateLeadSubmit(el);
     }, 'input');
+    /* Spec §2.3 — a field's error only appears once it has been left. */
+    delegate('[data-action="leadNameInput"]', function(el){
+      markLeadTouched(el.getAttribute('data-mid'), 'name');
+    }, 'blur');
+    delegate('[data-action="leadPhoneInput"]', function(el){
+      markLeadTouched(el.getAttribute('data-mid'), 'phone');
+    }, 'blur');
     delegate('[data-action="changeNumber"]', function(){ if (!state.busy) reopenLeadForm(); });
 
     /* Syllabus accordion */

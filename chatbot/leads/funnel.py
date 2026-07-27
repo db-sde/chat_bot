@@ -84,7 +84,18 @@ class LeadFunnel:
         compact = re.sub(r"[()\s-]", "", str(phone or ""))
         match = PHONE_RE.fullmatch(compact)
         if match is not None and _looks_fake(match.group(1)):
-            raise ValueError("that number looks like a placeholder — please re-enter your mobile")
+            # Spec §2.4: a *soft* re-prompt. Prompt once, then honour the same
+            # number if the user submits it again — a real number can look
+            # sequential, and a hard block would lock that user out entirely.
+            digits = match.group(1)
+            if getattr(state, "lead", None) is not None and (
+                state.lead.placeholder_prompted_for or ""
+            ) == digits:
+                pass
+            else:
+                if getattr(state, "lead", None) is not None:
+                    state.lead.placeholder_prompted_for = digits
+                raise ValueError("Please enter a valid mobile number")
         captured = self.capture_phone_only(
             state,
             phone,

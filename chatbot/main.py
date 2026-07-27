@@ -31,6 +31,7 @@ from analytics import (
 )
 from config import Settings, get_settings
 from data.accessor import safe_get
+from presentation.cards import build_entity_card
 from response.cards import entity_label, entity_page_type
 from data.loader import SAMPLE_CATALOG_PATH, CatalogStore
 from funnel import ChipEngine, ChipMapStore, JourneyEngine
@@ -59,6 +60,7 @@ from presentation.guided_navigation import (
 from resilience.health import dependency_health
 from tools import ToolEngine, ToolResult, ToolsContentStore
 from schemas import (
+    CardListComponent,
     CatalogOptionsResponse,
     ContextClearRequest,
     ContextClearResponse,
@@ -242,6 +244,28 @@ class GuidedWidgetService:
         focus.university = metadata.id if metadata.page_type == "university" else None
         focus.category = metadata.category
         focus.specialization = metadata.specialization_name
+
+    def attach_tool_reveal_cards(self, turn: Any) -> None:
+        """Render a tool result's recommended programs as real catalog cards.
+
+        The scorers deliberately return only ids (they must stay catalog- and
+        transport-agnostic); this is the single seam that resolves them, so no
+        tool duplicates card-building.
+        """
+
+        result = getattr(turn, "result", None)
+        payload = getattr(turn, "response", None)
+        if result is None or payload is None:
+            return
+        if getattr(turn, "lifecycle", "") != "reveal" or not result.cta_program_ids:
+            return
+        cards = []
+        for entity_id in result.cta_program_ids[:3]:
+            entity = self.catalog.get_entity(entity_id)
+            if entity is not None:
+                cards.append(build_entity_card(entity, self.catalog))
+        if cards:
+            payload.components = [*payload.components, CardListComponent(items=cards)]
 
     def emit_duplicate_suppressed(self, session_id: str, surface: str) -> None:
         """§8 confirms the idempotency guard fired."""
@@ -685,6 +709,7 @@ async def widget_guide_tool_endpoint(
                 state_value.navigation.page_type, NavigationStep.HOMEPAGE
             )
     service.emit_tool_turn(state_value, turn)
+    service.attach_tool_reveal_cards(turn)
     await service.session_store.set(state_value)
     tool_response = {
         "session_id": session_id,
@@ -1004,6 +1029,9 @@ async def widget_lead_endpoint(
             extra_context=lead_context or None,
         )
     except ValueError as exc:
+        # The soft placeholder prompt records that we asked once; persist it so
+        # a second submission of the same number is honoured (spec §2.4).
+        await service.session_store.set(state_value)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     service.record_chip_action(
         state_value,
@@ -1042,6 +1070,9 @@ async def widget_lead_endpoint(
             tool_turn = service.tools.resume_after_lead(state_value)
             if tool_turn is not None and tool_turn.consumed:
                 service.emit_tool_turn(state_value, tool_turn)
+                # The reveal reached through the lead gate needs the same
+                # recommended cards as the one reached through the tool endpoint.
+                service.attach_tool_reveal_cards(tool_turn)
                 tool_payload = tool_turn.response
         else:
             service.tools.abandon(state_value, reason="lead_capture")

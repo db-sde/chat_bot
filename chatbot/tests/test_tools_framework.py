@@ -345,48 +345,110 @@ def test_career_score_sums_configured_weights() -> None:
     assert result.full["weights"] == {"management": 10.0}
 
 
-def test_scholarship_counts_configured_answers_and_selects_band() -> None:
+def test_scholarship_scores_served_questions_and_scales_pool_by_band() -> None:
+    """Waiver = fee-model pool x the band percentage for the correct count."""
+
     questions = [
         {
             "id": f"s{index}",
             "prompt": f"Scholarship question {index}",
             "type": "choice",
+            "difficulty": "easy",
             "options": [
-                {"id": "a", "label": "A", "correct": True},
-                {"id": "b", "label": "B", "correct": False},
+                {"id": "a", "label": "A"},
+                {"id": "b", "label": "B"},
             ],
+            "correct": "a",
         }
-        for index in range(1, 8)
+        for index in range(1, 7)
     ]
     definition = ToolDefinition.model_validate(
         {
             "enabled": True,
             "steps": [],
-            "question_bank": {"online-mba": questions},
+            "setup": {
+                "id": "fee_model",
+                "prompt": "Which fee plan?",
+                "options": [
+                    {"id": "sem", "label": "Pay per semester", "pool": 5000},
+                    {"id": "year", "label": "Pay annually", "pool": 7500},
+                    {"id": "full", "label": "Pay full course upfront", "pool": 10000},
+                ],
+            },
+            "question_bank": {"easy": questions},
+            "serve": {"easy": 6},
             "reward_bands": [
-                {"min_correct": 0, "max_correct": 3, "label": "Band 1"},
-                {"min_correct": 4, "max_correct": 5, "label": "Band 2"},
-                {"min_correct": 6, "max_correct": 7, "label": "Band 3"},
+                {"min_correct": 0, "max_correct": 2, "pct": 0.4, "label": "Waiver unlocked"},
+                {"min_correct": 3, "max_correct": 4, "pct": 0.6, "label": "Strong result"},
+                {"min_correct": 5, "max_correct": 6, "pct": 1.0, "label": "Top scorer"},
             ],
         }
     )
-    answers = {f"s{index}": "a" if index <= 6 else "b" for index in range(1, 8)}
+    served = {"served_question_ids": [f"s{index}" for index in range(1, 7)]}
+
+    # 4 correct on the annual plan: 60% of 7500 = 4500 (spec worked example).
+    answers = {"fee_model": "year"}
+    answers.update({f"s{index}": "a" if index <= 4 else "b" for index in range(1, 7)})
+    result = score_scholarship(answers, definition, {**served, "program_id": "course-mba"})
+
+    assert result.status == "ok"
+    assert result.full["correct_count"] == 4
+    assert result.full["waiver_amount"] == 4500
+    assert result.full["reward_band"] == "Strong result"
+    assert result.cta_program_ids == ["course-mba"]
+    # The counsellor must see exactly what was promised.
+    assert result.lead_tags["waiver_amount"] == 4500
+    assert result.lead_tags["fee_model"] == "Pay annually"
+
+
+def test_scholarship_floor_band_still_awards_a_waiver() -> None:
+    """Everyone wins something: the floor is 40% of pool, never zero."""
+
+    questions = [
+        {
+            "id": f"s{index}",
+            "prompt": f"Q{index}",
+            "type": "choice",
+            "difficulty": "easy",
+            "options": [{"id": "a", "label": "A"}, {"id": "b", "label": "B"}],
+            "correct": "a",
+        }
+        for index in range(1, 7)
+    ]
+    definition = ToolDefinition.model_validate(
+        {
+            "enabled": True,
+            "steps": [],
+            "setup": {
+                "id": "fee_model",
+                "prompt": "Which fee plan?",
+                "options": [{"id": "sem", "label": "Pay per semester", "pool": 5000}],
+            },
+            "question_bank": {"easy": questions},
+            "serve": {"easy": 6},
+            "reward_bands": [
+                {"min_correct": 0, "max_correct": 2, "pct": 0.4, "label": "Waiver unlocked"},
+                {"min_correct": 3, "max_correct": 6, "pct": 1.0, "label": "Top scorer"},
+            ],
+        }
+    )
+    answers = {"fee_model": "sem"}
+    answers.update({f"s{index}": "b" for index in range(1, 7)})  # every answer wrong
 
     result = score_scholarship(
-        answers,
-        definition,
-        {"question_bank_key": "online-mba", "program_id": "course-mba"},
+        answers, definition, {"served_question_ids": [f"s{i}" for i in range(1, 7)]}
     )
 
     assert result.status == "ok"
-    assert result.full["correct_count"] == 6
-    assert result.full["reward_band"] == "Band 3"
-    assert result.cta_program_ids == ["course-mba"]
+    assert result.full["correct_count"] == 0
+    assert result.full["waiver_amount"] == 2000  # 40% of 5000, never zero
 
 
-def test_approved_v1_tool_content_runs_all_three_tool_frameworks() -> None:
+def test_shipped_tool_content_runs_all_three_tool_frameworks() -> None:
+    """End-to-end: every shipped tool completes against the real content file."""
+
     store = ToolsContentStore(DEFAULT_TOOLS_CONTENT_PATH, auto_reload=False)
-    assert store.version == "2026-07-18-v1"
+    assert store.version == "2026-07-25"
 
     catalog = {
         "course-mba": {
@@ -394,6 +456,7 @@ def test_approved_v1_tool_content_runs_all_three_tool_frameworks() -> None:
             "program_name": "MBA",
             "discipline": "management",
             "fee_numeric": 171000,
+            "job_profiles": [{"job_title": "Manager", "salary_numeric": 840000}],
         }
     }
     engine = ToolEngine(
@@ -402,29 +465,34 @@ def test_approved_v1_tool_content_runs_all_three_tool_frameworks() -> None:
         program_lookup=lambda discipline: [f"program-{discipline}-{index}" for index in range(3)],
     )
 
-    roi_state = ConversationState(session_id="approved-roi")
-    roi_turn = engine.enter(roi_state, "roi")
-    roi_turn = engine.dispatch(roi_state, roi_turn.response.quick_actions[0].message)
-    assert roi_turn is not None
-    roi_turn = engine.dispatch(roi_state, roi_turn.response.quick_actions[0].message)
-    assert roi_turn is not None and roi_turn.result is not None
+    # ROI — 6 steps, real salary-delta payback.
+    roi_state = ConversationState(session_id="shipped-roi")
+    roi_turn = engine.enter(roi_state, "roi", initial_payload={"program_id": "course-mba"})
+    for _ in range(6):
+        if roi_turn.lifecycle != "question":
+            break
+        roi_turn = engine.dispatch(roi_state, roi_turn.response.quick_actions[0].message)
+        assert roi_turn is not None
+    assert roi_turn.result is not None
     assert roi_turn.lifecycle == "partial_reveal"
-    assert roi_turn.result.full["payback_months"] == 7
-    assert roi_turn.result.lead_tags["model"] == "v1_salary_band"
+    assert roi_turn.result.full["payback_months"] > 0
+    assert roi_turn.result.lead_tags["tool"] == "roi"
 
-    career_state = ConversationState(session_id="approved-career")
+    # Career quiz — 7 questions, weighted discipline winner with real programs.
+    career_state = ConversationState(session_id="shipped-career")
     career_turn = engine.enter(career_state, "career_quiz")
-    for _ in range(5):
+    for _ in range(7):
         career_turn = engine.dispatch(
             career_state,
             career_turn.response.quick_actions[0].message,
         )
         assert career_turn is not None
     assert career_turn.result is not None
-    assert career_turn.result.full["top_discipline"] == "Business Analytics"
-    assert "job_profile" in career_turn.result.full
+    assert career_turn.result.full["top_discipline"]
+    assert len(career_turn.result.cta_program_ids) == 3
 
-    scholarship_state = ConversationState(session_id="approved-scholarship")
+    # Scholarship — setup + 6 served aptitude questions, waiver from the pool.
+    scholarship_state = ConversationState(session_id="shipped-scholarship")
     scholarship_turn = engine.enter(scholarship_state, "scholarship")
     for _ in range(7):
         scholarship_turn = engine.dispatch(
@@ -433,5 +501,8 @@ def test_approved_v1_tool_content_runs_all_three_tool_frameworks() -> None:
         )
         assert scholarship_turn is not None
     assert scholarship_turn.result is not None
-    assert scholarship_turn.result.full["waiver_amount"] == 31000
-    assert scholarship_turn.result.full["reward_band"] == "Strong waiver unlocked"
+    waiver = scholarship_turn.result.full["waiver_amount"]
+    # Everyone wins something; the ceiling is the chosen fee model's pool.
+    assert 0 < waiver <= 10000
+    assert scholarship_turn.result.lead_tags["waiver_amount"] == waiver
+    assert scholarship_turn.result.lead_tags["fee_model"]

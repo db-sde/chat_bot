@@ -1,225 +1,1008 @@
 {
-  "version": "2026-07-18-v1",
+  "version": "2026-07-25",
   "tools": {
-    "roi": {
-      "enabled": true,
-      "entry_copy": "See how fast this program pays for itself. 2 quick questions.",
-      "steps": [
-        {
-          "id": "program",
-          "prompt": "Which program are you considering?",
-          "type": "choice",
-          "options": [
-            {"id": "a", "label": "Online MBA", "value": "MBA"},
-            {"id": "b", "label": "Online MCA", "value": "MCA"},
-            {"id": "c", "label": "Online BBA", "value": "BBA"},
-            {"id": "d", "label": "Online MSc", "value": "MSc"}
-          ]
-        },
-        {
-          "id": "current_salary",
-          "prompt": "What do you earn right now?",
-          "type": "bucket",
-          "buckets": [
-            {"id": "a", "label": "Under ₹3L", "value": "Under ₹3L"},
-            {"id": "b", "label": "₹3–6L", "value": "₹3–6L"},
-            {"id": "c", "label": "₹6–10L", "value": "₹6–10L"},
-            {"id": "d", "label": "₹10L+", "value": "₹10L+"}
-          ]
-        }
-      ],
-      "roi_buckets": [
-        {
-          "option_id": "a",
-          "payback_months": 7,
-          "headline": "Your payback period is excellent — under a year."
-        },
-        {
-          "option_id": "b",
-          "payback_months": 9,
-          "headline": "Your payback period is excellent — under a year."
-        },
-        {
-          "option_id": "c",
-          "payback_months": 11,
-          "headline": "Your payback period is strong — just over a year."
-        },
-        {
-          "option_id": "d",
-          "payback_months": 14,
-          "headline": "Your payback period is strong — just over a year."
-        }
-      ],
-      "question_bank": {},
-      "reward_bands": []
-    },
     "career_quiz": {
       "enabled": true,
-      "entry_copy": "Answer 5 quick questions and we’ll point you to your best-fit field.",
+      "entry_copy": "Answer 7 quick questions to see your 3 best-fit programs.",
       "steps": [
         {
           "id": "q1",
           "prompt": "What kind of work energises you most?",
-          "type": "choice",
           "options": [
-            {"id": "a", "label": "Working with numbers & data", "weights": {"Business Analytics": 1}},
-            {"id": "b", "label": "Persuading & connecting with people", "weights": {"Marketing": 1}},
-            {"id": "c", "label": "Building & streamlining systems", "weights": {"Operations": 1}},
-            {"id": "d", "label": "Leading and developing people", "weights": {"HR": 1}}
+            {
+              "id": "a",
+              "label": "Solving problems with numbers & logic",
+              "weights": {
+                "data-science": 2,
+                "business-analytics": 2,
+                "finance": 1
+              }
+            },
+            {
+              "id": "b",
+              "label": "Leading people & making decisions",
+              "weights": {
+                "management": 2,
+                "human resource management": 1,
+                "operations management": 1
+              }
+            },
+            {
+              "id": "c",
+              "label": "Building or working with technology",
+              "weights": {
+                "technology": 3,
+                "ai-machine-learning": 1
+              }
+            },
+            {
+              "id": "d",
+              "label": "Persuading, marketing & storytelling",
+              "weights": {
+                "marketing": 2,
+                "international-business": 1
+              }
+            }
           ]
         },
         {
           "id": "q2",
-          "prompt": "Pick a project you’d enjoy:",
-          "type": "choice",
+          "prompt": "Which subject did you enjoy most while studying?",
           "options": [
-            {"id": "a", "label": "Analysing a sales dataset", "weights": {"Business Analytics": 1}},
-            {"id": "b", "label": "Launching a campaign", "weights": {"Marketing": 1}},
-            {"id": "c", "label": "Fixing a supply bottleneck", "weights": {"Operations": 1}},
-            {"id": "d", "label": "Building a hiring plan", "weights": {"HR": 1}}
+            {
+              "id": "a",
+              "label": "Maths / Statistics",
+              "weights": {
+                "data-science": 2,
+                "business-analytics": 1,
+                "finance": 1
+              }
+            },
+            {
+              "id": "b",
+              "label": "Business / Commerce",
+              "weights": {
+                "finance": 2,
+                "management": 1,
+                "international-business": 1
+              }
+            },
+            {
+              "id": "c",
+              "label": "Computers / IT",
+              "weights": {
+                "technology": 3,
+                "ai-machine-learning": 1
+              }
+            },
+            {
+              "id": "d",
+              "label": "Economics / Social Sciences",
+              "weights": {
+                "human resource management": 1,
+                "marketing": 1,
+                "management": 1
+              }
+            }
           ]
         },
         {
           "id": "q3",
-          "prompt": "What matters most to you in a role?",
-          "type": "choice",
+          "prompt": "Where do you see yourself in 5 years?",
           "options": [
-            {"id": "a", "label": "Sharp problem-solving", "weights": {"Business Analytics": 1}},
-            {"id": "b", "label": "Creativity & visibility", "weights": {"Marketing": 1}},
-            {"id": "c", "label": "Structure & efficiency", "weights": {"Operations": 1}},
-            {"id": "d", "label": "Impact on people", "weights": {"HR": 1}}
+            {
+              "id": "a",
+              "label": "Leading a team or business unit",
+              "weights": {
+                "management": 2,
+                "operations management": 1,
+                "human resource management": 1
+              }
+            },
+            {
+              "id": "b",
+              "label": "A specialist expert others rely on",
+              "weights": {
+                "data-science": 2,
+                "finance": 1,
+                "ai-machine-learning": 1
+              }
+            },
+            {
+              "id": "c",
+              "label": "Running my own venture",
+              "weights": {
+                "marketing": 2,
+                "international-business": 1,
+                "management": 1
+              }
+            },
+            {
+              "id": "d",
+              "label": "In a stable, high-demand technical role",
+              "weights": {
+                "technology": 3
+              }
+            }
           ]
         },
         {
           "id": "q4",
-          "prompt": "How do you like to spend a workday?",
-          "type": "choice",
+          "prompt": "Which of these tasks would you happily do all day?",
           "options": [
-            {"id": "a", "label": "With dashboards & tools", "weights": {"Business Analytics": 1}},
-            {"id": "b", "label": "With clients & pitches", "weights": {"Marketing": 1}},
-            {"id": "c", "label": "With processes & plans", "weights": {"Operations": 1}},
-            {"id": "d", "label": "With teams & 1:1s", "weights": {"HR": 1}}
+            {
+              "id": "a",
+              "label": "Analysing data & spotting patterns",
+              "weights": {
+                "business-analytics": 2,
+                "data-science": 1
+              }
+            },
+            {
+              "id": "b",
+              "label": "Managing budgets & investments",
+              "weights": {
+                "finance": 2,
+                "business-analytics": 1
+              }
+            },
+            {
+              "id": "c",
+              "label": "Designing or coding a product",
+              "weights": {
+                "technology": 3
+              }
+            },
+            {
+              "id": "d",
+              "label": "Planning campaigns & understanding customers",
+              "weights": {
+                "marketing": 2,
+                "management": 1
+              }
+            }
           ]
         },
         {
           "id": "q5",
-          "prompt": "Where do you want to be in 5 years?",
-          "type": "choice",
+          "prompt": "What matters most in your next role?",
           "options": [
-            {"id": "a", "label": "Analytics lead", "weights": {"Business Analytics": 1}},
-            {"id": "b", "label": "Marketing head", "weights": {"Marketing": 1}},
-            {"id": "c", "label": "Operations director", "weights": {"Operations": 1}},
-            {"id": "d", "label": "HR business partner", "weights": {"HR": 1}}
-          ]
-        }
-      ],
-      "tie_break": "last_answer",
-      "partial_reveal_template": "Your best-fit area looks like {area}.",
-      "full_reveal_template": "Based on your answers, {area} is your strongest fit. Three programs to explore:",
-      "job_profiles": {
-        "Finance": "💼 Financial Analyst · ₹7.2 LPA avg",
-        "Marketing": "💼 Brand Manager · ₹8.0 LPA avg",
-        "Business Analytics": "💼 Data Analyst · ₹6.5 LPA avg",
-        "HR": "💼 HR Manager · ₹6.8 LPA avg",
-        "Operations": "💼 Operations Manager · ₹7.5 LPA avg",
-        "International Business": "💼 Trade Manager · ₹7.4 LPA avg",
-        "default": "💼 Manager · ₹7.0 LPA avg"
-      },
-      "question_bank": {},
-      "reward_bands": []
-    },
-    "scholarship": {
-      "enabled": true,
-      "entry_copy": "Check which fee waivers you qualify for — takes under a minute. 7 quick questions.",
-      "steps": [
-        {
-          "id": "q1",
-          "prompt": "Your highest qualification?",
-          "type": "choice",
-          "options": [
-            {"id": "a", "label": "12th pass"},
-            {"id": "b", "label": "Graduate"},
-            {"id": "c", "label": "Postgraduate"}
-          ]
-        },
-        {
-          "id": "q2",
-          "prompt": "Your graduation aggregate?",
-          "type": "choice",
-          "options": [
-            {"id": "a", "label": "Below 50%"},
-            {"id": "b", "label": "50–60%"},
-            {"id": "c", "label": "60–75%", "bonus": 5000, "reason_label": "Merit — 60–75% aggregate"},
-            {"id": "d", "label": "Above 75%", "bonus": 12000, "reason_label": "Merit — 75%+ aggregate"}
-          ]
-        },
-        {
-          "id": "q3",
-          "prompt": "Work experience so far?",
-          "type": "choice",
-          "options": [
-            {"id": "a", "label": "None"},
-            {"id": "b", "label": "0–2 yrs"},
-            {"id": "c", "label": "2–5 yrs"},
-            {"id": "d", "label": "5+ yrs"}
-          ]
-        },
-        {
-          "id": "q4",
-          "prompt": "Which category do you belong to?",
-          "type": "choice",
-          "options": [
-            {"id": "a", "label": "General"},
-            {"id": "b", "label": "OBC", "bonus": 10000, "reason_label": "Reserved-category benefit"},
-            {"id": "c", "label": "SC / ST", "bonus": 10000, "reason_label": "Reserved-category benefit"},
-            {"id": "d", "label": "EWS", "bonus": 10000, "reason_label": "Reserved-category benefit"}
-          ]
-        },
-        {
-          "id": "q5",
-          "prompt": "Are you a woman applicant?",
-          "type": "choice",
-          "options": [
-            {"id": "a", "label": "Yes", "bonus": 6000, "reason_label": "Women applicant grant"},
-            {"id": "b", "label": "No"}
+            {
+              "id": "a",
+              "label": "Highest earning potential",
+              "weights": {
+                "finance": 1,
+                "data-science": 1,
+                "ai-machine-learning": 1
+              }
+            },
+            {
+              "id": "b",
+              "label": "Job security & steady demand",
+              "weights": {
+                "operations management": 1,
+                "human resource management": 1,
+                "technology": 1
+              }
+            },
+            {
+              "id": "c",
+              "label": "Creativity & variety",
+              "weights": {
+                "marketing": 2,
+                "international-business": 1
+              }
+            },
+            {
+              "id": "d",
+              "label": "Leadership & influence",
+              "weights": {
+                "management": 2,
+                "human resource management": 1
+              }
+            }
           ]
         },
         {
           "id": "q6",
-          "prompt": "From a defence / ex-servicemen family?",
-          "type": "choice",
+          "prompt": "Your current background is closest to?",
           "options": [
-            {"id": "a", "label": "Yes", "bonus": 10000, "reason_label": "Defence-family concession"},
-            {"id": "b", "label": "No"}
+            {
+              "id": "a",
+              "label": "Commerce / Finance / Accounts",
+              "weights": {
+                "finance": 2,
+                "business-analytics": 1
+              }
+            },
+            {
+              "id": "b",
+              "label": "Engineering / IT / Technical",
+              "weights": {
+                "technology": 2,
+                "data-science": 1,
+                "ai-machine-learning": 1
+              }
+            },
+            {
+              "id": "c",
+              "label": "Sales / Marketing / Business",
+              "weights": {
+                "marketing": 2,
+                "management": 1
+              }
+            },
+            {
+              "id": "d",
+              "label": "Operations / Admin / Other",
+              "weights": {
+                "operations management": 2,
+                "human resource management": 1
+              }
+            }
           ]
         },
         {
           "id": "q7",
-          "prompt": "When do you want to start?",
-          "type": "choice",
+          "prompt": "Pick the outcome that excites you most:",
           "options": [
-            {"id": "a", "label": "This month", "bonus": 5000, "reason_label": "Early-bird — joining this month"},
-            {"id": "b", "label": "Next 3 months"},
-            {"id": "c", "label": "Later"}
+            {
+              "id": "a",
+              "label": "“I can predict what happens next from data”",
+              "weights": {
+                "data-science": 2,
+                "business-analytics": 1
+              }
+            },
+            {
+              "id": "b",
+              "label": "“I built something people use every day”",
+              "weights": {
+                "technology": 3
+              }
+            },
+            {
+              "id": "c",
+              "label": "“I grew a brand / market”",
+              "weights": {
+                "marketing": 2,
+                "international-business": 1
+              }
+            },
+            {
+              "id": "d",
+              "label": "“I run the show”",
+              "weights": {
+                "management": 2,
+                "operations management": 1
+              }
+            }
           ]
         }
       ],
-      "base_waiver": 10000,
-      "max_waiver": 43000,
-      "standard_fee": 171000,
+      "tie_break": "last_answer",
+      "partial_reveal_template": "Your best-fit area looks like {discipline}.",
+      "full_reveal_template": "Based on your answers, {discipline} is your strongest fit. Here are 3 programs to explore:",
+      "output": {
+        "return_count": 3,
+        "order": [
+          "naac_score_desc",
+          "fee_numeric_asc"
+        ]
+      }
+    },
+    "roi": {
+      "enabled": true,
+      "entry_copy": "See how fast this program pays for itself.",
+      "steps": [
+        {
+          "id": "program",
+          "type": "entity",
+          "prompt": "Which program are you considering?"
+        },
+        {
+          "id": "current_salary",
+          "type": "bucket",
+          "prompt": "What's your current monthly salary?",
+          "value_period": "monthly",
+          "buckets": [
+            {
+              "id": "b0",
+              "label": "Not working right now",
+              "value": 0
+            },
+            {
+              "id": "b1",
+              "label": "Under ₹20,000",
+              "value": 15000
+            },
+            {
+              "id": "b2",
+              "label": "₹20,000–40,000",
+              "value": 30000
+            },
+            {
+              "id": "b3",
+              "label": "₹40,000–60,000",
+              "value": 50000
+            },
+            {
+              "id": "b4",
+              "label": "₹60,000–1,00,000",
+              "value": 80000
+            },
+            {
+              "id": "b5",
+              "label": "Above ₹1,00,000",
+              "value": 120000
+            }
+          ]
+        },
+        {
+          "id": "qualification",
+          "type": "choice",
+          "prompt": "Your highest qualification?",
+          "options": [
+            {
+              "id": "school",
+              "label": "12th / Diploma"
+            },
+            {
+              "id": "grad",
+              "label": "Graduate"
+            },
+            {
+              "id": "pg",
+              "label": "Postgraduate"
+            }
+          ]
+        },
+        {
+          "id": "experience",
+          "type": "factor",
+          "prompt": "How many years of work experience?",
+          "options": [
+            {
+              "id": "fresher",
+              "label": "Fresher",
+              "factor": 0.85
+            },
+            {
+              "id": "e1",
+              "label": "1–3 yrs",
+              "factor": 1.0
+            },
+            {
+              "id": "e2",
+              "label": "4–7 yrs",
+              "factor": 1.1
+            },
+            {
+              "id": "e3",
+              "label": "8+ yrs",
+              "factor": 1.2
+            }
+          ]
+        },
+        {
+          "id": "goal",
+          "type": "choice",
+          "prompt": "What's your primary goal with this degree?",
+          "options": [
+            {
+              "id": "raise",
+              "label": "A raise in my current field"
+            },
+            {
+              "id": "switch",
+              "label": "A career switch"
+            },
+            {
+              "id": "promo",
+              "label": "A promotion / management role"
+            },
+            {
+              "id": "venture",
+              "label": "Starting my own thing"
+            }
+          ]
+        },
+        {
+          "id": "start_intent",
+          "type": "lead_tag",
+          "prompt": "When are you planning to start?",
+          "options": [
+            {
+              "id": "now",
+              "label": "Immediately"
+            },
+            {
+              "id": "soon",
+              "label": "Within 3 months"
+            },
+            {
+              "id": "exploring",
+              "label": "Just exploring"
+            }
+          ]
+        }
+      ],
+      "partial_reveal_template": "Your payback period looks {band}.",
+      "output": {
+        "return_count": 3,
+        "order": [
+          "roi_ratio_asc"
+        ]
+      }
+    },
+    "scholarship": {
+      "enabled": true,
+      "entry_copy": "Answer 7 quick questions to see the fee waiver you qualify for.",
+      "setup": {
+        "id": "fee_model",
+        "type": "choice",
+        "prompt": "Which fee plan are you likely to choose?",
+        "options": [
+          {
+            "id": "sem",
+            "label": "Pay per semester",
+            "pool": 5000
+          },
+          {
+            "id": "year",
+            "label": "Pay annually",
+            "pool": 7500
+          },
+          {
+            "id": "full",
+            "label": "Pay full course upfront",
+            "pool": 10000
+          }
+        ]
+      },
+      "question_bank": {
+        "easy": [
+          {
+            "id": "e1",
+            "difficulty": "easy",
+            "prompt": "A course fee of ₹1,20,000 is paid in 4 equal instalments. Each instalment is?",
+            "options": [
+              {
+                "id": "a",
+                "label": "₹24,000"
+              },
+              {
+                "id": "b",
+                "label": "₹30,000"
+              },
+              {
+                "id": "c",
+                "label": "₹40,000"
+              },
+              {
+                "id": "d",
+                "label": "₹36,000"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "e2",
+            "difficulty": "easy",
+            "prompt": "Find the next number: 2, 6, 12, 20, __",
+            "options": [
+              {
+                "id": "a",
+                "label": "28"
+              },
+              {
+                "id": "b",
+                "label": "30"
+              },
+              {
+                "id": "c",
+                "label": "26"
+              },
+              {
+                "id": "d",
+                "label": "32"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "e3",
+            "difficulty": "easy",
+            "prompt": "What is 25% of ₹4,000?",
+            "options": [
+              {
+                "id": "a",
+                "label": "₹800"
+              },
+              {
+                "id": "b",
+                "label": "₹1,000"
+              },
+              {
+                "id": "c",
+                "label": "₹1,200"
+              },
+              {
+                "id": "d",
+                "label": "₹1,500"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "e4",
+            "difficulty": "easy",
+            "prompt": "UGC stands for?",
+            "options": [
+              {
+                "id": "a",
+                "label": "Union Grants Committee"
+              },
+              {
+                "id": "b",
+                "label": "University Grants Commission"
+              },
+              {
+                "id": "c",
+                "label": "United Graduate Council"
+              },
+              {
+                "id": "d",
+                "label": "University Governance Council"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "e5",
+            "difficulty": "easy",
+            "prompt": "Choose the correctly spelled word:",
+            "options": [
+              {
+                "id": "a",
+                "label": "Acommodation"
+              },
+              {
+                "id": "b",
+                "label": "Accomodation"
+              },
+              {
+                "id": "c",
+                "label": "Accommodation"
+              },
+              {
+                "id": "d",
+                "label": "Accomadation"
+              }
+            ],
+            "correct": "c"
+          },
+          {
+            "id": "e6",
+            "difficulty": "easy",
+            "prompt": "The average of 10, 20 and 30 is?",
+            "options": [
+              {
+                "id": "a",
+                "label": "15"
+              },
+              {
+                "id": "b",
+                "label": "20"
+              },
+              {
+                "id": "c",
+                "label": "25"
+              },
+              {
+                "id": "d",
+                "label": "30"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "e7",
+            "difficulty": "easy",
+            "prompt": "A program that runs for 24 months lasts how many years?",
+            "options": [
+              {
+                "id": "a",
+                "label": "1 year"
+              },
+              {
+                "id": "b",
+                "label": "1.5 years"
+              },
+              {
+                "id": "c",
+                "label": "2 years"
+              },
+              {
+                "id": "d",
+                "label": "3 years"
+              }
+            ],
+            "correct": "c"
+          }
+        ],
+        "medium": [
+          {
+            "id": "m1",
+            "difficulty": "medium",
+            "prompt": "An amount of ₹240 is split in the ratio 3 : 5. The smaller part is?",
+            "options": [
+              {
+                "id": "a",
+                "label": "₹90"
+              },
+              {
+                "id": "b",
+                "label": "₹100"
+              },
+              {
+                "id": "c",
+                "label": "₹120"
+              },
+              {
+                "id": "d",
+                "label": "₹150"
+              }
+            ],
+            "correct": "a"
+          },
+          {
+            "id": "m2",
+            "difficulty": "medium",
+            "prompt": "Find the next number: 3, 6, 11, 18, __",
+            "options": [
+              {
+                "id": "a",
+                "label": "25"
+              },
+              {
+                "id": "b",
+                "label": "27"
+              },
+              {
+                "id": "c",
+                "label": "29"
+              },
+              {
+                "id": "d",
+                "label": "24"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "m3",
+            "difficulty": "medium",
+            "prompt": "What is 15% of ₹2,00,000?",
+            "options": [
+              {
+                "id": "a",
+                "label": "₹20,000"
+              },
+              {
+                "id": "b",
+                "label": "₹25,000"
+              },
+              {
+                "id": "c",
+                "label": "₹30,000"
+              },
+              {
+                "id": "d",
+                "label": "₹35,000"
+              }
+            ],
+            "correct": "c"
+          },
+          {
+            "id": "m4",
+            "difficulty": "medium",
+            "prompt": "NAAC stands for?",
+            "options": [
+              {
+                "id": "a",
+                "label": "National Academy of Accredited Colleges"
+              },
+              {
+                "id": "b",
+                "label": "National Assessment and Accreditation Council"
+              },
+              {
+                "id": "c",
+                "label": "National Association of Affiliated Colleges"
+              },
+              {
+                "id": "d",
+                "label": "National Accreditation and Audit Committee"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "m5",
+            "difficulty": "medium",
+            "prompt": "A fee of ₹80,000 gets a 10% discount. The amount payable is?",
+            "options": [
+              {
+                "id": "a",
+                "label": "₹70,000"
+              },
+              {
+                "id": "b",
+                "label": "₹72,000"
+              },
+              {
+                "id": "c",
+                "label": "₹75,000"
+              },
+              {
+                "id": "d",
+                "label": "₹78,000"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "m6",
+            "difficulty": "medium",
+            "prompt": "Which one does NOT belong with the others?",
+            "options": [
+              {
+                "id": "a",
+                "label": "Rose"
+              },
+              {
+                "id": "b",
+                "label": "Lotus"
+              },
+              {
+                "id": "c",
+                "label": "Lily"
+              },
+              {
+                "id": "d",
+                "label": "Mango"
+              }
+            ],
+            "correct": "d"
+          },
+          {
+            "id": "m7",
+            "difficulty": "medium",
+            "prompt": "A car travels 180 km in 3 hours. Its average speed is?",
+            "options": [
+              {
+                "id": "a",
+                "label": "50 km/h"
+              },
+              {
+                "id": "b",
+                "label": "60 km/h"
+              },
+              {
+                "id": "c",
+                "label": "70 km/h"
+              },
+              {
+                "id": "d",
+                "label": "90 km/h"
+              }
+            ],
+            "correct": "b"
+          }
+        ],
+        "hard": [
+          {
+            "id": "h1",
+            "difficulty": "hard",
+            "prompt": "A fee of ₹1,00,000 rises by 10%, then rises by 10% again. The final amount is?",
+            "options": [
+              {
+                "id": "a",
+                "label": "₹1,20,000"
+              },
+              {
+                "id": "b",
+                "label": "₹1,21,000"
+              },
+              {
+                "id": "c",
+                "label": "₹1,22,000"
+              },
+              {
+                "id": "d",
+                "label": "₹1,10,000"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "h2",
+            "difficulty": "hard",
+            "prompt": "Find the next number: 2, 5, 10, 17, 26, __",
+            "options": [
+              {
+                "id": "a",
+                "label": "35"
+              },
+              {
+                "id": "b",
+                "label": "36"
+              },
+              {
+                "id": "c",
+                "label": "37"
+              },
+              {
+                "id": "d",
+                "label": "38"
+              }
+            ],
+            "correct": "c"
+          },
+          {
+            "id": "h3",
+            "difficulty": "hard",
+            "prompt": "If 3 people finish a task in 12 days, how long will 4 people take (same pace)?",
+            "options": [
+              {
+                "id": "a",
+                "label": "8 days"
+              },
+              {
+                "id": "b",
+                "label": "9 days"
+              },
+              {
+                "id": "c",
+                "label": "10 days"
+              },
+              {
+                "id": "d",
+                "label": "16 days"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "h4",
+            "difficulty": "hard",
+            "prompt": "Simple interest on ₹50,000 at 8% per year for 2 years is?",
+            "options": [
+              {
+                "id": "a",
+                "label": "₹4,000"
+              },
+              {
+                "id": "b",
+                "label": "₹8,000"
+              },
+              {
+                "id": "c",
+                "label": "₹10,000"
+              },
+              {
+                "id": "d",
+                "label": "₹16,000"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "h5",
+            "difficulty": "hard",
+            "prompt": "A salary rises from ₹40,000 to ₹50,000. The percentage increase is?",
+            "options": [
+              {
+                "id": "a",
+                "label": "20%"
+              },
+              {
+                "id": "b",
+                "label": "25%"
+              },
+              {
+                "id": "c",
+                "label": "10%"
+              },
+              {
+                "id": "d",
+                "label": "15%"
+              }
+            ],
+            "correct": "b"
+          },
+          {
+            "id": "h6",
+            "difficulty": "hard",
+            "prompt": "AICTE stands for?",
+            "options": [
+              {
+                "id": "a",
+                "label": "All India Council for Technical Education"
+              },
+              {
+                "id": "b",
+                "label": "Academic Institute for Career & Technical Education"
+              },
+              {
+                "id": "c",
+                "label": "All India Committee for Training & Employment"
+              },
+              {
+                "id": "d",
+                "label": "Association of Indian Colleges of Technical Education"
+              }
+            ],
+            "correct": "a"
+          },
+          {
+            "id": "h7",
+            "difficulty": "hard",
+            "prompt": "If a : b = 2 : 3 and b : c = 4 : 5, then a : c is?",
+            "options": [
+              {
+                "id": "a",
+                "label": "2 : 5"
+              },
+              {
+                "id": "b",
+                "label": "8 : 15"
+              },
+              {
+                "id": "c",
+                "label": "6 : 5"
+              },
+              {
+                "id": "d",
+                "label": "4 : 15"
+              }
+            ],
+            "correct": "b"
+          }
+        ]
+      },
+      "serve": {
+        "easy": 2,
+        "medium": 2,
+        "hard": 2
+      },
+      "reward_bands": [
+        {
+          "min_correct": 5,
+          "max_correct": 6,
+          "pct": 1.0,
+          "label": "Top scorer"
+        },
+        {
+          "min_correct": 3,
+          "max_correct": 4,
+          "pct": 0.6,
+          "label": "Strong result"
+        },
+        {
+          "min_correct": 0,
+          "max_correct": 2,
+          "pct": 0.4,
+          "label": "Waiver unlocked"
+        }
+      ],
+      "one_attempt_per_phone": true,
       "partial_reveal_template": "You've qualified for a fee waiver!",
       "claim_steps": [
         "A counsellor verifies your details on a quick call",
         "Submit your marksheet & photo ID",
-        "Waiver applied to your first-semester fee"
-      ],
-      "question_bank": {},
-      "reward_bands": [
-        {"min_waiver": 10000, "max_waiver": 14999, "label": "Base waiver unlocked"},
-        {"min_waiver": 15000, "max_waiver": 19999, "label": "Merit waiver unlocked"},
-        {"min_waiver": 20000, "max_waiver": 27999, "label": "Merit waiver unlocked"},
-        {"min_waiver": 28000, "max_waiver": 34999, "label": "Strong waiver unlocked"},
-        {"min_waiver": 35000, "max_waiver": 43000, "label": "Maximum waiver unlocked"}
+        "The waiver is applied to your first-semester fee"
       ]
     }
   }

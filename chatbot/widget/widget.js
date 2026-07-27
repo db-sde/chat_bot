@@ -1543,14 +1543,13 @@
 
     /* §3.2/§3.3 client validation. On failure, re-prompt with the offending
        field and record which field drove the drop-off (§8). */
-    if (!leadNameValid(state.leadName)) {
-      emitAnalytics('lead_form_validation_failed', state.lastChip, { attributes: { field: 'name' } });
-      mark({ leadError: 'Please enter your name (letters only).' });
-      return;
-    }
-    if (!leadPhoneValid(state.leadPhone)) {
-      emitAnalytics('lead_form_validation_failed', state.lastChip, { attributes: { field: 'phone' } });
-      mark({ leadError: 'Enter a valid 10-digit mobile number.' });
+    if (!leadNameValid(state.leadName) || !leadPhoneValid(state.leadPhone)) {
+      /* Spec §5: fire only on a submit attempt, so the count reflects real
+         friction rather than typing-in-progress. */
+      var field = leadNameValid(state.leadName) ? 'phone' : 'name';
+      emitAnalytics('lead_form_validation_failed', state.lastChip, { attributes: { field: field } });
+      msg.leadTouched = { name: true, phone: true };
+      mark({ leadError: '' });
       return;
     }
 
@@ -1575,6 +1574,16 @@
     });
   }
 
+  /* Record that a field has been focused-then-blurred, then refresh just the
+     error line — a full re-render here would steal focus from the next field. */
+  function markLeadTouched(mid, field) {
+    var msg = state.msgs.find(function (m) { return m.id === mid; });
+    if (!msg) return;
+    msg.leadTouched = Object.assign({}, msg.leadTouched, { [field]: true });
+    var node = windowEl && windowEl.querySelector('.db-lead-error');
+    if (node) node.textContent = msg.leadError || leadFieldError(msg);
+  }
+
   /* §5.1 flip the Submit button without a full re-render, so typing keeps
      focus. Called on every keystroke in the form. */
   function updateLeadSubmit(el) {
@@ -1586,6 +1595,11 @@
     submit.disabled = !ok;
     if (ok) submit.classList.remove('db-lead-submit--disabled');
     else submit.classList.add('db-lead-submit--disabled');
+    /* Spec: clear the error the instant the field becomes valid. */
+    var mid = el.getAttribute && el.getAttribute('data-mid');
+    var msg = mid && state.msgs.find(function (m) { return m.id === mid; });
+    var node = form.querySelector('.db-lead-error');
+    if (node && msg) node.textContent = leadFieldError(msg);
   }
 
   /* §4 the only path back to the form once a lead exists. */
@@ -1897,7 +1911,9 @@
       waiver: Number.isFinite(waiverNum) ? formatINR(waiverNum) : (result.reward_band || 'Waiver confirmed'),
       net: Number.isFinite(Number(result.net_fee)) ? formatINR(result.net_fee) : 'Confirmed on call',
       /* Standard fee is the published net plus the published waiver. */
-      standard: (Number.isFinite(Number(result.net_fee)) && Number.isFinite(waiverNum))
+      standard: Number.isFinite(Number(result.standard_fee))
+        ? formatINR(result.standard_fee)
+        : (Number.isFinite(Number(result.net_fee)) && Number.isFinite(waiverNum))
         ? formatINR(Number(result.net_fee) + waiverNum)
         : 'Not published',
       reasons: result.reasons || [result.reward_band].filter(Boolean),
@@ -2078,6 +2094,9 @@
     }
     var valid = leadNameValid(state.leadName) && leadPhoneValid(state.leadPhone);
     var disabled = m.leadBusy || !valid;
+    /* Errors only after the field has been touched (focus→blur) or a submit
+       attempt — never while someone is still typing their first characters. */
+    var error = m.leadError || leadFieldError(m);
     return div('db-lead',
       div('db-lead-text', esc(m.text)) +
       div('db-lead-fields',
@@ -2093,11 +2112,34 @@
           )
         )
       ) +
+      /* Space is reserved always, so showing/clearing the error never changes
+         the card height and the chips below never jump. */
+      div('db-lead-error', error ? esc(error) : '') +
       btn('db-lead-submit' + (disabled ? ' db-lead-submit--disabled' : ''),
         m.leadBusy ? 'Sending…' : 'Submit', '',
-        'data-action="submitLead" data-mid="'+m.id+'"' + (disabled ? ' disabled' : '')) +
-      div('db-lead-note', m.leadError ? esc(m.leadError) : 'No spam. One call, today\'s offer.')
+        'data-action="submitLead" data-mid="'+m.id+'"' + (disabled ? ' disabled' : ''))
     );
+  }
+
+  /* Spec §2.3 — one specific message for the first failing touched field. */
+  function leadFieldError(m) {
+    var touched = m.leadTouched || {};
+    if (touched.name) {
+      var n = String(state.leadName || '').trim();
+      if (!n) return 'Please enter your name';
+      if (/\d/.test(n)) return "Name can't contain numbers";
+      if (!/^[A-Za-z][A-Za-z .'-]*$/.test(n)) return "Name can't contain numbers";
+      if (n.length < 2) return 'Please enter your full name';
+    }
+    if (touched.phone) {
+      var raw = String(state.leadPhone || '');
+      var p = normalisePhone(raw);
+      if (!p) return 'Please enter your mobile number';
+      if (/[A-Za-z]/.test(raw)) return 'Numbers only, please';
+      if (p.length < 10) return 'Mobile number must be 10 digits';
+      if (!/^[6-9]/.test(p)) return 'Please enter a valid Indian mobile number';
+    }
+    return '';
   }
 
   /* §3.3 name: 2+ chars, letters/space/apostrophe/hyphen/period, no digits. */
@@ -2766,6 +2808,13 @@
       state.leadName = el.value;
       updateLeadSubmit(el);
     }, 'input');
+    /* Spec §2.3 — a field's error only appears once it has been left. */
+    delegate('[data-action="leadNameInput"]', function(el){
+      markLeadTouched(el.getAttribute('data-mid'), 'name');
+    }, 'blur');
+    delegate('[data-action="leadPhoneInput"]', function(el){
+      markLeadTouched(el.getAttribute('data-mid'), 'phone');
+    }, 'blur');
     delegate('[data-action="changeNumber"]', function(){ if (!state.busy) reopenLeadForm(); });
 
     /* Syllabus accordion */

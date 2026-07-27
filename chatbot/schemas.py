@@ -290,9 +290,18 @@ class PageContextResponse(TransportModel):
     context: ResponseContext = Field(default_factory=ResponseContext)
 
 
+class CardListComponent(TransportModel):
+    """Recommended catalog cards attached to a tool reveal."""
+
+    type: Literal["card_list"] = "card_list"
+    title: str | None = None
+    items: list[UniversityCard | ProgramCard] = Field(min_length=1, max_length=3)
+
+
 class ResponsePayload(TransportModel):
     text: str
     message: str | None = None
+    components: list[CardListComponent] = Field(default_factory=list)
     quick_actions: list[QuickAction] = Field(default_factory=list)
     context: ResponseContext = Field(default_factory=ResponseContext)
     metadata: dict[str, Any] = Field(default_factory=dict)

@@ -43,15 +43,23 @@ class ToolOption(ContentModel):
     value: str | int | float | None = None
     bonus: int = Field(default=0, ge=0)
     reason_label: str | None = Field(default=None, min_length=1, max_length=300)
+    # ROI Q4 experience tempering factor (spec: fresher .85 … 8+ 1.2).
+    factor: float | None = Field(default=None, gt=0, le=3)
+    # Scholarship Q1 fee-model waiver ceiling.
+    pool: int | None = Field(default=None, ge=0)
 
 
 class ToolStep(ContentModel):
     id: str = Field(min_length=1, max_length=80)
     prompt: str = Field(min_length=1, max_length=1000)
-    type: Literal["choice", "entity", "bucket", "text"] = "choice"
+    type: Literal["choice", "entity", "bucket", "text", "factor", "lead_tag"] = "choice"
     options: tuple[ToolOption, ...] = ()
     buckets: tuple[ToolOption, ...] = ()
     value_period: Literal["monthly", "annual"] | None = None
+    # Scholarship bank questions score against an option id, never an index, so
+    # options can be shuffled at serve time without breaking correctness.
+    correct: str | None = Field(default=None, min_length=1, max_length=80)
+    difficulty: Literal["easy", "medium", "hard"] | None = None
 
     @property
     def choices(self) -> tuple[ToolOption, ...]:
@@ -60,11 +68,13 @@ class ToolStep(ContentModel):
     @model_validator(mode="after")
     def validate_choices(self) -> ToolStep:
         choices = self.choices
-        if self.type in {"choice", "bucket"} and not choices:
+        if self.type in {"choice", "bucket", "factor", "lead_tag"} and not choices:
             raise ValueError(f"step {self.id!r} requires answer options")
         ids = [option.id.casefold() for option in choices]
         if len(ids) != len(set(ids)):
             raise ValueError(f"step {self.id!r} contains duplicate option ids")
+        if self.correct is not None and self.correct.casefold() not in ids:
+            raise ValueError(f"step {self.id!r} correct answer must match an option id")
         return self
 
 
@@ -79,6 +89,8 @@ class RewardBand(ContentModel):
     max_correct: int | None = Field(default=None, ge=0)
     min_waiver: int | None = Field(default=None, ge=0)
     max_waiver: int | None = Field(default=None, ge=0)
+    # Fraction of the fee-model pool awarded for this score band.
+    pct: float | None = Field(default=None, ge=0, le=1)
     label: str = Field(min_length=1, max_length=200)
 
     @model_validator(mode="after")
@@ -118,6 +130,13 @@ class ToolDefinition(ContentModel):
     max_waiver: int | None = Field(default=None, ge=0)
     standard_fee: int | None = Field(default=None, ge=0)
     claim_steps: tuple[str, ...] = ()
+    # Scholarship: the fee-model setup question that sets the waiver ceiling.
+    setup: ToolStep | None = None
+    # How many bank questions to serve per difficulty tier.
+    serve: dict[str, int] = Field(default_factory=dict)
+    one_attempt_per_phone: bool = False
+    # Career quiz / ROI reveal ordering and result size.
+    output: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_step_identity(self) -> ToolDefinition:

@@ -66,14 +66,14 @@ def _salary_numeric(entity: Any) -> float | None:
     direct = _number(safe_get(entity, "salary_numeric", None))
     if direct is not None:
         return direct
-    salaries = {
+    salaries = [
         salary
         for profile in (safe_get(entity, "job_profiles", []) or [])
         if (salary := _number(safe_get(profile, "salary_numeric", None))) is not None
-    }
-    # The spec does not define how to aggregate multiple job-profile salaries.
-    # Compute only when the normalized data supplies one unambiguous value.
-    return next(iter(salaries)) if len(salaries) == 1 else None
+    ]
+    # Spec: expected salary comes from job_profiles[].avg_salary. A program that
+    # lists several roles gets their mean — the honest central estimate.
+    return sum(salaries) / len(salaries) if salaries else None
 
 
 def _current_annual_salary(payload: Mapping[str, Any]) -> float | None:
@@ -140,7 +140,15 @@ def _configured_program(
 
     values = payload.get("answer_values")
     selected = values.get("program") if isinstance(values, Mapping) else None
-    target = _normalized(selected or answers.get("program"))
+    answered = str(answers.get("program") or "").strip()
+    # Q1 is an entity step: when the answer already is a catalog id, use it.
+    # (Only the prefixed-id branch above is context-derived; this is the user's
+    # own selection and must not be dropped for lacking a known id prefix.)
+    if answered:
+        direct = _catalog_entity(catalog, answered)
+        if direct is not None:
+            return answered, direct
+    target = _normalized(selected or answered)
     candidates: list[tuple[float, str, Any]] = []
     for entity in _catalog_entities(catalog):
         entity_id = _entity_id(entity)
@@ -173,6 +181,68 @@ def _rank_same_discipline_by_fee(catalog: Any, discipline: str) -> list[str]:
     return [entity_id for _, entity_id in ranked[:3]]
 
 
+def _answer_value(payload: Mapping[str, Any], step_id: str) -> Any:
+    values = payload.get("answer_values")
+    return values.get(step_id) if isinstance(values, Mapping) else None
+
+
+def _current_monthly_salary(payload: Mapping[str, Any]) -> float | None:
+    """Q2 bucket midpoint, normalised to a monthly figure."""
+
+    values = payload.get("answer_values")
+    periods = payload.get("answer_periods")
+    if not isinstance(values, Mapping):
+        return None
+    key = next((name for name in values if str(name).startswith("current_salary")), None)
+    if key is None:
+        return None
+    amount = _number(values.get(key))
+    if amount is None or amount < 0:
+        return None
+    period = periods.get(key) if isinstance(periods, Mapping) else None
+    return amount / 12 if period == "annual" else amount
+
+
+def _rank_by_roi(catalog: Any, discipline: str, exclude: str | None = None) -> list[str]:
+    """Best-ROI programs in the same discipline: lowest fee per rupee of salary."""
+
+    ranked: list[tuple[float, str]] = []
+    for entity in _catalog_entities(catalog):
+        if str(safe_get(entity, "discipline", "")).casefold() != discipline.casefold():
+            continue
+        entity_id = _entity_id(entity)
+        fee = _number(safe_get(entity, "fee_numeric", None))
+        salary = _salary_numeric(entity)
+        if not entity_id or entity_id == exclude or fee is None or not salary:
+            continue
+        ranked.append((fee / salary, entity_id))
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return [entity_id for _, entity_id in ranked[:3]]
+
+
+def _payback_band(months: int) -> str:
+    if months <= 12:
+        return "excellent — under a year"
+    if months <= 18:
+        return "strong — around 18 months"
+    if months <= 36:
+        return f"solid — about {round(months / 12)} years"
+    return "longer-term — 3 years+"
+
+
+def _friendly_payback(months: int) -> str:
+    """Spec: round to a friendly figure, cap the display at a sane ceiling."""
+
+    if months > 36:
+        return "~3 years+"
+    if months <= 12:
+        return f"{months} months"
+    if months % 12 == 0:
+        years = months // 12
+        return f"{years} year" if years == 1 else f"{years} years"
+    return f"{months} months"
+
+
 def score_roi(
     answers: Mapping[str, str],
     payload: Mapping[str, Any],
@@ -180,107 +250,130 @@ def score_roi(
     *,
     definition: ToolDefinition | None = None,
 ) -> ToolResult:
-    """Use configured v1 buckets when present, otherwise normalized salary delta."""
+    """Salary-delta payback using the catalog's own numeric fields.
 
-    if definition is not None and definition.roi_buckets:
-        salary_answer = answers.get("current_salary")
-        bucket = next(
-            (
-                candidate
-                for candidate in definition.roi_buckets
-                if candidate.option_id == salary_answer
-            ),
-            None,
-        )
-        if bucket is None:
-            return unavailable_result("roi", "A configured salary band has not been selected.")
-        program_id, entity = _configured_program(answers, payload, catalog)
-        if entity is None or program_id is None:
-            return unavailable_result(
-                "roi",
-                "No published catalog program matches the selected program option.",
-            )
-        fee = _number(safe_get(entity, "fee_numeric", None))
-        discipline = " ".join(str(safe_get(entity, "discipline", "") or "").split())
-        ranked_ids = _rank_same_discipline_by_fee(catalog, discipline) if discipline else []
-        if program_id not in ranked_ids:
-            ranked_ids.insert(0, program_id)
-        program_name = str(
-            safe_get(entity, "program_name", None)
-            or safe_get(entity, "spec_name", None)
-            or program_id
-        )
-        message = (
-            f"Using the approved v1 salary-band model, the estimated payback for "
-            f"{program_name} is {bucket.payback_months} months."
-        )
-        return ToolResult(
-            partial={"headline": bucket.headline},
-            full={
-                "message": message,
-                "payback_months": bucket.payback_months,
-                "program_id": program_id,
-                "program_name": program_name,
-                **({"fee_numeric": fee} if fee is not None else {}),
-            },
-            cta_program_ids=ranked_ids[:3],
-            lead_tags={
-                "tool": "roi",
-                "payback_months": bucket.payback_months,
-                "model": "v1_salary_band",
-            },
+    expected = (job_profiles avg salary / 12) * experience_factor
+    payback  = ceil(fee_numeric / (expected - current_monthly))
+    """
+
+    program_id, entity = _configured_program(answers, payload, catalog)
+    if entity is None or program_id is None:
+        return unavailable_result(
+            "roi",
+            "No published catalog program matches the selected program option.",
         )
 
-    program_id = answers.get("program")
-    if not program_id:
-        return unavailable_result("roi", "A catalog program has not been selected.")
-    entity = _catalog_entity(catalog, program_id)
-    if entity is None:
-        return unavailable_result("roi", "The selected program is not in the loaded catalog.")
+    program_name = str(
+        safe_get(entity, "program_name", None)
+        or safe_get(entity, "specialization_name", None)
+        or safe_get(entity, "spec_name", None)
+        or program_id
+    )
     fee = _number(safe_get(entity, "fee_numeric", None))
-    post_salary = _salary_numeric(entity)
-    current_salary = _current_annual_salary(payload)
-    if fee is None or post_salary is None:
+    annual_salary = _salary_numeric(entity)
+    current_monthly = _current_monthly_salary(payload)
+    discipline = " ".join(str(safe_get(entity, "discipline", "") or "").split())
+
+    # Q4 tempers the expected figure so the number is honest, not rosy.
+    factor = 1.0
+    if definition is not None:
+        experience_step = next(
+            (step for step in definition.steps if step.type == "factor"), None
+        )
+        if experience_step is not None:
+            chosen = next(
+                (
+                    option
+                    for option in experience_step.choices
+                    if option.id == answers.get(experience_step.id)
+                ),
+                None,
+            )
+            if chosen is not None and chosen.factor is not None:
+                factor = float(chosen.factor)
+
+    lead_tags: dict[str, Any] = {"tool": "roi", "program_id": program_id}
+    # Q6 is a pure lead signal; Q3/Q5 tailor the copy. All reach the CRM.
+    for step_id in ("start_intent", "goal", "qualification"):
+        chosen_id = answers.get(step_id)
+        if chosen_id and definition is not None:
+            step = next((s for s in definition.steps if s.id == step_id), None)
+            option = (
+                next((o for o in step.choices if o.id == chosen_id), None)
+                if step is not None
+                else None
+            )
+            if option is not None:
+                lead_tags[step_id] = option.label
+
+    # Missing catalog numerics is a content gap, not a computed outcome: report
+    # it as unavailable so the reason names the absent fields.
+    if fee is None or not annual_salary:
         return unavailable_result(
             "roi",
             "Normalized fee_numeric and salary_numeric data are not available for this program.",
         )
-    if current_salary is None:
+    if current_monthly is None:
         return unavailable_result(
             "roi",
             "The current salary value or its monthly/annual period is not configured.",
         )
-    payback = _payback_months(fee, post_salary, current_salary)
-    if payback is None:
+
+    expected_monthly = (annual_salary / 12) * factor
+    monthly_delta = expected_monthly - current_monthly
+
+    # Guardrail: already earning above the program's average outcome. Reframe
+    # honestly rather than showing a fake payback — this is a real segment.
+    if monthly_delta <= 0:
         return ToolResult(
             status="cannot_compute",
-            partial={"message": "A reliable positive salary-delta payback cannot be computed."},
-            full={"message": "A reliable positive salary-delta payback cannot be computed."},
-            lead_tags={"tool": "roi", "result_status": "cannot_compute"},
-            reason=(
-                "The expected post-program salary is not higher than the supplied current "
-                "salary, or the normalized fee is not positive."
-            ),
+            partial={"headline": "Your payback picture is a little different."},
+            full={
+                "message": (
+                    "You're already earning above the average starting salary for this "
+                    "program — the value here is the qualification and progression, not "
+                    "a salary jump. A counsellor can talk through what it unlocks."
+                ),
+                "program_id": program_id,
+                "program_name": program_name,
+                "fee_numeric": fee,
+                "expected_monthly_salary": round(expected_monthly),
+                "current_monthly_salary": round(current_monthly),
+            },
+            cta_program_ids=_rank_by_roi(catalog, discipline) if discipline else [program_id],
+            lead_tags={**lead_tags, "result_status": "already_above_average"},
         )
 
-    discipline = " ".join(str(safe_get(entity, "discipline", "") or "").split())
-    ranked_ids = _rank_same_discipline(catalog, discipline, current_salary) if discipline else []
-    if not ranked_ids:
-        ranked_ids = [program_id]
+    payback = math.ceil(fee / monthly_delta)
+    # Spec: the 3 best-ROI programs in the same discipline, ranked by
+    # fee/salary. The selected program competes on the same footing rather than
+    # being pinned to the front — the point of the list is the better option.
+    ranked = _rank_by_roi(catalog, discipline) if discipline else []
+    if not ranked:
+        ranked = [program_id]
+
+    template = (definition.partial_reveal_template if definition is not None else None) or (
+        "Your payback period looks {band}."
+    )
     return ToolResult(
-        partial={"headline": f"Estimated salary-delta payback: {payback} months."},
+        partial={"headline": template.format(band=_payback_band(payback))},
         full={
             "message": (
-                f"Estimated salary-delta payback is {payback} months, using the normalized "
-                "program fee and expected annual salary data."
+                f"Program cost ₹{round(fee):,} · Expected uplift ₹{round(monthly_delta):,}/mo · "
+                f"Pays back in {_friendly_payback(payback)}"
             ),
             "payback_months": payback,
+            "payback_label": _friendly_payback(payback),
+            "program_id": program_id,
+            "program_name": program_name,
             "fee_numeric": fee,
-            "current_salary_annual": current_salary,
-            "expected_post_program_salary_annual": post_salary,
+            "monthly_uplift": round(monthly_delta),
+            "expected_monthly_salary": round(expected_monthly),
+            "current_monthly_salary": round(current_monthly),
+            "experience_factor": factor,
         },
-        cta_program_ids=ranked_ids,
-        lead_tags={"tool": "roi", "payback_months": payback},
+        cta_program_ids=ranked[:3],
+        lead_tags={**lead_tags, "payback_months": payback},
     )
 
 

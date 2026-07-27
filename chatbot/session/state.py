@@ -38,6 +38,9 @@ class LeadState(StateModel):
     # captured" flag that stops any later trigger re-rendering the form. Cleared
     # only when the session (and its whole state) expires from the store.
     captured_at: str | None = None
+    # §2.4 the placeholder-looking number we already prompted about once, so a
+    # second submission of the same number is honoured rather than blocked.
+    placeholder_prompted_for: str | None = None
 
     @property
     def captured(self) -> bool:

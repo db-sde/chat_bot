@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import random
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -164,6 +165,25 @@ def _scholarship_bank_key(payload: Mapping[str, Any]) -> str | None:
     return rendered or None
 
 
+def _draw_scholarship_questions(definition: ToolDefinition) -> tuple[ToolStep, ...]:
+    """Draw the configured per-tier count at random (spec: 2 easy, 2 medium, 2 hard).
+
+    Option order is shuffled per draw so a repeat visitor cannot pattern-match a
+    position; `correct` is stored by option id, so shuffling is safe.
+    """
+
+    drawn: list[ToolStep] = []
+    for difficulty, count in definition.serve.items():
+        pool = list(definition.question_bank.get(difficulty, ()))
+        if len(pool) < count:
+            return ()
+        for question in random.sample(pool, count):
+            options = list(question.choices)
+            random.shuffle(options)
+            drawn.append(question.model_copy(update={"options": tuple(options)}))
+    return tuple(drawn)
+
+
 def _steps_for(
     tool: str,
     definition: ToolDefinition,
@@ -172,22 +192,40 @@ def _steps_for(
     if not definition.enabled:
         return (), definition.unavailable_reason or "This tool has not been configured yet."
     if tool == "scholarship":
-        key = _scholarship_bank_key(payload)
-        steps = (
-            definition.question_bank.get(key, ())
-            if key is not None
-            else ()
-        )
-        if not steps:
-            steps = definition.question_bank.get("default", ()) or definition.steps
-        if len(steps) != 7:
-            return (
-                (),
-                "A complete seven-question scholarship bank is not configured for this program.",
-            )
+        # Setup question (fee model → waiver pool) + a random draw from the bank.
+        # The draw is recorded in the flow payload on entry so every turn of the
+        # same session serves the identical questions in the identical order.
+        if definition.setup is None:
+            return (), "The scholarship fee-model question is not configured."
+        served_ids = payload.get("served_question_ids")
+        bank = {
+            step.id: step
+            for steps in definition.question_bank.values()
+            for step in steps
+        }
+        if isinstance(served_ids, (list, tuple)) and served_ids:
+            order = payload.get("served_option_order")
+            order = order if isinstance(order, Mapping) else {}
+            served_list: list[ToolStep] = []
+            for qid in served_ids:
+                question = bank.get(qid)
+                if question is None:
+                    return (), "A served scholarship question is no longer in the bank."
+                frozen = order.get(qid)
+                if isinstance(frozen, (list, tuple)) and frozen:
+                    by_id = {option.id: option for option in question.choices}
+                    options = tuple(by_id[oid] for oid in frozen if oid in by_id)
+                    if len(options) == len(question.choices):
+                        question = question.model_copy(update={"options": options})
+                served_list.append(question)
+            served = tuple(served_list)
+        else:
+            served = _draw_scholarship_questions(definition)
+            if not served:
+                return (), "The scholarship question bank is not configured."
         if not definition.reward_bands:
             return (), "Scholarship reward bands have not been configured."
-        return tuple(steps), None
+        return (definition.setup, *served), None
     if tool == "career_quiz":
         if not 5 <= len(definition.steps) <= 7:
             return (), "A complete five-to-seven-question career quiz has not been configured."
@@ -293,7 +331,7 @@ def _validate_answer(
 ) -> tuple[str, Any, str | None] | None:
     token_value = _token_answer(message, step.id)
     raw = token_value if token_value is not None else " ".join(message.strip().split())
-    if step.type in {"choice", "bucket"}:
+    if step.type in {"choice", "bucket", "factor", "lead_tag"}:
         selected = next(
             (
                 option
@@ -348,7 +386,7 @@ def _score(
     if flow.tool == "scholarship":
         from .scholarship import score_scholarship
 
-        return score_scholarship(flow.answers, definition, flow.payload)
+        return score_scholarship(flow.answers, definition, flow.payload, catalog)
     return unavailable_result(flow.tool, "Unknown tool.")
 
 
@@ -413,6 +451,13 @@ def enter(
             content_version=content_version,
             replaced_tool=replaced_tool,
         )
+    if tool == "scholarship":
+        # Freeze this session's draw (ids + shuffled option order) so every
+        # later turn re-renders exactly the questions the user is answering.
+        payload["served_question_ids"] = [step.id for step in steps[1:]]
+        payload["served_option_order"] = {
+            step.id: [option.id for option in step.choices] for step in steps[1:]
+        }
     flow = ActiveFlow(
         tool=tool,
         step=steps[0].id,
@@ -420,10 +465,25 @@ def enter(
         payload=payload,
         version=content_version,
     )
+    # An `entity` step has no tappable options, so in a chips-only widget it can
+    # only be answered from the session's active program. Pre-fill it and open
+    # on the first question the user can actually act on (spec: ROI Q1 is
+    # "resolved via the existing entity matcher, or pre-filled").
+    first = steps[0]
+    if first.type == "entity":
+        resolved = str(payload.get("program_id") or "").strip()
+        if resolved and _catalog_entity(catalog, resolved) is not None:
+            flow.answers[first.id] = resolved
+            values = flow.payload.setdefault("answer_values", {})
+            if isinstance(values, dict):
+                values[first.id] = resolved
+            if len(steps) > 1:
+                flow.step = steps[1].id
+                first = steps[1]
     _set_flow(state, flow)
     return _question_turn(
         flow,
-        steps[0],
+        first,
         entry_copy=definition.entry_copy,
         replaced_tool=replaced_tool,
         steps=steps,
@@ -602,6 +662,13 @@ def dispatch(
     flow.step = "compute"
     result = _score(flow, definition, catalog=catalog, program_lookup=program_lookup)
     flow.payload["result"] = result.model_dump(mode="json")
+    if flow.tool == "scholarship" and result.status == "ok":
+        # Count the attempt as soon as a waiver exists, not at reveal. Counting
+        # later would let a user abandon at the lead gate and re-roll for a
+        # better score — the retake-until-max hole the waiver rule closes.
+        attempts = getattr(state, "tool_attempts", None)
+        if isinstance(attempts, dict):
+            attempts["scholarship"] = int(attempts.get("scholarship", 0) or 0) + 1
     if result.status != "ok":
         _set_flow(state, None)
         return _unavailable_turn(
@@ -636,10 +703,6 @@ def dispatch(
 def _reveal(state: Any, flow: ActiveFlow) -> ToolTurn:
     result = ToolResult.model_validate(flow.payload.get("result", {}))
     flow.step = "reveal"
-    if flow.tool == "scholarship":
-        attempts = getattr(state, "tool_attempts", None)
-        if isinstance(attempts, dict):
-            attempts["scholarship"] = int(attempts.get("scholarship", 0) or 0) + 1
     _set_flow(state, None)
     return ToolTurn(
         response=_response(

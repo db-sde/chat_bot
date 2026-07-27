@@ -103,6 +103,9 @@
     }
     var valid = leadNameValid(state.leadName) && leadPhoneValid(state.leadPhone);
     var disabled = m.leadBusy || !valid;
+    /* Errors only after the field has been touched (focus→blur) or a submit
+       attempt — never while someone is still typing their first characters. */
+    var error = m.leadError || leadFieldError(m);
     return div('db-lead',
       div('db-lead-text', esc(m.text)) +
       div('db-lead-fields',
@@ -118,11 +121,34 @@
           )
         )
       ) +
+      /* Space is reserved always, so showing/clearing the error never changes
+         the card height and the chips below never jump. */
+      div('db-lead-error', error ? esc(error) : '') +
       btn('db-lead-submit' + (disabled ? ' db-lead-submit--disabled' : ''),
         m.leadBusy ? 'Sending…' : 'Submit', '',
-        'data-action="submitLead" data-mid="'+m.id+'"' + (disabled ? ' disabled' : '')) +
-      div('db-lead-note', m.leadError ? esc(m.leadError) : 'No spam. One call, today\'s offer.')
+        'data-action="submitLead" data-mid="'+m.id+'"' + (disabled ? ' disabled' : ''))
     );
+  }
+
+  /* Spec §2.3 — one specific message for the first failing touched field. */
+  function leadFieldError(m) {
+    var touched = m.leadTouched || {};
+    if (touched.name) {
+      var n = String(state.leadName || '').trim();
+      if (!n) return 'Please enter your name';
+      if (/\d/.test(n)) return "Name can't contain numbers";
+      if (!/^[A-Za-z][A-Za-z .'-]*$/.test(n)) return "Name can't contain numbers";
+      if (n.length < 2) return 'Please enter your full name';
+    }
+    if (touched.phone) {
+      var raw = String(state.leadPhone || '');
+      var p = normalisePhone(raw);
+      if (!p) return 'Please enter your mobile number';
+      if (/[A-Za-z]/.test(raw)) return 'Numbers only, please';
+      if (p.length < 10) return 'Mobile number must be 10 digits';
+      if (!/^[6-9]/.test(p)) return 'Please enter a valid Indian mobile number';
+    }
+    return '';
   }
 
   /* §3.3 name: 2+ chars, letters/space/apostrophe/hyphen/period, no digits. */

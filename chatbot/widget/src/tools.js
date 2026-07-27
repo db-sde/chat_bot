@@ -107,7 +107,9 @@
       waiver: Number.isFinite(waiverNum) ? formatINR(waiverNum) : (result.reward_band || 'Waiver confirmed'),
       net: Number.isFinite(Number(result.net_fee)) ? formatINR(result.net_fee) : 'Confirmed on call',
       /* Standard fee is the published net plus the published waiver. */
-      standard: (Number.isFinite(Number(result.net_fee)) && Number.isFinite(waiverNum))
+      standard: Number.isFinite(Number(result.standard_fee))
+        ? formatINR(result.standard_fee)
+        : (Number.isFinite(Number(result.net_fee)) && Number.isFinite(waiverNum))
         ? formatINR(Number(result.net_fee) + waiverNum)
         : 'Not published',
       reasons: result.reasons || [result.reward_band].filter(Boolean),
