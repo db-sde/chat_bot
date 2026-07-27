@@ -394,6 +394,8 @@ def test_guided_tool_endpoint_accepts_only_activeflow_tokens(
     assert started.status_code == 200
     payload = started.json()["response"]
     assert payload["metadata"]["tool_flow"]["tool"] == "roi"
+    assert payload["metadata"]["tool_flow"]["step_total"] == 5
+    assert payload["metadata"]["tool_flow"]["step_index"] == 1
     answer = next(
         action["message"]
         for action in payload["quick_actions"]
@@ -412,3 +414,164 @@ def test_guided_tool_endpoint_accepts_only_activeflow_tokens(
         json={"session_id": session_id, "command": "Tell me about NMIMS"},
     )
     assert rejected.status_code == 422
+
+
+def test_entity_pool_actions_are_valid_on_the_surface_that_rendered_them(
+    guide_client: TestClient,
+) -> None:
+    context = guide_client.get(
+        "/api/widget/guide/context",
+        params={
+            "page_type": "specialization",
+            "entity_id": "spec-nmims-mca-cloud-computing",
+        },
+    ).json()
+    opening = context["opening"]
+    eligibility = next(
+        action
+        for action in [*opening["top"], *opening["more"]]
+        if action["chip_id"] == "eligibility"
+    )
+    first = guide_client.post(
+        "/api/widget/guide/chips",
+        json={
+            "session_id": context["session_id"],
+            "page_type": "specialization",
+            "entity_id": "spec-nmims-mca-cloud-computing",
+            "surface": eligibility["surface"],
+            "config_version": eligibility["config_version"],
+            "completed_chip_id": "eligibility",
+            "answer_state": "eligibility_borderline",
+            "card_type": "specialization",
+        },
+    )
+    assert first.status_code == 200
+    payload = first.json()
+    pooled = payload["followup"]["actions"][0]
+    assert pooled["chip_id"] not in {"eligible_programs", "counsellor"}
+
+    second = guide_client.post(
+        "/api/widget/guide/chips",
+        json={
+            "session_id": context["session_id"],
+            "page_type": "specialization",
+            "entity_id": "spec-nmims-mca-cloud-computing",
+            "surface": pooled["surface"],
+            "config_version": pooled["config_version"],
+            "completed_chip_id": pooled["chip_id"],
+            "answer_state": "careers",
+            "card_type": "specialization",
+        },
+    )
+    assert second.status_code == 200
+    navigation = second.json()["navigation"]
+    assert pooled["chip_id"] in navigation["completed_actions"]
+    assert navigation["interaction_count"] == 2
+
+
+def test_existing_lead_bypasses_tool_gate_and_reveal_actions_are_routable(
+    guide_client: TestClient,
+) -> None:
+    context = guide_client.get(
+        "/api/widget/guide/context",
+        params={"page_type": "course", "entity_id": "course-nmims-mca"},
+    ).json()
+    session_id = context["session_id"]
+    captured = guide_client.post(
+        "/api/widget/lead",
+        json={
+            "session_id": session_id,
+            "name": "Audit Learner",
+            "phone": "9000099999",
+            "source": "widget",
+            "request_id": "audit-pre-captured",
+        },
+    )
+    assert captured.status_code == 200
+
+    response = guide_client.post(
+        "/api/widget/guide/tool",
+        json={
+            "session_id": session_id,
+            "command": "tool:roi",
+            "page_type": "course",
+            "entity_id": "course-nmims-mca",
+            "request_id": "audit-roi-start",
+        },
+    ).json()["response"]
+    turn = 0
+    while response["metadata"]["tool_flow"]["step"] != "partial_reveal":
+        action = next(
+            item
+            for item in response["quick_actions"]
+            if item["message"].startswith("tool:answer:")
+        )
+        turn += 1
+        advanced = guide_client.post(
+            "/api/widget/guide/tool",
+            json={
+                "session_id": session_id,
+                "command": action["message"],
+                "page_type": "course",
+                "entity_id": "course-nmims-mca",
+                "request_id": f"audit-roi-answer-{turn}",
+            },
+        )
+        assert advanced.status_code == 200
+        response = advanced.json()["response"]
+
+    revealed = guide_client.post(
+        "/api/widget/guide/tool",
+        json={
+            "session_id": session_id,
+            "command": "tool:continue",
+            "page_type": "course",
+            "entity_id": "course-nmims-mca",
+            "request_id": "audit-roi-continue",
+        },
+    )
+    assert revealed.status_code == 200
+    payload = revealed.json()["response"]
+    assert payload["metadata"]["tool_flow"]["step"] == "reveal"
+    assert payload["components"][0]["type"] == "card_list"
+    actions = payload["quick_actions"]
+    assert [item["chip_id"] for item in actions] == [
+        "apply_now",
+        "counsellor",
+        "compare",
+    ]
+    assert all(item["chip_handler"] and item["surface"] == "tool:reveal" for item in actions)
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        "lead_form_shown",
+        "lead_form_submitted",
+        "lead_form_validation_failed",
+        "compare_opponent_selected",
+        "list_overflow_opened",
+        "chip_pool_exhausted",
+        "duplicate_request_suppressed",
+    ],
+)
+def test_browser_analytics_contract_accepts_every_declared_event(
+    guide_client: TestClient, event: str
+) -> None:
+    response = guide_client.post(
+        "/api/widget/analytics",
+        json={
+            "event": event,
+            "surface": "page:home",
+            "funnel_stage": "top",
+            "interaction_count": 0,
+            "entity": {"type": "homepage", "id": "homepage"},
+            "config_version": "test",
+            "content_version": "not_applicable",
+        },
+    )
+    assert response.status_code == 200
+
+
+def test_health_supports_head_probes(guide_client: TestClient) -> None:
+    assert guide_client.head("/health").status_code == 200

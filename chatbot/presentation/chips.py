@@ -167,11 +167,25 @@ def catalog_chip_context(entity: Any, catalog: Any) -> dict[str, bool] | None:
             (entity,), "syllabus", "semesters", "syllabus_semesters", "syllabus_content"
         ),
         "scholarship": _any_published(sources, "scholarship_available", "scholarship_types"),
-        "roi": _any_published(
-            sources,
+        # ROI requires one concrete programme plus both numeric fee and salary
+        # inputs. A university can inherit child fees for display, but passing
+        # its university id into the programme calculator creates an entity
+        # question with no tappable answer in the chips-only widget.
+        "roi": page_type in {"course", "specialization"}
+        and _any_published(
+            (entity,),
             "starting_fee_numeric",
             "total_fee_numeric",
             "fee_numeric",
+        )
+        and (
+            isinstance(safe_get(entity, "salary_numeric", None), (int, float))
+            and not isinstance(safe_get(entity, "salary_numeric", None), bool)
+            or any(
+                isinstance(safe_get(profile, "salary_numeric", None), (int, float))
+                and not isinstance(safe_get(profile, "salary_numeric", None), bool)
+                for profile in (safe_get(entity, "job_profiles", None) or [])
+            )
         ),
         "validity": _any_published(
             sources,

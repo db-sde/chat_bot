@@ -223,7 +223,7 @@
 
   /* POST one predefined ActiveFlow command. This endpoint accepts tool tokens,
      not user-authored messages. */
-  function postGuideTool(command, chip) {
+  function postGuideTool(command, chip, requestId) {
     var c = chip || {};
     return postJson('/api/widget/guide/tool', Object.assign({
       command: command,
@@ -232,9 +232,11 @@
       ctxEntityId() ? { entity_id: ctxEntityId() } : {},
       c.chip_id ? { chip_id: c.chip_id } : {},
       c.chip_surface ? { chip_surface: c.chip_surface } : {},
-      c.chip_config_version ? { chip_config_version: c.chip_config_version } : {}
+      c.chip_config_version ? { chip_config_version: c.chip_config_version } : {},
+      requestId ? { request_id: requestId } : {}
     )).then(function (payload) {
       if (payload && payload.session_id) state.sessionId = payload.session_id;
+      adoptServerContext(payload);
       return payload && payload.response ? payload.response : payload;
     });
   }
@@ -873,7 +875,8 @@
     render();
     scrollToBottom();
 
-    return postGuideTool(message, options.chip).then(function (payload) {
+    var requestId = options.requestId || ('tool-' + nextId() + '-' + Date.now());
+    return postGuideTool(message, options.chip, requestId).then(function (payload) {
       applyPayload(payload, options);
       return payload;
     }).catch(function (err) {
@@ -1294,6 +1297,8 @@
      breadcrumb/rail. The widget only renders the result. */
   function switchEntity(item) {
     if (!item || !item.id) return;
+    state.tool = null;
+    state.endScreen = null;
     state.guideBundle = null;
     state.pickerCache = {};
     var tid = beginTurn(item.label);
@@ -1317,6 +1322,8 @@
      breadcrumb reset; the recently-viewed rail, per-entity consumed chips and
      the captured lead all survive (backend `main_menu` scope). */
   function goMainMenu() {
+    state.tool = null;
+    state.endScreen = null;
     var tid = beginTurn(null);
     /* Clear only the client's view of the active entity; the rail and lead are
        re-adopted from the server response. */
@@ -1742,6 +1749,7 @@
 
     dispatchGuidedCommand('tool:' + TOOL_TOKEN_BY_KIND[kind], {
       echo: false,
+      chip: chip,
       onFail: function () { closeTool('unavailable'); }
     });
   }
@@ -1831,8 +1839,22 @@
   }
 
   function onEndPrograms() {
+    var result = state.endScreen;
     state.endScreen = null;
+    if (result && result.revealMsgs && result.revealMsgs.length) {
+      state.msgs = state.msgs.concat(result.revealMsgs);
+      setChips(result.actions || [], []);
+      render(); scrollToBottom();
+      return;
+    }
     openPicker({ kind: 'program', title: 'Browse programs' }, state.lastChip);
+  }
+
+  function closeEndScreen() {
+    var result = state.endScreen;
+    state.endScreen = null;
+    if (result) setChips(result.actions || [], []);
+    render(); scrollToBottom();
   }
   /* Clearing context must clear the backend session too, otherwise later turns
      keep resolving against the entity the user just dismissed. */
@@ -1921,15 +1943,18 @@
       state.tool = null;
       state.busy = false;
       var result = flow.result || {};
+      var revealMsgs = payloadToMsgs(payload).map(function (m) { return Object.assign({}, m, { id: nextId() }); });
+      var revealChips = chipsFrom(payload);
       if (kind === 'quiz') {
         /* The quiz reveals inline in the stream, exactly like the static flow. */
-        var msgs = payloadToMsgs(payload).map(function (m) { return Object.assign({}, m, { id: nextId() }); });
-        state.msgs = state.msgs.concat(msgs);
-        state.chips = chipsFrom(payload);
+        state.msgs = state.msgs.concat(revealMsgs);
+        setChips(revealChips, []);
         render(); scrollToBottom();
         return true;
       }
       state.endScreen = endScreenFrom(kind, result, payload);
+      state.endScreen.revealMsgs = revealMsgs.filter(function (m) { return m.kind === 'cards'; });
+      state.endScreen.actions = revealChips;
       render();
       return true;
     }
@@ -1989,16 +2014,16 @@
     var masked = maskedPhone(state.toolPhone);
     if (kind === 'roi') {
       var months = Number(result.payback_months);
+      var expectedMonthly = Number(result.expected_monthly_salary);
       return {
         kind: 'roi',
         name: name,
         masked: masked,
         program: result.program_name || 'this programme',
-        months: Number.isFinite(months) ? months : '—',
+        months: Number.isFinite(months) ? months : null,
         invest: result.fee_numeric ? formatINR(result.fee_numeric) : 'Not published',
-        avgSalary: result.expected_post_program_salary_annual
-          ? formatINR(result.expected_post_program_salary_annual) : 'Not published',
-        emi: result.emi || 'Confirmed on call',
+        annualSalary: Number.isFinite(expectedMonthly)
+          ? formatINR(expectedMonthly * 12) : 'Not published',
         verdict: result.message || (payload && (payload.message || payload.text)) || ''
       };
     }
@@ -2552,7 +2577,7 @@
           e('input','db-tool-phone-input','','type="tel" placeholder="Your number" data-action="toolPhone" value="'+esc(state.toolPhone)+'"')
         ) +
         btn('db-tool-submit','Reveal my result','','data-action="toolSubmit"') +
-        btn('db-tool-skip','Skip — show a general result','','data-action="toolSkip"');
+        btn('db-tool-skip','Not now','','data-action="toolSkip"');
     }
 
     return div('db-msg', '<div id="db-tool-widget">'+header+body+'</div>');
@@ -2657,8 +2682,13 @@
     var e2 = state.endScreen;
     var firstName = e2.name ? e2.name.split(' ')[0] : 'there';
     var headLabel = e2.kind==='roi' ? 'Your ROI result' : 'Scholarship unlocked';
-    var heroValue = e2.kind==='roi' ? (e2.months+' months') : (e2.waiver+' off');
-    var heroSub = e2.kind==='roi' ? 'estimated payback period' : 'applied to your first-semester fee';
+    var hasPayback = e2.kind === 'roi' && e2.months !== null;
+    var heroValue = e2.kind==='roi'
+      ? (hasPayback ? (e2.months+' months') : 'Needs a closer look')
+      : (e2.waiver+' off');
+    var heroSub = e2.kind==='roi'
+      ? (hasPayback ? 'estimated payback period' : 'salary uplift is not applicable')
+      : 'applied to your first-semester fee';
 
     var detail = '';
     if (e2.kind==='roi') {
@@ -2666,8 +2696,7 @@
         div('db-info-card-title', esc(e2.program)+' · the maths') +
         div('db-roi-stats',
           div('db-roi-stat',div('db-roi-stat-label','Investment')+div('db-roi-stat-value',esc(e2.invest))) +
-          div('db-roi-stat',div('db-roi-stat-label','Avg salary')+div('db-roi-stat-value',esc(e2.avgSalary))) +
-          div('db-roi-stat',div('db-roi-stat-label','EMI/mo')+div('db-roi-stat-value',esc(e2.emi)))
+          div('db-roi-stat',div('db-roi-stat-label','Est. annual salary')+div('db-roi-stat-value',esc(e2.annualSalary)))
         ) +
         div('db-roi-verdict',esc(e2.verdict))
       );
@@ -2683,8 +2712,7 @@
       ) +
       div('db-info-card',
         div('db-info-card-title','How to claim it') +
-        e2.steps.map(function(st){ return div('db-tool-step',div('db-tool-step-num',esc(st.n))+div('db-tool-step-text',esc(st.t))); }).join('') +
-        div('db-offer-locked', SVG.clock + 'Offer locked for 7 days')
+        e2.steps.map(function(st){ return div('db-tool-step',div('db-tool-step-num',esc(st.n))+div('db-tool-step-text',esc(st.t))); }).join('')
       );
     }
 
@@ -2706,13 +2734,17 @@
           div('db-end-confirm-icon',SVG.phone) +
           div('',
             div('db-end-confirm-name','Locked in, '+esc(firstName)+'.') +
-            div('db-end-confirm-sub','A counsellor will call '+e('span','db-end-confirm-phone',esc(e2.masked))+' within 30 minutes to confirm this offer. No spam.')
+            div('db-end-confirm-sub','A counsellor will call '+
+              (e2.masked ? e('span','db-end-confirm-phone',esc(e2.masked)) : 'the number you shared')+
+              ' to confirm the next step. No spam.')
           )
         ) +
         detail
       ) +
       div('db-end-footer',
-        btn('db-cta-primary','See matching programs','','data-action="endPrograms"') +
+        ((e2.revealMsgs || []).length
+          ? btn('db-cta-primary','See matching programs','','data-action="endPrograms"')
+          : '') +
         btn('db-cta-secondary','Back to chat','','data-action="closeEnd"')
       ) +
       '</div>';
@@ -2809,7 +2841,7 @@
       if (ev.key !== 'Escape') return;
       if (state.picker) { state.picker = null; state.pickerToken++; render(); }
       else if (state.details) { state.details = null; render(); }
-      else if (state.endScreen) { state.endScreen = null; render(); }
+      else if (state.endScreen) { closeEndScreen(); }
       else return;
       ev.stopPropagation();
     });
@@ -3004,7 +3036,7 @@
     });
 
     /* End screen */
-    delegate('[data-action="closeEnd"]', function(){ state.endScreen = null; render(); });
+    delegate('[data-action="closeEnd"]', function(){ closeEndScreen(); });
     delegate('[data-action="endPrograms"]', function(){ onEndPrograms(); });
   }
 

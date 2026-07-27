@@ -54,6 +54,13 @@ def test_stable_taxonomy_and_full_key_block() -> None:
         "counsellor_clicked",
         "session_start",
         "flow_abandoned",
+        "list_overflow_opened",
+        "chip_pool_exhausted",
+        "lead_form_shown",
+        "lead_form_submitted",
+        "lead_form_validation_failed",
+        "compare_opponent_selected",
+        "duplicate_request_suppressed",
     } == EVENT_NAMES
     assert set(KEY_BLOCK_FIELDS) <= event.keys()
     assert event["entity"] == {"type": "course", "id": "course-nmims-mba"}

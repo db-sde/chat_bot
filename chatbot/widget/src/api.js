@@ -87,7 +87,7 @@
 
   /* POST one predefined ActiveFlow command. This endpoint accepts tool tokens,
      not user-authored messages. */
-  function postGuideTool(command, chip) {
+  function postGuideTool(command, chip, requestId) {
     var c = chip || {};
     return postJson('/api/widget/guide/tool', Object.assign({
       command: command,
@@ -96,9 +96,11 @@
       ctxEntityId() ? { entity_id: ctxEntityId() } : {},
       c.chip_id ? { chip_id: c.chip_id } : {},
       c.chip_surface ? { chip_surface: c.chip_surface } : {},
-      c.chip_config_version ? { chip_config_version: c.chip_config_version } : {}
+      c.chip_config_version ? { chip_config_version: c.chip_config_version } : {},
+      requestId ? { request_id: requestId } : {}
     )).then(function (payload) {
       if (payload && payload.session_id) state.sessionId = payload.session_id;
+      adoptServerContext(payload);
       return payload && payload.response ? payload.response : payload;
     });
   }

@@ -601,7 +601,9 @@ class ChipEngine:
         more: tuple[ResolvedChip, ...] = ()
         tier = 1
         pool_key = _pool_key(entity_type)
-        if entity_type and pool_key in config.pools:
+        # Tool completion has an explicit conversion sequence. Replacing it
+        # with the entity exploration pool loses Apply/Compare/Counsellor.
+        if surface_key != "tool:reveal" and entity_type and pool_key in config.pools:
             pool, tier = resolve_nav_pool(
                 config,
                 entity_type=entity_type,

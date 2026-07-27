@@ -18,15 +18,18 @@
       state.tool = null;
       state.busy = false;
       var result = flow.result || {};
+      var revealMsgs = payloadToMsgs(payload).map(function (m) { return Object.assign({}, m, { id: nextId() }); });
+      var revealChips = chipsFrom(payload);
       if (kind === 'quiz') {
         /* The quiz reveals inline in the stream, exactly like the static flow. */
-        var msgs = payloadToMsgs(payload).map(function (m) { return Object.assign({}, m, { id: nextId() }); });
-        state.msgs = state.msgs.concat(msgs);
-        state.chips = chipsFrom(payload);
+        state.msgs = state.msgs.concat(revealMsgs);
+        setChips(revealChips, []);
         render(); scrollToBottom();
         return true;
       }
       state.endScreen = endScreenFrom(kind, result, payload);
+      state.endScreen.revealMsgs = revealMsgs.filter(function (m) { return m.kind === 'cards'; });
+      state.endScreen.actions = revealChips;
       render();
       return true;
     }
@@ -86,16 +89,16 @@
     var masked = maskedPhone(state.toolPhone);
     if (kind === 'roi') {
       var months = Number(result.payback_months);
+      var expectedMonthly = Number(result.expected_monthly_salary);
       return {
         kind: 'roi',
         name: name,
         masked: masked,
         program: result.program_name || 'this programme',
-        months: Number.isFinite(months) ? months : '—',
+        months: Number.isFinite(months) ? months : null,
         invest: result.fee_numeric ? formatINR(result.fee_numeric) : 'Not published',
-        avgSalary: result.expected_post_program_salary_annual
-          ? formatINR(result.expected_post_program_salary_annual) : 'Not published',
-        emi: result.emi || 'Confirmed on call',
+        annualSalary: Number.isFinite(expectedMonthly)
+          ? formatINR(expectedMonthly * 12) : 'Not published',
         verdict: result.message || (payload && (payload.message || payload.text)) || ''
       };
     }

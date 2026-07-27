@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import re
+import logging
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -41,6 +42,11 @@ _CONTINUE_TOKENS = frozenset(
     }
 )
 _ANSWER_TOKEN = re.compile(r"^tool:answer:([^:]+):(.+)$", re.IGNORECASE)
+logger = logging.getLogger(__name__)
+_PUBLIC_UNAVAILABLE = (
+    "This result is not available for the selected option right now. "
+    "You can continue exploring or talk to a counsellor."
+)
 
 
 class ToolResult(BaseModel):
@@ -120,13 +126,10 @@ def _unavailable_turn(
     result: ToolResult | None = None,
 ) -> ToolTurn:
     result = result or unavailable_result(tool, reason)
+    logger.warning("%s tool unavailable: %s", tool, result.reason or reason)
     return ToolTurn(
         response=_response(
-            result.reason or "Tool content is unavailable.",
-            actions=(
-                ("Talk to a counsellor", "Call me"),
-                ("Continue exploring", "Browse programs"),
-            ),
+            _PUBLIC_UNAVAILABLE,
             metadata={
                 "tool_flow": {
                     "tool": tool,
@@ -261,6 +264,11 @@ def _question_turn(
     replaced_tool: str | None = None,
     steps: Sequence[ToolStep] = (),
 ) -> ToolTurn:
+    visible_steps = tuple(
+        candidate
+        for candidate in steps
+        if not (candidate.type == "entity" and candidate.id in flow.answers)
+    )
     action_pairs = [
         (
             option.label,
@@ -285,8 +293,8 @@ def _question_turn(
                     # can lay them out without re-deriving them.
                     "prompt": step.prompt,
                     "entry_copy": entry_copy or None,
-                    "step_index": _step_position(step, steps),
-                    "step_total": len(steps) or None,
+                    "step_index": _step_position(step, visible_steps),
+                    "step_total": len(visible_steps) or None,
                 }
             },
         ),
@@ -572,6 +580,8 @@ def dispatch(
                 content_version=content_version,
                 result=result,
             )
+        if lead_complete:
+            return _reveal(state, flow)
         flow.step = "await_lead"
         return ToolTurn(
             response=_response(
@@ -669,7 +679,7 @@ def dispatch(
         attempts = getattr(state, "tool_attempts", None)
         if isinstance(attempts, dict):
             attempts["scholarship"] = int(attempts.get("scholarship", 0) or 0) + 1
-    if result.status != "ok":
+    if result.status == "content_unavailable":
         _set_flow(state, None)
         return _unavailable_turn(
             flow.tool,
@@ -707,11 +717,6 @@ def _reveal(state: Any, flow: ActiveFlow) -> ToolTurn:
     return ToolTurn(
         response=_response(
             _render_result_text(result.full, "Your full result is ready."),
-            actions=(
-                ("Apply now", "Apply now"),
-                ("Talk to a counsellor", "Call me"),
-                ("Compare options", "Compare programs"),
-            ),
             metadata={
                 "tool_flow": {
                     "tool": flow.tool,

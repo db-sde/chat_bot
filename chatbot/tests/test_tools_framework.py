@@ -131,7 +131,7 @@ def test_spec_shaped_tool_content_is_enabled_unless_explicitly_disabled(
     assert definition.enabled is True
 
 
-def test_disabled_tool_exits_honestly_with_conversion_actions(tmp_path: Path) -> None:
+def test_disabled_tool_exits_honestly_for_integration_owned_actions(tmp_path: Path) -> None:
     path = tmp_path / "tools.json"
     document = _content_document(version="disabled-v3")
     document["tools"]["roi"]["enabled"] = False
@@ -145,10 +145,8 @@ def test_disabled_tool_exits_honestly_with_conversion_actions(tmp_path: Path) ->
     assert turn.answered_step is None
     assert turn.response.metadata["tool_flow"]["version"] == "disabled-v3"
     assert state.active_flow is None
-    assert [action.message for action in turn.response.quick_actions] == [
-        "Call me",
-        "Browse programs",
-    ]
+    assert turn.response.quick_actions == []
+    assert "ROI content is pending" not in turn.response.text
 
 
 def test_career_flow_runs_questions_partial_lead_reveal_and_exit(tmp_path: Path) -> None:
@@ -194,11 +192,9 @@ def test_career_flow_runs_questions_partial_lead_reveal_and_exit(tmp_path: Path)
     assert turn.result is not None
     assert turn.result.full["top_discipline"] == "management"
     assert state.active_flow is None
-    assert [action.message for action in turn.response.quick_actions] == [
-        "Apply now",
-        "Call me",
-        "Compare programs",
-    ]
+    # Config-owned reveal actions are attached by the API integration layer,
+    # not invented inside the transport-neutral tool engine.
+    assert turn.response.quick_actions == []
 
 
 def test_current_view_is_read_only_and_uses_the_flow_pinned_snapshot(tmp_path: Path) -> None:
@@ -294,7 +290,7 @@ def test_roi_refuses_to_parse_missing_numeric_shadow_fields() -> None:
     assert "salary_numeric" in (result.reason or "")
 
 
-def test_roi_flow_preserves_cannot_compute_status_on_safe_exit(tmp_path: Path) -> None:
+def test_roi_flow_preserves_cannot_compute_as_an_honest_reveal(tmp_path: Path) -> None:
     path = tmp_path / "tools.json"
     _write_json(path, _content_document())
     state = ConversationState(session_id="roi-cannot-compute")
@@ -321,6 +317,13 @@ def test_roi_flow_preserves_cannot_compute_status_on_safe_exit(tmp_path: Path) -
     assert turn.content_version == "v1"
     assert turn.response.metadata["tool_flow"]["status"] == "cannot_compute"
     assert turn.response.metadata["tool_flow"]["version"] == "v1"
+    assert turn.lifecycle == "partial_reveal"
+    assert state.active_flow is not None
+    lead_gate = engine.dispatch(state, "tool:continue")
+    assert lead_gate is not None and lead_gate.lifecycle == "await_lead"
+    reveal = engine.resume_after_lead(state)
+    assert reveal is not None and reveal.lifecycle == "reveal"
+    assert reveal.result is not None and reveal.result.status == "cannot_compute"
     assert state.active_flow is None
 
 

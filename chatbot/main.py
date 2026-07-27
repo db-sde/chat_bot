@@ -39,6 +39,7 @@ from leads.funnel import LeadFunnel
 from leads.webhook import CRMWebhook
 from presentation.chips import (
     catalog_chip_context,
+    chip_actions,
     faq_chips_for,
     followup_payload,
     opening_payload,
@@ -267,6 +268,99 @@ class GuidedWidgetService:
         if cards:
             payload.components = [*payload.components, CardListComponent(items=cards)]
 
+    @staticmethod
+    def remember_rendered_actions(
+        state: ConversationState, *groups: Any
+    ) -> None:
+        """Persist the exact action snapshot the client is allowed to tap."""
+
+        action_ids: list[str] = []
+        for group in groups:
+            for item in group or ():
+                value = (
+                    item.get("chip_id")
+                    if isinstance(item, Mapping)
+                    else getattr(item, "id", None) or getattr(item, "chip_id", None)
+                )
+                rendered = str(value or "").strip()
+                if rendered and rendered not in action_ids:
+                    action_ids.append(rendered)
+        state.navigation.rendered_actions = action_ids
+
+    def attach_tool_reveal_experience(
+        self, state: ConversationState, turn: Any
+    ) -> None:
+        """Attach catalog cards and config-owned post-tool actions."""
+
+        self.attach_tool_reveal_cards(turn)
+        lifecycle = getattr(turn, "lifecycle", "")
+        payload = getattr(turn, "response", None)
+        if lifecycle == "exit" and payload is not None:
+            entity_id = state.navigation.entity_id or state.focus.entity_id or ""
+            entity = self.catalog.get_entity(entity_id) if entity_id else None
+            opening = self.journey_engine.opening(
+                state.navigation.page_type,
+                entity_context=catalog_chip_context(entity, self.catalog),
+            )
+            correlation_id = logging_setup.correlation_id(
+                state.session_id, max(state.navigation.interaction_count, 1)
+            )
+            rendered = (*opening.top, *opening.more)
+            payload.quick_actions = chip_actions(
+                rendered,
+                surface=opening.surface,
+                config_version=opening.config_version,
+                content_version=getattr(turn, "content_version", None)
+                or "not_applicable",
+                interaction_count=state.navigation.interaction_count,
+                correlation_id=correlation_id,
+            )
+            state.navigation.surface = opening.surface
+            state.navigation.current_node = opening.surface
+            state.navigation.config_version = opening.config_version
+            self.remember_rendered_actions(state, rendered)
+            return
+        if lifecycle != "reveal":
+            return
+        result = getattr(turn, "result", None)
+        if result is None or payload is None:
+            return
+        entity_id = state.navigation.entity_id or state.focus.entity_id or ""
+        entity = self.catalog.get_entity(entity_id) if entity_id else None
+        entity_type = entity_page_type(entity) if entity is not None else None
+        context = state.session_context
+        active_key = context.active.key if context.active else ""
+        followup = self.chip_engine.lookup(
+            page_type=state.navigation.page_type,
+            answer_state="tool_reveal",
+            interaction_count=state.navigation.interaction_count,
+            state=state,
+            entity_context=catalog_chip_context(entity, self.catalog),
+            entity_type=entity_type,
+            consumed=context.consumed_for(active_key),
+            faq_chips=faq_chips_for(
+                entity,
+                self.chip_map.snapshot(),
+                context.consumed_for(active_key),
+            ),
+        )
+        correlation_id = logging_setup.correlation_id(
+            state.session_id, max(state.navigation.interaction_count, 1)
+        )
+        payload.quick_actions = chip_actions(
+            followup.chips,
+            surface=followup.surface,
+            config_version=followup.config_version,
+            content_version=getattr(turn, "content_version", None) or "not_applicable",
+            interaction_count=followup.interaction_count,
+            correlation_id=correlation_id,
+            lead_tags=result.lead_tags,
+        )
+        state.navigation.surface = followup.surface
+        state.navigation.current_node = followup.surface
+        state.navigation.config_version = followup.config_version
+        self.remember_rendered_actions(state, followup.chips)
+
     def emit_duplicate_suppressed(self, session_id: str, surface: str) -> None:
         """§8 confirms the idempotency guard fired."""
         try:
@@ -368,11 +462,11 @@ class GuidedWidgetService:
             return False
         action_surface = str(surface or state.navigation.surface or "")
         declared = config.surfaces.get(action_surface)
-        declared_ids = (
-            set((*declared.top, *declared.more, *declared.follow))
-            if declared is not None
-            else set()
-        )
+        declared_ids = set(state.navigation.rendered_actions)
+        if not declared_ids and declared is not None:
+            # Compatibility for sessions created before rendered snapshots were
+            # persisted. New responses always populate rendered_actions.
+            declared_ids = set((*declared.top, *declared.more, *declared.follow))
         is_conversion = chip_id in config.progression.conversion_chips
         if not is_conversion and (
             action_surface != state.navigation.surface or chip_id not in declared_ids
@@ -543,6 +637,22 @@ async def widget_guide_context_endpoint(
     state_value = await service.session_store.get(resolved_session_id) or ConversationState(
         session_id=resolved_session_id
     )
+    context_changed = (
+        state_value.navigation.page_type != resolved_page_type
+        or state_value.navigation.entity_id
+        != (str(resolved_entity_id) if resolved_entity_id else None)
+    )
+    if state_value.active_flow is not None and context_changed:
+        active_tool = state_value.active_flow.tool
+        version = state_value.active_flow.version
+        service.tools.abandon(state_value, reason="context_switch")
+        service.emit_funnel_event(
+            FLOW_ABANDONED,
+            state_value,
+            surface=f"tool:{active_tool}",
+            content_version=version or "not_applicable",
+            attributes={"tool": active_tool, "reason": "context_switch"},
+        )
     if resolved_entity_id:
         service._apply_catalog_focus(state_value, str(resolved_entity_id))
         # §11 the landing page seeds the session context once; from then on the
@@ -563,6 +673,7 @@ async def widget_guide_context_endpoint(
         entity_id=str(resolved_entity_id) if resolved_entity_id else None,
         config_version=opening.config_version,
     )
+    service.remember_rendered_actions(state_value, opening.top, opening.more)
     await service.session_store.set(state_value)
     correlation_id = logging_setup.correlation_id(
         resolved_session_id, max(state_value.navigation.interaction_count, 0)
@@ -595,20 +706,21 @@ async def widget_guide_chips_endpoint(
     existing = await service.session_store.get(session_id)
     state_value = existing or ConversationState(session_id=session_id)
     current_version = service.chip_map.snapshot().version
-    # §11 the session owns context: the landing page seeds it once and is never
-    # re-applied. An entity change is therefore a legitimate pivot, not stale
-    # context, so navigation re-syncs to whatever the widget is now showing.
+    # Validate against the response that actually rendered the chip before a
+    # legitimate context pivot can replace its origin surface.
+    action_recorded = service.record_chip_action(
+        state_value,
+        chip_id=command.completed_chip_id,
+        surface=command.surface,
+        config_version=command.config_version,
+    )
+    if command.completed_chip_id and not action_recorded:
+        raise HTTPException(status_code=409, detail="This guided action is stale")
     sync_page_navigation(
         state_value,
         page_type=command.page_type,
         entity_id=command.entity_id,
         config_version=current_version,
-    )
-    service.record_chip_action(
-        state_value,
-        chip_id=command.completed_chip_id,
-        surface=command.surface,
-        config_version=command.config_version,
     )
     advance_answer_navigation(state_value, answer_state=command.answer_state)
 
@@ -645,6 +757,9 @@ async def widget_guide_chips_endpoint(
     state_value.navigation.surface = followup.surface
     state_value.navigation.current_node = followup.surface
     state_value.navigation.config_version = followup.config_version
+    service.remember_rendered_actions(
+        state_value, followup.chips, followup.more, [followup.conversion]
+    )
     await service.session_store.set(state_value)
     correlation_id = logging_setup.correlation_id(
         session_id, max(state_value.navigation.interaction_count, 1)
@@ -663,8 +778,11 @@ async def widget_guide_tool_endpoint(
 ) -> dict[str, Any]:
     service = _service(request)
     session_id = command.session_id or str(uuid4())
+    request_key = (
+        f"tool:{session_id}:{command.request_id}" if command.request_id else None
+    )
     # §5.2 a duplicate tap must not advance the ActiveFlow twice.
-    cached = service.idempotent_hit(command.request_id)
+    cached = service.idempotent_hit(request_key)
     if cached is not None:
         service.emit_duplicate_suppressed(session_id, f"tool:{command.command}")
         return cached
@@ -676,12 +794,14 @@ async def widget_guide_tool_endpoint(
     }
     tool_id = entry_tools.get(command.command)
     if tool_id:
-        service.record_chip_action(
+        action_recorded = service.record_chip_action(
             state_value,
             chip_id=command.chip_id,
             surface=command.chip_surface,
             config_version=command.chip_config_version,
         )
+        if command.chip_id and not action_recorded:
+            raise HTTPException(status_code=409, detail="This guided action is stale")
         entity_id = command.entity_id or state_value.navigation.entity_id
         turn = service.tools.enter(
             state_value,
@@ -701,7 +821,11 @@ async def widget_guide_tool_endpoint(
     else:
         if state_value.active_flow is None:
             raise HTTPException(status_code=409, detail="No guided tool flow is active")
-        turn = service.tools.dispatch(state_value, command.command)
+        turn = service.tools.dispatch(
+            state_value,
+            command.command,
+            lead_complete=state_value.lead.captured,
+        )
         if turn is None:
             raise HTTPException(status_code=409, detail="Invalid guided tool command")
         if str(turn.lifecycle) == "exit" and state_value.active_flow is None:
@@ -709,14 +833,14 @@ async def widget_guide_tool_endpoint(
                 state_value.navigation.page_type, NavigationStep.HOMEPAGE
             )
     service.emit_tool_turn(state_value, turn)
-    service.attach_tool_reveal_cards(turn)
+    service.attach_tool_reveal_experience(state_value, turn)
     await service.session_store.set(state_value)
     tool_response = {
         "session_id": session_id,
         "response": turn.response.model_dump(mode="json", exclude_none=True),
         "navigation": navigation_payload(state_value),
     }
-    service.idempotent_store(command.request_id, tool_response)
+    service.idempotent_store(request_key, tool_response)
     return tool_response
 
 
@@ -908,6 +1032,17 @@ async def widget_context_clear_endpoint(
         # breadcrumb stack reset; the recently-viewed rail, every entity's
         # consumed chip state, and the captured lead all survive.
         context = state_value.session_context
+        if state_value.active_flow is not None:
+            active_tool = state_value.active_flow.tool
+            version = state_value.active_flow.version
+            service.tools.abandon(state_value, reason="main_menu")
+            service.emit_funnel_event(
+                FLOW_ABANDONED,
+                state_value,
+                surface=f"tool:{active_tool}",
+                content_version=version or "not_applicable",
+                attributes={"tool": active_tool, "reason": "main_menu"},
+            )
         context.active = None
         context.stack.clear()
         state_value.focus.clear()
@@ -917,6 +1052,7 @@ async def widget_context_clear_endpoint(
             page_type="homepage",
             config_version=opening.config_version,
         )
+        service.remember_rendered_actions(state_value, opening.top, opening.more)
         await service.session_store.set(state_value)
         return ContextClearResponse(
             session_id=command.session_id,
@@ -944,6 +1080,7 @@ async def widget_context_clear_endpoint(
             page_type="homepage",
             config_version=opening.config_version,
         )
+        service.remember_rendered_actions(state_value, opening.top, opening.more)
     await service.session_store.set(state_value)
     return ContextClearResponse(
         session_id=command.session_id,
@@ -990,21 +1127,38 @@ async def widget_lead_endpoint(
 ) -> WidgetLeadResponse:
     service = _service(request)
     session_id = lead.session_id or str(uuid4())
+    request_key = f"lead:{session_id}:{lead.request_id}" if lead.request_id else None
     # §5.2 a duplicate submission id returns the cached response — never a
     # second CRM record.
-    cached = service.idempotent_hit(lead.request_id)
+    cached = service.idempotent_hit(request_key)
     if cached is not None:
         service.emit_duplicate_suppressed(session_id, "lead_form")
         return WidgetLeadResponse.model_validate(cached)
     state_value = await service.session_store.get_or_create(session_id)
     # §4 once captured, never re-capture: acknowledge and pass straight through.
     if state_value.lead.captured:
+        tool_payload: ResponsePayload | None = None
+        if (
+            state_value.active_flow is not None
+            and state_value.active_flow.step == "await_lead"
+        ):
+            tool_turn = service.tools.resume_after_lead(state_value)
+            if tool_turn is not None and tool_turn.consumed:
+                service.emit_tool_turn(state_value, tool_turn)
+                service.attach_tool_reveal_experience(state_value, tool_turn)
+                tool_payload = tool_turn.response
+                await service.session_store.set(state_value)
         response = WidgetLeadResponse(
             session_id=session_id,
             message="We'll use the number you shared.",
+            response=(
+                tool_payload.model_dump(mode="json", exclude_none=True)
+                if tool_payload is not None
+                else None
+            ),
             already_captured=True,
         )
-        service.idempotent_store(lead.request_id, response.model_dump(mode="json"))
+        service.idempotent_store(request_key, response.model_dump(mode="json"))
         return response
     tool_lead_tags: dict[str, Any] = {}
     active_flow = state_value.active_flow
@@ -1072,7 +1226,7 @@ async def widget_lead_endpoint(
                 service.emit_tool_turn(state_value, tool_turn)
                 # The reveal reached through the lead gate needs the same
                 # recommended cards as the one reached through the tool endpoint.
-                service.attach_tool_reveal_cards(tool_turn)
+                service.attach_tool_reveal_experience(state_value, tool_turn)
                 tool_payload = tool_turn.response
         else:
             service.tools.abandon(state_value, reason="lead_capture")
@@ -1093,10 +1247,11 @@ async def widget_lead_endpoint(
             else None
         ),
     )
-    service.idempotent_store(lead.request_id, result.model_dump(mode="json"))
+    service.idempotent_store(request_key, result.model_dump(mode="json"))
     return result
 
 
+@app.head("/health", include_in_schema=False)
 @app.get("/health", response_model=HealthResponse)
 async def health_endpoint(request: Request) -> dict[str, Any]:
     service = _service(request)

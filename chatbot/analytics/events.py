@@ -25,6 +25,13 @@ APPLY_CLICKED: Final = "apply_clicked"
 COUNSELLOR_CLICKED: Final = "counsellor_clicked"
 SESSION_START: Final = "session_start"
 FLOW_ABANDONED: Final = "flow_abandoned"
+LIST_OVERFLOW_OPENED: Final = "list_overflow_opened"
+CHIP_POOL_EXHAUSTED: Final = "chip_pool_exhausted"
+LEAD_FORM_SHOWN: Final = "lead_form_shown"
+LEAD_FORM_SUBMITTED: Final = "lead_form_submitted"
+LEAD_FORM_VALIDATION_FAILED: Final = "lead_form_validation_failed"
+COMPARE_OPPONENT_SELECTED: Final = "compare_opponent_selected"
+DUPLICATE_REQUEST_SUPPRESSED: Final = "duplicate_request_suppressed"
 
 EVENT_NAMES: Final = frozenset(
     {
@@ -42,6 +49,13 @@ EVENT_NAMES: Final = frozenset(
         COUNSELLOR_CLICKED,
         SESSION_START,
         FLOW_ABANDONED,
+        LIST_OVERFLOW_OPENED,
+        CHIP_POOL_EXHAUSTED,
+        LEAD_FORM_SHOWN,
+        LEAD_FORM_SUBMITTED,
+        LEAD_FORM_VALIDATION_FAILED,
+        COMPARE_OPPONENT_SELECTED,
+        DUPLICATE_REQUEST_SUPPRESSED,
     }
 )
 FUNNEL_STAGES: Final = frozenset({"top", "mid", "bottom"})

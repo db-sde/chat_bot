@@ -112,6 +112,7 @@ def sync_page_navigation(
     if journey_changed:
         navigation.interaction_count = 0
         navigation.completed_actions.clear()
+        navigation.rendered_actions.clear()
         navigation.step = PAGE_STEPS[normalized]
         navigation.surface = PAGE_SURFACES[normalized]
         navigation.current_node = PAGE_SURFACES[normalized]

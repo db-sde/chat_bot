@@ -19,7 +19,8 @@
     render();
     scrollToBottom();
 
-    return postGuideTool(message, options.chip).then(function (payload) {
+    var requestId = options.requestId || ('tool-' + nextId() + '-' + Date.now());
+    return postGuideTool(message, options.chip, requestId).then(function (payload) {
       applyPayload(payload, options);
       return payload;
     }).catch(function (err) {
@@ -440,6 +441,8 @@
      breadcrumb/rail. The widget only renders the result. */
   function switchEntity(item) {
     if (!item || !item.id) return;
+    state.tool = null;
+    state.endScreen = null;
     state.guideBundle = null;
     state.pickerCache = {};
     var tid = beginTurn(item.label);
@@ -463,6 +466,8 @@
      breadcrumb reset; the recently-viewed rail, per-entity consumed chips and
      the captured lead all survive (backend `main_menu` scope). */
   function goMainMenu() {
+    state.tool = null;
+    state.endScreen = null;
     var tid = beginTurn(null);
     /* Clear only the client's view of the active entity; the rail and lead are
        re-adopted from the server response. */
@@ -888,6 +893,7 @@
 
     dispatchGuidedCommand('tool:' + TOOL_TOKEN_BY_KIND[kind], {
       echo: false,
+      chip: chip,
       onFail: function () { closeTool('unavailable'); }
     });
   }
@@ -977,8 +983,22 @@
   }
 
   function onEndPrograms() {
+    var result = state.endScreen;
     state.endScreen = null;
+    if (result && result.revealMsgs && result.revealMsgs.length) {
+      state.msgs = state.msgs.concat(result.revealMsgs);
+      setChips(result.actions || [], []);
+      render(); scrollToBottom();
+      return;
+    }
     openPicker({ kind: 'program', title: 'Browse programs' }, state.lastChip);
+  }
+
+  function closeEndScreen() {
+    var result = state.endScreen;
+    state.endScreen = null;
+    if (result) setChips(result.actions || [], []);
+    render(); scrollToBottom();
   }
   /* Clearing context must clear the backend session too, otherwise later turns
      keep resolving against the entity the user just dismissed. */

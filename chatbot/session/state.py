@@ -87,6 +87,10 @@ class NavigationState(StateModel):
     specialization_id: str | None = None
     interaction_count: int = Field(default=0, ge=0)
     completed_actions: list[str] = Field(default_factory=list)
+    # Exact action ids last rendered by the server. Entity pools can legally
+    # backfill chips that are not part of a surface's static seed, so validating
+    # against the config declaration alone rejects actions we just displayed.
+    rendered_actions: list[str] = Field(default_factory=list)
     config_version: str = ""
 
     def mark_completed(self, chip_id: str | None) -> bool:

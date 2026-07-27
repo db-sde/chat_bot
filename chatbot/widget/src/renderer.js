@@ -462,7 +462,7 @@
           e('input','db-tool-phone-input','','type="tel" placeholder="Your number" data-action="toolPhone" value="'+esc(state.toolPhone)+'"')
         ) +
         btn('db-tool-submit','Reveal my result','','data-action="toolSubmit"') +
-        btn('db-tool-skip','Skip — show a general result','','data-action="toolSkip"');
+        btn('db-tool-skip','Not now','','data-action="toolSkip"');
     }
 
     return div('db-msg', '<div id="db-tool-widget">'+header+body+'</div>');
@@ -567,8 +567,13 @@
     var e2 = state.endScreen;
     var firstName = e2.name ? e2.name.split(' ')[0] : 'there';
     var headLabel = e2.kind==='roi' ? 'Your ROI result' : 'Scholarship unlocked';
-    var heroValue = e2.kind==='roi' ? (e2.months+' months') : (e2.waiver+' off');
-    var heroSub = e2.kind==='roi' ? 'estimated payback period' : 'applied to your first-semester fee';
+    var hasPayback = e2.kind === 'roi' && e2.months !== null;
+    var heroValue = e2.kind==='roi'
+      ? (hasPayback ? (e2.months+' months') : 'Needs a closer look')
+      : (e2.waiver+' off');
+    var heroSub = e2.kind==='roi'
+      ? (hasPayback ? 'estimated payback period' : 'salary uplift is not applicable')
+      : 'applied to your first-semester fee';
 
     var detail = '';
     if (e2.kind==='roi') {
@@ -576,8 +581,7 @@
         div('db-info-card-title', esc(e2.program)+' · the maths') +
         div('db-roi-stats',
           div('db-roi-stat',div('db-roi-stat-label','Investment')+div('db-roi-stat-value',esc(e2.invest))) +
-          div('db-roi-stat',div('db-roi-stat-label','Avg salary')+div('db-roi-stat-value',esc(e2.avgSalary))) +
-          div('db-roi-stat',div('db-roi-stat-label','EMI/mo')+div('db-roi-stat-value',esc(e2.emi)))
+          div('db-roi-stat',div('db-roi-stat-label','Est. annual salary')+div('db-roi-stat-value',esc(e2.annualSalary)))
         ) +
         div('db-roi-verdict',esc(e2.verdict))
       );
@@ -593,8 +597,7 @@
       ) +
       div('db-info-card',
         div('db-info-card-title','How to claim it') +
-        e2.steps.map(function(st){ return div('db-tool-step',div('db-tool-step-num',esc(st.n))+div('db-tool-step-text',esc(st.t))); }).join('') +
-        div('db-offer-locked', SVG.clock + 'Offer locked for 7 days')
+        e2.steps.map(function(st){ return div('db-tool-step',div('db-tool-step-num',esc(st.n))+div('db-tool-step-text',esc(st.t))); }).join('')
       );
     }
 
@@ -616,13 +619,17 @@
           div('db-end-confirm-icon',SVG.phone) +
           div('',
             div('db-end-confirm-name','Locked in, '+esc(firstName)+'.') +
-            div('db-end-confirm-sub','A counsellor will call '+e('span','db-end-confirm-phone',esc(e2.masked))+' within 30 minutes to confirm this offer. No spam.')
+            div('db-end-confirm-sub','A counsellor will call '+
+              (e2.masked ? e('span','db-end-confirm-phone',esc(e2.masked)) : 'the number you shared')+
+              ' to confirm the next step. No spam.')
           )
         ) +
         detail
       ) +
       div('db-end-footer',
-        btn('db-cta-primary','See matching programs','','data-action="endPrograms"') +
+        ((e2.revealMsgs || []).length
+          ? btn('db-cta-primary','See matching programs','','data-action="endPrograms"')
+          : '') +
         btn('db-cta-secondary','Back to chat','','data-action="closeEnd"')
       ) +
       '</div>';

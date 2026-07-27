@@ -24,7 +24,7 @@
       if (ev.key !== 'Escape') return;
       if (state.picker) { state.picker = null; state.pickerToken++; render(); }
       else if (state.details) { state.details = null; render(); }
-      else if (state.endScreen) { state.endScreen = null; render(); }
+      else if (state.endScreen) { closeEndScreen(); }
       else return;
       ev.stopPropagation();
     });
@@ -219,7 +219,7 @@
     });
 
     /* End screen */
-    delegate('[data-action="closeEnd"]', function(){ state.endScreen = null; render(); });
+    delegate('[data-action="closeEnd"]', function(){ closeEndScreen(); });
     delegate('[data-action="endPrograms"]', function(){ onEndPrograms(); });
   }
 
