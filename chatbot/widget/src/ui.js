@@ -119,6 +119,15 @@
     });
 
     /* Lead submit */
+    delegate('[data-action="expandLead"]', function(el){
+      var mid = el.getAttribute('data-mid');
+      var msg = state.msgs.find(function(m){ return m.id === mid; });
+      if (!msg || msg.leadDone) return;
+      msg.leadExpanded = true;
+      var card = el.closest('.db-lead');
+      if (card) card.classList.add('db-lead--expanded');
+      el.setAttribute('aria-expanded', 'true');
+    });
     delegate('[data-action="submitLead"]', function(el){
       submitLead(el.getAttribute('data-mid'));
     });
@@ -197,6 +206,13 @@
     });
     delegate('[data-action="toolAnswer"]', function(el){ toolAnswer(el.getAttribute('data-opt'), parseInt(el.getAttribute('data-oi'))); });
     delegate('[data-action="toolReveal"]', function(){ toolReveal(); });
+    delegate('[data-action="expandToolLead"]', function(el){
+      if (!state.tool || state.tool.phase !== 'lead') return;
+      state.tool.leadExpanded = true;
+      var stage = el.closest('.db-tool-lead-stage');
+      if (stage) stage.classList.add('db-tool-lead-stage--expanded');
+      el.setAttribute('aria-expanded', 'true');
+    });
     delegate('[data-action="toolName"]', function(el){ state.toolName = el.value; }, 'input');
     delegate('[data-action="toolPhone"]', function(el){ state.toolPhone = el.value; }, 'input');
     delegate('[data-action="toolSubmit"]', function(){ toolSubmit(); });

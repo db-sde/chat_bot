@@ -1706,7 +1706,7 @@
     state.lead = null;
     state.leadName = ''; state.leadPhone = '';
     var tid = beginTurn(null);
-    settleTurn(tid, [{ kind: 'lead', text: 'Prefer a different number? Enter it below.' }], null);
+    settleTurn(tid, [{ kind: 'lead', text: 'Prefer a different number? Enter it below.', leadExpanded: true }], null);
     emitAnalytics('lead_form_shown', state.lastChip);
     loadFollowups(null, state.lastChip).catch(function () {});
   }
@@ -1969,7 +1969,7 @@
     }
 
     if (step === 'await_lead') {
-      state.tool = Object.assign({}, base, { kind: kind, phase: 'lead' });
+      state.tool = Object.assign({}, base, { kind: kind, phase: 'lead', leadExpanded: false });
       state.busy = false;
       render(); scrollToBottom();
       return true;
@@ -2221,8 +2221,9 @@
     /* Errors only after the field has been touched (focus→blur) or a submit
        attempt — never while someone is still typing their first characters. */
     var error = m.leadError || leadFieldError(m);
-    return div('db-lead',
-      div('db-lead-text', esc(m.text)) +
+    var expanded = m.leadExpanded === true;
+    var bodyId = 'lead-body-' + m.id;
+    var formBody = div('db-lead-form-body',
       div('db-lead-fields',
         div('db-lead-field',
           e('label','db-lead-label','Name','for="db-lead-name-'+m.id+'"') +
@@ -2241,7 +2242,17 @@
       div('db-lead-error', error ? esc(error) : '') +
       btn('db-lead-submit' + (disabled ? ' db-lead-submit--disabled' : ''),
         m.leadBusy ? 'Sending…' : 'Submit', '',
-        'data-action="submitLead" data-mid="'+m.id+'"' + (disabled ? ' disabled' : ''))
+        'data-action="submitLead" data-mid="'+m.id+'"' + (disabled ? ' disabled' : '')),
+      'id="' + bodyId + '"'
+    );
+    return div('db-lead' + (expanded ? ' db-lead--expanded' : ''),
+      div('db-lead-text', esc(m.text)) +
+      div('db-lead-continue-wrap',
+        btn('db-lead-continue', 'Continue', '',
+          'data-action="expandLead" data-mid="' + m.id + '" aria-expanded="' +
+          (expanded ? 'true' : 'false') + '" aria-controls="' + bodyId + '"')
+      ) +
+      formBody
     );
   }
 
@@ -2570,14 +2581,29 @@
         ) +
         btn('db-tool-reveal','See my full result ›','','data-action="toolReveal"');
     } else if (t.phase==='lead') {
-      body = div('db-tool-lead-text','Enter your details to see your full result.') +
-        e('input','db-tool-name-input','','type="text" placeholder="Your name" data-action="toolName" value="'+esc(state.toolName)+'"') +
-        div('db-tool-phone-row',
-          e('span','db-tool-phone-prefix','+91') +
-          e('input','db-tool-phone-input','','type="tel" placeholder="Your number" data-action="toolPhone" value="'+esc(state.toolPhone)+'"')
-        ) +
-        btn('db-tool-submit','Reveal my result','','data-action="toolSubmit"') +
-        btn('db-tool-skip','Not now','','data-action="toolSkip"');
+      var toolLeadExpanded = t.leadExpanded === true;
+      var toolLeadBodyId = 'tool-lead-body';
+      body = (t.partialText ? div('db-tool-partial-box',
+          div('db-tool-partial-check',SVG.checkWhite(14,2.8)) +
+          div('db-tool-partial-text',esc(t.partialText))
+        ) : '') +
+        div('db-tool-lead-stage' + (toolLeadExpanded ? ' db-tool-lead-stage--expanded' : ''),
+          div('db-tool-lead-text','Want to see your full result and next steps?') +
+          div('db-lead-continue-wrap',
+            btn('db-lead-continue','Continue','','data-action="expandToolLead" aria-expanded="' +
+              (toolLeadExpanded ? 'true' : 'false') + '" aria-controls="' + toolLeadBodyId + '"')
+          ) +
+          div('db-lead-form-body',
+            e('input','db-tool-name-input','','type="text" placeholder="Your name" data-action="toolName" value="'+esc(state.toolName)+'"') +
+            div('db-tool-phone-row',
+              e('span','db-tool-phone-prefix','+91') +
+              e('input','db-tool-phone-input','','type="tel" placeholder="Your number" data-action="toolPhone" value="'+esc(state.toolPhone)+'"')
+            ) +
+            btn('db-tool-submit','Reveal my result','','data-action="toolSubmit"') +
+            btn('db-tool-skip','Not now','','data-action="toolSkip"'),
+            'id="' + toolLeadBodyId + '"'
+          )
+        );
     }
 
     return div('db-msg', '<div id="db-tool-widget">'+header+body+'</div>');
@@ -2936,6 +2962,15 @@
     });
 
     /* Lead submit */
+    delegate('[data-action="expandLead"]', function(el){
+      var mid = el.getAttribute('data-mid');
+      var msg = state.msgs.find(function(m){ return m.id === mid; });
+      if (!msg || msg.leadDone) return;
+      msg.leadExpanded = true;
+      var card = el.closest('.db-lead');
+      if (card) card.classList.add('db-lead--expanded');
+      el.setAttribute('aria-expanded', 'true');
+    });
     delegate('[data-action="submitLead"]', function(el){
       submitLead(el.getAttribute('data-mid'));
     });
@@ -3014,6 +3049,13 @@
     });
     delegate('[data-action="toolAnswer"]', function(el){ toolAnswer(el.getAttribute('data-opt'), parseInt(el.getAttribute('data-oi'))); });
     delegate('[data-action="toolReveal"]', function(){ toolReveal(); });
+    delegate('[data-action="expandToolLead"]', function(el){
+      if (!state.tool || state.tool.phase !== 'lead') return;
+      state.tool.leadExpanded = true;
+      var stage = el.closest('.db-tool-lead-stage');
+      if (stage) stage.classList.add('db-tool-lead-stage--expanded');
+      el.setAttribute('aria-expanded', 'true');
+    });
     delegate('[data-action="toolName"]', function(el){ state.toolName = el.value; }, 'input');
     delegate('[data-action="toolPhone"]', function(el){ state.toolPhone = el.value; }, 'input');
     delegate('[data-action="toolSubmit"]', function(){ toolSubmit(); });

@@ -44,7 +44,7 @@
     }
 
     if (step === 'await_lead') {
-      state.tool = Object.assign({}, base, { kind: kind, phase: 'lead' });
+      state.tool = Object.assign({}, base, { kind: kind, phase: 'lead', leadExpanded: false });
       state.busy = false;
       render(); scrollToBottom();
       return true;

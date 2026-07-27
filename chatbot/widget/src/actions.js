@@ -850,7 +850,7 @@
     state.lead = null;
     state.leadName = ''; state.leadPhone = '';
     var tid = beginTurn(null);
-    settleTurn(tid, [{ kind: 'lead', text: 'Prefer a different number? Enter it below.' }], null);
+    settleTurn(tid, [{ kind: 'lead', text: 'Prefer a different number? Enter it below.', leadExpanded: true }], null);
     emitAnalytics('lead_form_shown', state.lastChip);
     loadFollowups(null, state.lastChip).catch(function () {});
   }

@@ -188,6 +188,21 @@ def test_missing_backend_data_shows_an_unavailable_state() -> None:
     assert "has not been published" in bundle
 
 
+def test_lead_forms_use_progressive_disclosure_without_new_submission_paths() -> None:
+    renderer = _module("renderer.js")
+    ui = _module("ui.js")
+    actions = _module("actions.js")
+    api = _module("api.js")
+
+    assert 'data-action="expandLead"' in renderer
+    assert 'data-action="expandToolLead"' in renderer
+    assert "db-lead-form-body" in renderer
+    assert "msg.leadExpanded = true" in ui
+    assert "state.tool.leadExpanded = true" in ui
+    assert actions.count("postLead(") == 2
+    assert "postJson('/api/widget/lead'" in api
+
+
 # ── Analytics contract ──────────────────────────────────────────────
 
 

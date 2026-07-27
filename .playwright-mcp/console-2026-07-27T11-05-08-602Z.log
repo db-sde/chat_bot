@@ -1,0 +1,18 @@
+[ 2840818ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8765/api/widget/analytics:0
+[ 2840824ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8765/api/widget/guide/context?page_type=course&session_id=1f743f67-e719-4e90-a14d-960c19d6bbf7&entity_id=course-nmims-mca&university=uni-nmims:0
+[ 2840825ms] [WARNING] DegreeBaba widget guided card unavailable TypeError: Failed to fetch
+    at fetchJson (http://127.0.0.1:8765/widget.js:170:12)
+    at loadGuideContext (http://127.0.0.1:8765/widget.js:261:12)
+    at ensureGuideBundle (http://127.0.0.1:8765/widget.js:524:23)
+    at showInfoCard (http://127.0.0.1:8765/widget.js:1029:5)
+    at onChip (http://127.0.0.1:8765/widget.js:987:35)
+    at http://127.0.0.1:8765/widget.js:2871:7
+    at HTMLDivElement.<anonymous> (http://127.0.0.1:8765/widget.js:3047:15) @ http://127.0.0.1:8765/widget.js:1037
+[ 2840828ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://127.0.0.1:8765/api/widget/guide/chips:0
+[ 2840828ms] [WARNING] DegreeBaba widget follow-up chips unavailable TypeError: Failed to fetch
+    at fetchJson (http://127.0.0.1:8765/widget.js:170:12)
+    at postJson (http://127.0.0.1:8765/widget.js:180:12)
+    at postGuideChips (http://127.0.0.1:8765/widget.js:375:12)
+    at loadFollowups (http://127.0.0.1:8765/widget.js:1200:12)
+    at unavailableTurn (http://127.0.0.1:8765/widget.js:2114:5)
+    at http://127.0.0.1:8765/widget.js:1039:7 @ http://127.0.0.1:8765/widget.js:1207
