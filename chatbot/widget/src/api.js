@@ -215,6 +215,9 @@
       c.chip_correlation_id ? { chip_correlation_id: c.chip_correlation_id } : {}
     )).then(function (res) {
       if (res && res.session_id) state.sessionId = res.session_id;
+      /* Both lead paths (inline form and tool gate) resolve here, and only on
+         a 2xx — a rejected or invalid submission throws before this point. */
+      markLeadSubmitted(source, chip, requestId, res);
       return res;
     });
   }
@@ -251,6 +254,91 @@
     var entity = bundle.entity || {};
     var type = ctx.page_type || ctxPageType();
     return { type: type, id: String(entity.id || ctx.entity_id || (type === 'homepage' ? 'homepage' : 'unknown')) };
+  }
+
+  /* ── Measurement dataLayer contract ──────────────────────────
+     Two browser-side events for GTM → GA4/Ads. Event and parameter names are
+     a fixed contract with the GTM build; do not rename them. This mirrors two
+     moments into window.dataLayer and changes nothing about the existing
+     backend analytics stream, which continues to run unmodified.
+
+     window.dataLayer is a plain global, reachable from inside the shadow DOM
+     (shadow DOM isolates styles and markup, not `window`). */
+  var DATALAYER_CHATBOT = 'degreebaba_ai';
+
+  function dataLayerPush(payload) {
+    try {
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push(payload);
+    } catch (err) {
+      /* Measurement must never break the widget. */
+      console.debug('DegreeBaba dataLayer unavailable', err);
+    }
+  }
+
+  /* The contract publishes `home`, while the widget's internal page type for
+     the same surface is `homepage`. */
+  var DATALAYER_PAGE_TYPES = {
+    homepage: 'home',
+    home: 'home',
+    pillar: 'pillar',
+    university: 'university',
+    course: 'course',
+    specialization: 'specialization'
+  };
+
+  function dataLayerPageType() {
+    return DATALAYER_PAGE_TYPES[String(ctxPageType() || '')] || '';
+  }
+
+  /* Fires once on the user's first genuine interaction — never on widget open,
+     and never again for the rest of the session. The flag lives on the session
+     object so it survives minimise/reopen. */
+  function markSessionStart() {
+    if (state.sessionStartPushed) return;
+    state.sessionStartPushed = true;
+    dataLayerPush({
+      event: 'chatbot_session_start',
+      chatbot_name: DATALAYER_CHATBOT,
+      page_type: dataLayerPageType()
+    });
+  }
+
+  /* `source` already carries where the lead came from for the CRM; reuse it
+     rather than deriving a second value. */
+  var LEAD_CONTEXTS = {
+    'tool:roi': 'roi_tool',
+    'tool:scholarship': 'scholarship_tool',
+    'tool:career_quiz': 'career_quiz'
+  };
+
+  function leadContextFor(source, chip) {
+    var known = LEAD_CONTEXTS[String(source || '')];
+    if (known) return known;
+    var handler = (chip && chip.handler) || '';
+    if (handler === 'cta_apply') return 'apply_now';
+    if (handler === 'cta_callback') return 'counsellor';
+    return 'other';
+  }
+
+  /* Fires only on server-confirmed success, so the conversion count equals real
+     leads. De-duped on the same request id the lead form already uses for
+     backend idempotency: a suppressed double-submit must not push twice. */
+  function markLeadSubmitted(source, chip, requestId, response) {
+    /* The backend skipped this one — the session already had a lead, so it is
+       not a new conversion. */
+    if (response && response.already_captured) return;
+    if (requestId) {
+      if (!state.leadPushedRequestIds) state.leadPushedRequestIds = {};
+      if (state.leadPushedRequestIds[requestId]) return;
+      state.leadPushedRequestIds[requestId] = true;
+    }
+    dataLayerPush({
+      event: 'chatbot_lead_submitted',
+      chatbot_name: DATALAYER_CHATBOT,
+      lead_context: leadContextFor(source, chip),
+      page_type: dataLayerPageType()
+    });
   }
 
   function emitAnalytics(event, chip, extra) {

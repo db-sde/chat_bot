@@ -918,9 +918,16 @@
     if (!(state.toolName || '').trim()) return;
     if ((state.toolPhone || '').replace(/\D/g, '').length < 10) return;
     var t = state.tool;
+    if (!t.leadRequestId) t.leadRequestId = 'lead-' + nextId() + '-' + Date.now();
     state.tool = Object.assign({}, t, { phase: 'loading' });
     render();
-    postLead(state.toolPhone, state.toolName, 'tool:' + TOOL_TOKEN_BY_KIND[t.kind], state.lastChip)
+    postLead(
+      state.toolPhone,
+      state.toolName,
+      'tool:' + TOOL_TOKEN_BY_KIND[t.kind],
+      state.lastChip,
+      t.leadRequestId
+    )
       .then(function (res) {
         /* The lead endpoint resumes the flow and returns the reveal payload. */
         if (res && res.response) { applyPayload(res.response); return; }

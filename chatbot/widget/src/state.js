@@ -36,6 +36,10 @@
     guideBusy: null,       // in-flight /guide/context promise
     viewedActions: new Set(),  // chip_ids already counted as impressions
     lastChip: null,
+    /* Measurement dataLayer contract — session-owned so the guards survive
+       minimise/reopen. No browser storage, no page-scoped globals. */
+    sessionStartPushed: false,
+    leadPushedRequestIds: null,
     /* ── The only copy of backend-owned context. Written exclusively by
        adoptServerContext() from a backend response; never inferred here. ── */
     server: {

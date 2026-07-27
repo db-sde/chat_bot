@@ -28,6 +28,17 @@
       else return;
       ev.stopPropagation();
     });
+    /* Measurement contract: the session starts on the user's first genuine
+       interaction, not on widget open. Every interactive control carries a
+       data-action, so one listener covers chips, the persistent nav row, list
+       rows, tools and the lead form — and keeps working as new controls are
+       added. Open and minimise are deliberately excluded: the launcher lives
+       outside this element and the close button carries no data-action. */
+    windowEl.addEventListener('click', function (ev) {
+      if (ev.target && ev.target.closest && ev.target.closest('[data-action]')) {
+        markSessionStart();
+      }
+    }, true);
     delegatesBound = true;
 
     /* Clear context */
