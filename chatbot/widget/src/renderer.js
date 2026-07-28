@@ -38,20 +38,42 @@
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   /* ── Message renderers ── */
+  /* Every render recreates the whole transcript, so an entry animation bound to
+     .db-msg would replay on all of history each time. Only a message that is
+     genuinely arriving carries the modifier the animation binds to.
+
+     A single interaction rebuilds the window several times within a few frames,
+     so "new" cannot mean "first emitted" — the follow-up rebuild would strip the
+     class before the animation ran. Instead a message stays new for roughly the
+     animation's own duration, then never animates again. */
+  var MSG_ENTRY_MS = 260;
+  function msgClass(m) {
+    if (!m || !m.id) return 'db-msg';
+    if (state.paintedMsgIds[m.id]) return 'db-msg';
+    if (!state.paintTimers[m.id]) {
+      state.paintTimers[m.id] = setTimeout(function () {
+        state.paintedMsgIds[m.id] = true;
+        delete state.paintTimers[m.id];
+      }, MSG_ENTRY_MS);
+    }
+    return 'db-msg db-msg--new';
+  }
+
   function renderMsg(m) {
-    if (m.kind==='user') return div('db-msg', div('db-bubble-user', esc(m.text)));
-    if (m.kind==='bot') return div('db-msg', div('db-bubble-bot', esc(m.text)));
-    if (m.kind==='cards') return div('db-msg', m.cards.map(function(c){ return renderCard(c,m.id); }).join(''));
-    if (m.kind==='compare') return div('db-msg', renderCompare(m));
-    if (m.kind==='lead') return div('db-msg', renderLead(m));
-    if (m.kind==='fees') return div('db-msg', renderFees(m.fee));
-    if (m.kind==='elig') return div('db-msg', renderElig(m.elig));
-    if (m.kind==='career') return div('db-msg', renderCareer(m.career));
-    if (m.kind==='reviews') return div('db-msg', renderReviews(m.rev));
-    if (m.kind==='syllabus') return div('db-msg', renderSyllabus(m.syl, m.id));
-    if (m.kind==='toolResult') return div('db-msg', renderToolResult(m.tr));
-    if (m.kind==='published') return div('db-msg', renderPublished(m.info));
-    if (m.kind==='faq') return div('db-msg', renderFaq(m.faq));
+    var cls = msgClass(m);
+    if (m.kind==='user') return div(cls, div('db-bubble-user', esc(m.text)));
+    if (m.kind==='bot') return div(cls, div('db-bubble-bot', esc(m.text)));
+    if (m.kind==='cards') return div(cls, m.cards.map(function(c){ return renderCard(c,m.id); }).join(''));
+    if (m.kind==='compare') return div(cls, renderCompare(m));
+    if (m.kind==='lead') return div(cls, renderLead(m));
+    if (m.kind==='fees') return div(cls, renderFees(m.fee));
+    if (m.kind==='elig') return div(cls, renderElig(m.elig));
+    if (m.kind==='career') return div(cls, renderCareer(m.career));
+    if (m.kind==='reviews') return div(cls, renderReviews(m.rev));
+    if (m.kind==='syllabus') return div(cls, renderSyllabus(m.syl, m.id));
+    if (m.kind==='toolResult') return div(cls, renderToolResult(m.tr));
+    if (m.kind==='published') return div(cls, renderPublished(m.info));
+    if (m.kind==='faq') return div(cls, renderFaq(m.faq));
     return '';
   }
   function renderCard(c, mid) {
@@ -718,10 +740,16 @@
     if (state.details) html += renderDetails();
     if (state.endScreen) html += renderEndScreen();
 
+    /* The rebuild below replaces #db-messages, so its scrollTop would reset to
+       0 — that is what loses the reading position when an overlay opens or
+       closes. Carry it across. scrollToBottom() still wins when new content
+       genuinely arrives. */
+    var keptScroll = scrollEl ? scrollEl.scrollTop : 0;
     windowEl.innerHTML = html;
 
     /* Re-query scroll target */
     scrollEl = windowEl.querySelector('#db-messages');
+    if (scrollEl && keptScroll) scrollEl.scrollTop = keptScroll;
 
     /* Bind events */
     bindEvents();

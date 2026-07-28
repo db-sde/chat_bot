@@ -242,6 +242,10 @@
 .db-msg {
   display: flex;
   flex-direction: column;
+}
+/* Entry animation only for a message's first paint — a re-render must not
+   replay it across the whole transcript. */
+.db-msg--new {
   animation: dbFade .22s ease both;
 }
 

@@ -86,7 +86,13 @@
   /* Build the .db-end-screen model from the backend's revealed ToolResult. */
   function endScreenFrom(kind, result, payload) {
     var name = (state.toolName || '').trim();
-    var masked = maskedPhone(state.toolPhone);
+    /* Once-per-session capture skips the lead gate, so toolPhone is empty for a
+       returning lead. The session's captured number (masked by the backend) is
+       the truthful fallback. */
+    var masked = state.toolPhone
+      ? maskedPhone(state.toolPhone)
+      : ((state.lead && state.lead.masked_phone) || '');
+    if (!name && state.lead && state.lead.name) name = String(state.lead.name).trim();
     if (kind === 'roi') {
       var months = Number(result.payback_months);
       var expectedMonthly = Number(result.expected_monthly_salary);
@@ -176,6 +182,15 @@
      widget never has to reconstruct which chip converts. */
   function setChips(actions, more, conversion) {
     state.chips = (actions || []).map(chipFrom).filter(function (c) { return c.label; });
+    /* The backend can promote a conversion chip into the info actions while
+       also returning it in the reserved slot. The slot owns it — drop the
+       duplicate rather than rendering the same action twice. */
+    if (conversion) {
+      var reservedKey = conversion.chip_id || conversion.label;
+      state.chips = state.chips.filter(function (c) {
+        return (c.chip_id || c.label) !== reservedKey;
+      });
+    }
     state.moreChips = (more || []).map(chipFrom).filter(function (c) { return c.label; });
     state.hasMore = state.moreChips.length > 0;
     state.moreOpen = false;

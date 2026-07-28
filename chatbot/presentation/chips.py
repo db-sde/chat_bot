@@ -376,6 +376,15 @@ def followup_payload(
     return payload
 
 
+def _masked_phone(phone: Any) -> str | None:
+    """Render a captured number as +91 98 ••••• 210 without exposing it."""
+
+    digits = "".join(character for character in str(phone or "") if character.isdigit())
+    if len(digits) < 5:
+        return None
+    return f"+91 {digits[:2]} ••••• {digits[-3:]}"
+
+
 def session_context_payload(context: Any, lead: Any = None) -> dict[str, object]:
     """§11.3/§11.4 breadcrumb + recently-viewed rail, plus the §4 lead flag.
 
@@ -393,7 +402,13 @@ def session_context_payload(context: Any, lead: Any = None) -> dict[str, object]
         "recently_viewed": [ref(item) for item in getattr(context, "visited", [])],
     }
     if lead is not None and getattr(lead, "captured", False):
-        payload["lead"] = {"captured": True, "name": getattr(lead, "name", None)}
+        payload["lead"] = {
+            "captured": True,
+            "name": getattr(lead, "name", None),
+            # Masked here, never raw: the acknowledgement needs to be truthful
+            # but the browser has no reason to hold the number itself.
+            "masked_phone": _masked_phone(getattr(lead, "phone", None)),
+        }
     return payload
 
 

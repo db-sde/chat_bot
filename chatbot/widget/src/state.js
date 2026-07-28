@@ -39,6 +39,10 @@
     /* Measurement dataLayer contract — session-owned so the guards survive
        minimise/reopen. No browser storage, no page-scoped globals. */
     sessionStartPushed: false,
+    /* Message ids already painted once, so the entry animation never replays
+       over existing history on a re-render. */
+    paintedMsgIds: {},
+    paintTimers: {},
     leadPushedRequestIds: null,
     /* ── The only copy of backend-owned context. Written exclusively by
        adoptServerContext() from a backend response; never inferred here. ── */

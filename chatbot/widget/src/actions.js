@@ -643,7 +643,22 @@
       /* Anchor: an explicit fixed side, else the entity in view. */
       var anchor = side || (entity && entity.id === ctxEntityId() ? cardFrom(entity) : null);
       var anchorId = anchor && anchor.entityId;
-      if (!anchorId) { unavailableTurn(beginTurn(chip && chip.label), UNAVAILABLE); return; }
+      /* No entity in view (the homepage, or any surface that is not a single
+         option) means there is nothing to anchor the opponent set on. The
+         first pick becomes the anchor: choose side A from the ordinary
+         catalog, then re-enter this flow with A fixed so side B still comes
+         from the backend's validity-filtered opponents. */
+      if (!anchorId) {
+        state.compare = [];
+        state.picker = {
+          title: COMPARE_PICKER_TITLE[kind], kind: kind, query: '',
+          rows: null, loading: true, chip: chip || null, compareMode: true,
+          anchorPick: true
+        };
+        render();
+        refreshPicker('');
+        return;
+      }
       state.compare = [anchor];
       state.picker = {
         title: COMPARE_PICKER_TITLE[kind], kind: kind, query: '',
@@ -671,6 +686,16 @@
     }
 
     var chip = state.picker && state.picker.chip;
+
+    /* Anchor round: this pick only decides side A. Re-enter the opponent flow
+       with it fixed so B is drawn from the validity-filtered set for A. */
+    if (state.picker && state.picker.anchorPick) {
+      state.picker = null;
+      state.pickerToken++;
+      openComparePicker(chip, entry);
+      return;
+    }
+
     state.compare = state.compare.length >= 2
       ? [state.compare[1], entry]
       : state.compare.concat([entry]);
@@ -804,7 +829,10 @@
     postLead(phone, name, 'widget_inline', state.lastChip, msg.leadRequestId).then(function (res) {
       emitAnalytics('lead_form_submitted', state.lastChip);
       /* §4 remember the capture for the rest of the session. */
-      state.lead = { captured: true, name: name };
+      /* The number is masked here and never kept raw — the same shape the
+         backend publishes in session_context, so a later context adoption
+         overwrites this with an identical value instead of contradicting it. */
+      state.lead = { captured: true, name: name, masked_phone: maskedPhone(phone) };
       state.leadPhone = ''; state.leadName = '';
       mark({ leadBusy: false, leadDone: true });
       if (res && res.response) applyPayload(res.response, { toolAware: false });

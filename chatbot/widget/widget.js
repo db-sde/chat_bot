@@ -81,6 +81,10 @@
     /* Measurement dataLayer contract — session-owned so the guards survive
        minimise/reopen. No browser storage, no page-scoped globals. */
     sessionStartPushed: false,
+    /* Message ids already painted once, so the entry animation never replays
+       over existing history on a re-render. */
+    paintedMsgIds: {},
+    paintTimers: {},
     leadPushedRequestIds: null,
     /* ── The only copy of backend-owned context. Written exclusively by
        adoptServerContext() from a backend response; never inferred here. ── */
@@ -1499,7 +1503,22 @@
       /* Anchor: an explicit fixed side, else the entity in view. */
       var anchor = side || (entity && entity.id === ctxEntityId() ? cardFrom(entity) : null);
       var anchorId = anchor && anchor.entityId;
-      if (!anchorId) { unavailableTurn(beginTurn(chip && chip.label), UNAVAILABLE); return; }
+      /* No entity in view (the homepage, or any surface that is not a single
+         option) means there is nothing to anchor the opponent set on. The
+         first pick becomes the anchor: choose side A from the ordinary
+         catalog, then re-enter this flow with A fixed so side B still comes
+         from the backend's validity-filtered opponents. */
+      if (!anchorId) {
+        state.compare = [];
+        state.picker = {
+          title: COMPARE_PICKER_TITLE[kind], kind: kind, query: '',
+          rows: null, loading: true, chip: chip || null, compareMode: true,
+          anchorPick: true
+        };
+        render();
+        refreshPicker('');
+        return;
+      }
       state.compare = [anchor];
       state.picker = {
         title: COMPARE_PICKER_TITLE[kind], kind: kind, query: '',
@@ -1527,6 +1546,16 @@
     }
 
     var chip = state.picker && state.picker.chip;
+
+    /* Anchor round: this pick only decides side A. Re-enter the opponent flow
+       with it fixed so B is drawn from the validity-filtered set for A. */
+    if (state.picker && state.picker.anchorPick) {
+      state.picker = null;
+      state.pickerToken++;
+      openComparePicker(chip, entry);
+      return;
+    }
+
     state.compare = state.compare.length >= 2
       ? [state.compare[1], entry]
       : state.compare.concat([entry]);
@@ -1660,7 +1689,10 @@
     postLead(phone, name, 'widget_inline', state.lastChip, msg.leadRequestId).then(function (res) {
       emitAnalytics('lead_form_submitted', state.lastChip);
       /* §4 remember the capture for the rest of the session. */
-      state.lead = { captured: true, name: name };
+      /* The number is masked here and never kept raw — the same shape the
+         backend publishes in session_context, so a later context adoption
+         overwrites this with an identical value instead of contradicting it. */
+      state.lead = { captured: true, name: name, masked_phone: maskedPhone(phone) };
       state.leadPhone = ''; state.leadName = '';
       mark({ leadBusy: false, leadDone: true });
       if (res && res.response) applyPayload(res.response, { toolAware: false });
@@ -2011,7 +2043,13 @@
   /* Build the .db-end-screen model from the backend's revealed ToolResult. */
   function endScreenFrom(kind, result, payload) {
     var name = (state.toolName || '').trim();
-    var masked = maskedPhone(state.toolPhone);
+    /* Once-per-session capture skips the lead gate, so toolPhone is empty for a
+       returning lead. The session's captured number (masked by the backend) is
+       the truthful fallback. */
+    var masked = state.toolPhone
+      ? maskedPhone(state.toolPhone)
+      : ((state.lead && state.lead.masked_phone) || '');
+    if (!name && state.lead && state.lead.name) name = String(state.lead.name).trim();
     if (kind === 'roi') {
       var months = Number(result.payback_months);
       var expectedMonthly = Number(result.expected_monthly_salary);
@@ -2101,6 +2139,15 @@
      widget never has to reconstruct which chip converts. */
   function setChips(actions, more, conversion) {
     state.chips = (actions || []).map(chipFrom).filter(function (c) { return c.label; });
+    /* The backend can promote a conversion chip into the info actions while
+       also returning it in the reserved slot. The slot owns it — drop the
+       duplicate rather than rendering the same action twice. */
+    if (conversion) {
+      var reservedKey = conversion.chip_id || conversion.label;
+      state.chips = state.chips.filter(function (c) {
+        return (c.chip_id || c.label) !== reservedKey;
+      });
+    }
     state.moreChips = (more || []).map(chipFrom).filter(function (c) { return c.label; });
     state.hasMore = state.moreChips.length > 0;
     state.moreOpen = false;
@@ -2153,20 +2200,42 @@
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
   /* ── Message renderers ── */
+  /* Every render recreates the whole transcript, so an entry animation bound to
+     .db-msg would replay on all of history each time. Only a message that is
+     genuinely arriving carries the modifier the animation binds to.
+
+     A single interaction rebuilds the window several times within a few frames,
+     so "new" cannot mean "first emitted" — the follow-up rebuild would strip the
+     class before the animation ran. Instead a message stays new for roughly the
+     animation's own duration, then never animates again. */
+  var MSG_ENTRY_MS = 260;
+  function msgClass(m) {
+    if (!m || !m.id) return 'db-msg';
+    if (state.paintedMsgIds[m.id]) return 'db-msg';
+    if (!state.paintTimers[m.id]) {
+      state.paintTimers[m.id] = setTimeout(function () {
+        state.paintedMsgIds[m.id] = true;
+        delete state.paintTimers[m.id];
+      }, MSG_ENTRY_MS);
+    }
+    return 'db-msg db-msg--new';
+  }
+
   function renderMsg(m) {
-    if (m.kind==='user') return div('db-msg', div('db-bubble-user', esc(m.text)));
-    if (m.kind==='bot') return div('db-msg', div('db-bubble-bot', esc(m.text)));
-    if (m.kind==='cards') return div('db-msg', m.cards.map(function(c){ return renderCard(c,m.id); }).join(''));
-    if (m.kind==='compare') return div('db-msg', renderCompare(m));
-    if (m.kind==='lead') return div('db-msg', renderLead(m));
-    if (m.kind==='fees') return div('db-msg', renderFees(m.fee));
-    if (m.kind==='elig') return div('db-msg', renderElig(m.elig));
-    if (m.kind==='career') return div('db-msg', renderCareer(m.career));
-    if (m.kind==='reviews') return div('db-msg', renderReviews(m.rev));
-    if (m.kind==='syllabus') return div('db-msg', renderSyllabus(m.syl, m.id));
-    if (m.kind==='toolResult') return div('db-msg', renderToolResult(m.tr));
-    if (m.kind==='published') return div('db-msg', renderPublished(m.info));
-    if (m.kind==='faq') return div('db-msg', renderFaq(m.faq));
+    var cls = msgClass(m);
+    if (m.kind==='user') return div(cls, div('db-bubble-user', esc(m.text)));
+    if (m.kind==='bot') return div(cls, div('db-bubble-bot', esc(m.text)));
+    if (m.kind==='cards') return div(cls, m.cards.map(function(c){ return renderCard(c,m.id); }).join(''));
+    if (m.kind==='compare') return div(cls, renderCompare(m));
+    if (m.kind==='lead') return div(cls, renderLead(m));
+    if (m.kind==='fees') return div(cls, renderFees(m.fee));
+    if (m.kind==='elig') return div(cls, renderElig(m.elig));
+    if (m.kind==='career') return div(cls, renderCareer(m.career));
+    if (m.kind==='reviews') return div(cls, renderReviews(m.rev));
+    if (m.kind==='syllabus') return div(cls, renderSyllabus(m.syl, m.id));
+    if (m.kind==='toolResult') return div(cls, renderToolResult(m.tr));
+    if (m.kind==='published') return div(cls, renderPublished(m.info));
+    if (m.kind==='faq') return div(cls, renderFaq(m.faq));
     return '';
   }
   function renderCard(c, mid) {
@@ -2833,10 +2902,16 @@
     if (state.details) html += renderDetails();
     if (state.endScreen) html += renderEndScreen();
 
+    /* The rebuild below replaces #db-messages, so its scrollTop would reset to
+       0 — that is what loses the reading position when an overlay opens or
+       closes. Carry it across. scrollToBottom() still wins when new content
+       genuinely arrives. */
+    var keptScroll = scrollEl ? scrollEl.scrollTop : 0;
     windowEl.innerHTML = html;
 
     /* Re-query scroll target */
     scrollEl = windowEl.querySelector('#db-messages');
+    if (scrollEl && keptScroll) scrollEl.scrollTop = keptScroll;
 
     /* Bind events */
     bindEvents();
