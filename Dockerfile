@@ -8,14 +8,14 @@ WORKDIR /app
 # Install uv package manager
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy dependency manifests
-COPY pyproject.toml uv.lock README.md ./
+# Copy chatbot pyproject.toml and lockfile
+COPY chatbot/pyproject.toml chatbot/uv.lock chatbot/README.md ./
 
 # Install dependencies into system Python
 RUN uv pip install --system --no-cache -r pyproject.toml
 
-# Copy source code
-COPY . .
+# Copy remaining chatbot code
+COPY chatbot/ .
 
 # Ensure var directory exists
 RUN mkdir -p var
