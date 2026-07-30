@@ -81,14 +81,30 @@
     var inC = !!state.compare.find(function(x){ return (x.entityId || x.title) === cardKey; });
     var cmpCls = 'db-btn-compare' + (inC ? ' db-in-compare' : '');
     var cmpLabel = inC ? '✓ Added' : '+ Compare';
+    var metrics = (c.metrics && c.metrics.length ? c.metrics : (c.pills || []).map(function(value) {
+      return { label: 'Details', value: value };
+    })).slice(0, 3);
     return div('db-card',
       div('db-card-head',
         div('db-card-mono', esc(c.mono), 'style="background:'+c.bg+'"') +
         div('',div('db-card-title',esc(c.title))+div('db-card-trust',esc(c.trust)))
       ) +
-      div('db-pills-row', c.pills.map(function(p){return div('db-pill',esc(p));}).join('')) +
-      (c.emi ? div('db-card-emi', esc(c.emi)) : '') +
-      (c.job ? div('db-card-job', esc(c.job)) : '') +
+      div('db-pills-row', metrics.map(function(metric){
+        return div('db-pill',
+          div('db-pill-label',esc(metric.label)) +
+          div('db-pill-value',esc(metric.value))
+        );
+      }).join('')) +
+      (c.emi ? div('db-card-emi',
+        e('span','db-card-secondary-label','EMI starts from') +
+        e('span','db-card-secondary-value',esc(c.emi.value || c.emi))
+      ) : '') +
+      (c.career ? div('db-card-job',
+        e('span','db-card-secondary-label','Top career') +
+        e('span','db-card-job-outcome',esc(c.career.outcome || c.career)) +
+        (c.career.salary ? e('span','db-card-job-salary-label','Avg. salary') +
+          e('span','db-card-job-salary',esc(c.career.salary)) : '')
+      ) : '') +
       div('db-card-actions',
         btn('db-btn-primary','View details','','data-action="viewDetails" data-mid="'+mid+'" data-key="'+esc(cardKey)+'"') +
         btn(cmpCls, cmpLabel, '', 'data-action="toggleCompare" data-key="'+esc(cardKey)+'"')

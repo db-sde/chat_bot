@@ -188,6 +188,26 @@ def test_missing_backend_data_shows_an_unavailable_state() -> None:
     assert "has not been published" in bundle
 
 
+def test_recommendation_metrics_are_labeled_and_context_aware() -> None:
+    api = _module("api.js")
+    renderer = _module("renderer.js")
+    styles = (WIDGET_DIR / "widget.css").read_text(encoding="utf-8")
+
+    for label in ("Starting Fee", "Programs", "Established", "Total Fee", "Duration", "Specializations", "Mode"):
+        assert label in api
+    assert "component.type === 'university_card'" in api
+    assert "component.kind === 'specialization'" in api
+    assert "metrics.length >= 3" in api
+    assert "db-pill-label" in renderer
+    assert "db-pill-value" in renderer
+    assert ".db-pill-label" in styles
+    assert ".db-pill-value" in styles
+    assert "EMI starts from" in renderer
+    assert "Top career" in renderer
+    assert "Avg. salary" in renderer
+    assert "hasEmiMetric" in api
+
+
 def test_lead_forms_use_progressive_disclosure_without_new_submission_paths() -> None:
     renderer = _module("renderer.js")
     ui = _module("ui.js")

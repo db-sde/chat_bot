@@ -454,22 +454,36 @@
 
   function cardFrom(component) {
     var name = component.name || '';
-    var pills = [];
-    if (component.fee) pills.push(money(component.fee));
-    else if (component.starting_fee) {
-      var cleaned = money(component.starting_fee);
-      pills.push(cleaned.indexOf('₹') === 0 ? 'From ' + cleaned : cleaned);
+    var metrics = [];
+    var addMetric = function(label, value) {
+      if (metrics.length >= 3 || value === null || value === undefined || value === '') return;
+      if (metrics.some(function(metric) { return metric.label === label; })) return;
+      metrics.push({ label: label, value: String(value) });
+    };
+    var isUniversity = component.type === 'university_card';
+    var isSpecialization = component.kind === 'specialization';
+
+    if (isUniversity) {
+      addMetric('Starting Fee', component.starting_fee && money(component.starting_fee));
+      addMetric('Programs', component.program_count);
+      addMetric('Established', component.established_year);
+      addMetric('Mode', component.learning_mode);
+    } else {
+      addMetric('Total Fee', component.fee && money(component.fee));
+      addMetric('Duration', component.duration);
+      if (isSpecialization) {
+        addMetric('Mode', component.mode || component.learning_mode);
+        addMetric('Specializations', component.specialization_count);
+      } else {
+        addMetric('Specializations', component.specialization_count);
+        addMetric('Mode', component.mode || component.learning_mode);
+      }
+      addMetric('EMI', component.emi && money(component.emi));
     }
-    if (component.duration) pills.push(String(component.duration));
-    if (component.specialization_count || component.specialization_count === 0) {
-      pills.push(component.specialization_count + ' spec' + (component.specialization_count === 1 ? '' : 's'));
-    } else if (component.program_count || component.program_count === 0) {
-      pills.push(component.program_count + ' program' + (component.program_count === 1 ? '' : 's'));
-    } else if (component.mode || component.learning_mode) {
-      pills.push(String(component.mode || component.learning_mode));
-    }
-    (component.highlights || []).forEach(function (h) {
-      if (pills.length < 3 && h && h.value) pills.push(String(h.value));
+    (component.highlights || []).forEach(function (highlight) {
+      if (highlight && highlight.label && highlight.value) {
+        addMetric(String(highlight.label), highlight.value);
+      }
     });
     /* "MBA" alone is ambiguous across publishers — lead the trust line with
        the university the backend published for this card. */
@@ -479,16 +493,27 @@
       component.naac_grade && ('NAAC ' + component.naac_grade)
     ].filter(Boolean).join(' · ');
     var career = component.career_outcome || (component.career_outcomes || [])[0];
+    var emiValue = component.emi ? money(component.emi)
+      .replace(/^\s*(emi\s+from|from)\s*/i, '')
+      .replace(/\s+per\s+month\b/i, '/month') : '';
+    var hasEmiMetric = metrics.some(function(metric) { return metric.label === 'EMI'; });
     var markSource = component.university_name || name;
     return {
       mono: initialsFor(markSource),
       bg: colorFor(markSource),
       title: String(name),
       trust: trust || (component.category || component.summary || 'Published programme'),
-      pills: pills.length ? pills : ['Details published'],
-      /* Published EMI copy often already reads "From ₹…" — don't double the prefix. */
-      emi: component.emi ? (/^\s*(emi|from)\b/i.test(component.emi) ? money(component.emi) : 'EMI from ' + money(component.emi)) : '',
-      job: career ? ('💼 ' + career + (component.average_salary ? ' · ' + money(component.average_salary) : '')) : '',
+      metrics: metrics.length ? metrics : [{ label: 'Details', value: 'Published' }],
+      /* Details overlay already consumes the compact values. Keep this
+         projection so its existing UI and data binding stay unchanged. */
+      pills: metrics.length ? metrics.map(function(metric) { return metric.value; }) : ['Published'],
+      /* These remain the existing two secondary surfaces. They are structured
+         only so the renderer can establish hierarchy without inventing copy. */
+      emi: emiValue && !hasEmiMetric ? { value: emiValue } : null,
+      career: career ? {
+        outcome: String(career),
+        salary: component.average_salary ? money(component.average_salary) : ''
+      } : null,
       entityId: component.id || component.slug || null,
       component: component
     };

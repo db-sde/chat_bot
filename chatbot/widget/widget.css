@@ -318,29 +318,82 @@
 }
 .db-pill {
   flex: 1;
+  min-width: 0;
   background: #F3F4F6;
   border-radius: 7px;
-  padding: 8px 6px;
+  /* Keep the existing metric-box footprint while fitting the small context
+     label above the primary value. */
+  padding: 3px 6px 2px;
   text-align: center;
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
-  font-size: 11px;
   color: #0E1F3D;
   white-space: nowrap;
 }
+.db-pill-label {
+  overflow: hidden;
+  color: #6B7280;
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: .035em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+}
+.db-pill-value {
+  overflow: hidden;
+  margin-top: 1px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 11px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+}
 .db-card-emi {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   margin-top: 9px;
-  font-size: 12px;
-  color: #4B5563;
+  min-width: 0;
 }
 .db-card-job {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 6px;
+  row-gap: 2px;
   margin-top: 11px;
   background: #FDF1EC;
   border: 1px solid #F6D3C4;
   border-radius: 8px;
   padding: 9px 11px;
-  font-size: 13px;
-  font-weight: 500;
   color: #0E1F3D;
+}
+.db-card-secondary-label,
+.db-card-job-salary-label {
+  flex: 0 0 auto;
+  color: #6B7280;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.db-card-secondary-value,
+.db-card-job-outcome,
+.db-card-job-salary {
+  min-width: 0;
+  color: #0E1F3D;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+.db-card-secondary-value {
+  overflow: hidden;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-card-job-salary-label { margin-left: auto; }
+.db-card-job-salary {
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  white-space: nowrap;
 }
 .db-card-actions {
   display: flex;
