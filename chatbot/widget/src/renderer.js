@@ -95,15 +95,16 @@
           div('db-pill-value',esc(metric.value))
         );
       }).join('')) +
-      (c.emi ? div('db-card-emi',
-        e('span','db-card-secondary-label','EMI starts from') +
-        e('span','db-card-secondary-value',esc(c.emi.value || c.emi))
-      ) : '') +
+      (c.emi ? renderEmi(c.emi.value || c.emi, 'card') : '') +
       (c.career ? div('db-card-job',
-        e('span','db-card-secondary-label','Top career') +
-        e('span','db-card-job-outcome',esc(c.career.outcome || c.career)) +
-        (c.career.salary ? e('span','db-card-job-salary-label','Avg. salary') +
-          e('span','db-card-job-salary',esc(c.career.salary)) : '')
+        div('db-card-job-copy',
+          e('span','db-card-secondary-label','Top career') +
+          e('span','db-card-job-outcome',esc(c.career.outcome || c.career))
+        ) +
+        (c.career.salary ? div('db-card-job-salary-group',
+          e('span','db-card-job-salary-label','Avg. salary') +
+          e('span','db-card-job-salary',esc(c.career.salary))
+        ) : '')
       ) : '') +
       div('db-card-actions',
         btn('db-btn-primary','View details','','data-action="viewDetails" data-mid="'+mid+'" data-key="'+esc(cardKey)+'"') +
@@ -220,12 +221,30 @@
         div('',div('db-fees-sem-label','Per semester')+div('db-fees-sem-value',esc(f.perSem)))
       ) +
       (f.plans.length ? div('db-fees-plans', f.plans.map(function(p){
-        return div('db-fees-plan-row',
+        var isMonthlyPlan = /(?:emi|monthly|installment|finance)/i.test(String(p.label || ''));
+        return div('db-fees-plan-row'+(isMonthlyPlan ? ' db-fees-plan-row--emi' : ''),
           div('',div('db-fees-plan-label',esc(p.label))+div('db-fees-plan-note',esc(p.note))) +
           div('db-fees-plan-value',esc(p.value))
         );
       }).join('')) : '') +
-      div('db-fees-emi', SVG.currency + e('span','',esc(f.emiNote)))
+      renderEmi(f.emiNote, 'fees')
+    );
+  }
+
+  /* Presentation-only formatter shared by compact recommendation cards and
+     expanded fee cards. Values remain backend-published; this only separates
+     the supporting label from the monthly amount. */
+  function renderEmi(value, variant) {
+    var text = String(value == null ? '' : value).trim();
+    var variantClass = variant === 'fees' ? 'db-emi--fees' : 'db-emi--card';
+    var isEstimate = /(?:₹|INR\s*)\s*\d/i.test(text);
+    var amount = isEstimate
+      ? text.replace(/^\s*(?:emi\s+(?:starts?\s+)?from|from)\s*/i, '')
+          .replace(/\s+per\s+month\b/i, '/month')
+      : text;
+    return div('db-emi '+variantClass,
+      e('span','db-emi-label',isEstimate ? 'EMI starts from' : 'EMI options') +
+      e('span','db-emi-value',esc(amount))
     );
   }
   function renderElig(elig) {
@@ -619,7 +638,12 @@
         )
       ) +
       div('db-details-body',
-        div('db-details-pills', d.pills.map(function(p){return div('db-details-pill',esc(p));}).join('')) +
+        div('db-details-pills', (d.metrics || []).slice(0, 3).map(function(metric){
+          return div('db-details-pill',
+            div('db-details-pill-label',esc(metric.label)) +
+            div('db-details-pill-value',esc(metric.value))
+          );
+        }).join('')) +
         sections.join('')
       ) +
       div('db-details-footer', btn('db-cta-primary','Ask about fees & EMI','','data-action="detailsCtaFees"')) +

@@ -50,6 +50,10 @@
   line-height: 1.5;
   color: #111827;
   -webkit-font-smoothing: antialiased;
+  --db-card-gap: 12px;
+  --db-card-muted: #6B7280;
+  --db-card-surface: #F3F4F6;
+  --db-card-border: #E5E7EB;
 }
 
 /* ── Launcher Button ─────────────────────────────────────────── */
@@ -278,7 +282,7 @@
 /* ── Program Card ────────────────────────────────────────────── */
 .db-card {
   background: #fff;
-  border: 1px solid #E5E7EB;
+  border: 1px solid var(--db-card-border);
   border-radius: 12px;
   padding: 15px 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
@@ -305,76 +309,108 @@
   font-weight: 600;
   color: #0E1F3D;
   line-height: 1.25;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 .db-card-trust {
   font-size: 11px;
   color: #4B5563;
   margin-top: 3px;
-}
-.db-pills-row {
-  display: flex;
-  gap: 7px;
-  margin-top: 13px;
-}
-.db-pill {
-  flex: 1;
-  min-width: 0;
-  background: #F3F4F6;
-  border-radius: 7px;
-  /* Keep the existing metric-box footprint while fitting the small context
-     label above the primary value. */
-  padding: 3px 6px 2px;
-  text-align: center;
-  color: #0E1F3D;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
+.db-pills-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: var(--db-card-gap);
+}
+.db-pill {
+  min-width: 0;
+  min-height: 50px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--db-card-surface);
+  border-radius: 7px;
+  padding: 6px 7px 5px;
+  text-align: center;
+  color: #0E1F3D;
+}
 .db-pill-label {
+  min-width: 0;
   overflow: hidden;
-  color: #6B7280;
+  color: var(--db-card-muted);
   font-family: inherit;
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.15;
   letter-spacing: .035em;
   text-transform: uppercase;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .db-pill-value {
+  width: 100%;
   overflow: hidden;
-  margin-top: 1px;
+  margin-top: 3px;
   font-family: 'JetBrains Mono', 'Courier New', monospace;
-  font-size: 11px;
-  line-height: 1.1;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.2;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.db-card-emi {
+.db-emi {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  margin-top: 9px;
+  gap: 7px;
   min-width: 0;
+}
+.db-emi--card {
+  margin-top: var(--db-card-gap);
+  padding-top: 10px;
+  border-top: 1px solid #F0F1F3;
 }
 .db-card-job {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  column-gap: 6px;
-  row-gap: 2px;
-  margin-top: 11px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: var(--db-card-gap);
   background: #FDF1EC;
   border: 1px solid #F6D3C4;
   border-radius: 8px;
-  padding: 9px 11px;
+  padding: 10px 11px;
   color: #0E1F3D;
 }
+.db-card-job-copy,
+.db-card-job-salary-group {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+.db-card-job-copy { flex: 1 1 auto; }
+.db-card-job-salary-group {
+  flex: 0 0 auto;
+  align-items: flex-end;
+  text-align: right;
+}
+.db-emi-label,
 .db-card-secondary-label,
 .db-card-job-salary-label {
   flex: 0 0 auto;
-  color: #6B7280;
+  color: var(--db-card-muted);
   font-size: 10px;
   font-weight: 600;
   line-height: 1.25;
 }
+.db-emi-value,
 .db-card-secondary-value,
 .db-card-job-outcome,
 .db-card-job-salary {
@@ -389,19 +425,37 @@
   font-family: 'JetBrains Mono', 'Courier New', monospace;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
 }
-.db-card-job-salary-label { margin-left: auto; }
+.db-emi-value {
+  overflow: hidden;
+  min-width: 0;
+  color: #0E1F3D;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-card-job-outcome {
+  overflow-wrap: anywhere;
+}
 .db-card-job-salary {
   font-family: 'JetBrains Mono', 'Courier New', monospace;
   white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
 }
 .db-card-actions {
   display: flex;
   gap: 8px;
-  margin-top: 14px;
+  margin-top: var(--db-card-gap);
 }
 .db-btn-primary {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   background: #0E1F3D;
   color: #fff;
   border: none;
@@ -416,7 +470,8 @@
 }
 .db-btn-primary:hover { background: #1a2f54; }
 .db-btn-compare {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   border-radius: 8px;
   padding: 10px;
   font-size: 13px;
@@ -433,6 +488,17 @@
   background: #FDF1EC;
   color: #E84010;
   border-color: #F6D3C4;
+}
+
+@media (max-width: 360px) {
+  .db-card { padding: 14px; }
+  .db-card-head { gap: 9px; }
+  .db-card-mono { width: 40px; height: 40px; }
+  .db-pill { min-height: 48px; padding-inline: 5px; }
+  .db-pill-label { font-size: 7.5px; }
+  .db-pill-value { font-size: 10px; }
+  .db-card-job { gap: 8px; }
+  .db-card-job-salary { font-size: 11.5px; }
 }
 
 /* ── Compare Table ───────────────────────────────────────────── */
@@ -691,18 +757,35 @@
   font-family: 'JetBrains Mono', 'Courier New', monospace;
   white-space: nowrap;
 }
-.db-fees-emi {
+.db-fees-plan-row--emi .db-fees-plan-label {
+  color: #6B7280;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .025em;
+  text-transform: uppercase;
+}
+.db-fees-plan-row--emi .db-fees-plan-value {
+  font-size: 13.5px;
+}
+.db-emi--fees {
   margin: 6px 16px 15px;
   background: #FDF1EC;
   border: 1px solid #F6D3C4;
   border-radius: 8px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  font-size: 12.5px;
-  font-weight: 500;
-  color: #0E1F3D;
+  padding: 11px 12px;
+}
+.db-emi--fees .db-emi-label {
+  color: #8C5545;
+}
+.db-emi--fees .db-emi-value {
+  font-size: 13px;
+}
+
+@media (max-width: 360px) {
+  .db-emi { gap: 5px; }
+  .db-emi-label { font-size: 9px; }
+  .db-emi-value { font-size: 11.5px; }
+  .db-emi--fees { margin-inline: 14px; padding-inline: 10px; }
 }
 
 /* ── Eligibility Card ────────────────────────────────────────── */
@@ -1418,19 +1501,52 @@
 }
 .db-details-body::-webkit-scrollbar { display: none; }
 .db-details-pills {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 .db-details-pill {
-  flex: 1;
+  min-width: 0;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   background: #fff;
   border: 1px solid #E5E7EB;
   border-radius: 9px;
-  padding: 12px 6px;
+  padding: 7px 8px 6px;
   text-align: center;
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
-  font-size: 13px;
   color: #0E1F3D;
+}
+.db-details-pill-label {
+  width: 100%;
+  overflow: hidden;
+  color: #6B7280;
+  font-size: 8.5px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: .035em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.db-details-pill-value {
+  width: 100%;
+  overflow: hidden;
+  margin-top: 3px;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 360px) {
+  .db-details-pills { gap: 6px; }
+  .db-details-pill { min-height: 54px; padding-inline: 5px; }
+  .db-details-pill-label { font-size: 7.5px; }
+  .db-details-pill-value { font-size: 11px; }
 }
 .db-info-card {
   background: #fff;

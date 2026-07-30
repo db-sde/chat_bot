@@ -888,7 +888,13 @@
     var c = card.component || {};
     var d = c.details || {};
     state.details = {
-      mono: card.mono, bg: card.bg, title: card.title, trust: card.trust, pills: card.pills,
+      mono: card.mono, bg: card.bg, title: card.title, trust: card.trust,
+      /* Keep the same backend-derived, priority-ordered metrics shown on the
+         recommendation card. `pills` remains as a compatibility fallback for
+         an older card payload that has values but no metric labels. */
+      metrics: (card.metrics && card.metrics.length) ? card.metrics : (card.pills || []).map(function(value) {
+        return { label: 'Details', value: value };
+      }),
       entityId: card.entityId || null,
       /* Disambiguates same-named programmes when the CTA has to go through
          chat ("MBA" alone could be any university's). */
