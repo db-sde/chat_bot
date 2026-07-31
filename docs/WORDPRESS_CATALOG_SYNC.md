@@ -53,7 +53,7 @@ The updated catalog is immediately available from this running service
 | Item | Value |
 | --- | --- |
 | Method | `POST` |
-| URL | `https://<your-chatbot-host>/api/catalog/sync` |
+| URL | `https://chat-bot-id1n.onrender.com/api/catalog/sync` |
 | Content type | `application/json` |
 | Authentication | `X-Webhook-Secret` request header |
 | Request unit | Exactly one WordPress entity per request |
@@ -64,7 +64,7 @@ The updated catalog is immediately available from this running service
 POST /api/catalog/sync HTTP/1.1
 Content-Type: application/json
 Accept: application/json
-X-Webhook-Secret: replace-with-the-shared-secret
+X-Webhook-Secret: YOUR_CATALOG_WEBHOOK_SECRET
 
 {
   "post_id": 412,
@@ -533,8 +533,8 @@ Put this in a site plugin or a must-use plugin, not directly in a theme. Replace
  * wp-content/mu-plugins/degreebaba-catalog-sync.php
  */
 
-define('DEGREEBABA_CATALOG_SYNC_URL', 'https://chatbot.example.com/api/catalog/sync');
-define('DEGREEBABA_CATALOG_WEBHOOK_SECRET', 'replace-with-a-long-random-secret');
+define('DEGREEBABA_CATALOG_SYNC_URL', 'https://chat-bot-id1n.onrender.com/api/catalog/sync');
+define('DEGREEBABA_CATALOG_WEBHOOK_SECRET', 'YOUR_CATALOG_WEBHOOK_SECRET');
 
 function degreebaba_catalog_post_type($wp_post_type) {
     $map = array(
