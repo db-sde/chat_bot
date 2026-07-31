@@ -320,6 +320,9 @@ class HealthResponse(TransportModel):
     dependencies: dict[str, Any] = Field(default_factory=dict)
     timestamp: str | None = None
     catalog_source: str | None = None
+    catalog_version: int | None = None
+    catalog_last_updated: str | None = None
+    catalog_entity_count: int | None = None
 
 
 class ReindexResponse(TransportModel):

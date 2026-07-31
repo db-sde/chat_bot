@@ -34,12 +34,15 @@ class Settings(BaseSettings):
     catalog_url: str | None = None
     catalog_path: Path | None = None
     catalog_timeout_seconds: float = Field(default=5.0, gt=0)
+    catalog_webhook_secret: str | None = None
     widget_config_path: Path | None = None
     chip_map_path: Path | None = None
     tools_content_path: Path | None = None
     widget_allowed_origins: str = "*"
 
-    @field_validator("catalog_url", "analytics_webhook_url", mode="before")
+    @field_validator(
+        "catalog_url", "analytics_webhook_url", "catalog_webhook_secret", mode="before"
+    )
     @classmethod
     def _blank_url_is_none(cls, value: object) -> object:
         """Treat ``CATALOG_URL=`` (blank) as unset rather than an empty string."""

@@ -7,6 +7,8 @@ import json
 import logging
 import re
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -44,6 +46,17 @@ class EntityMetadata(BaseModel):
         return self.model_dump()
 
 
+@dataclass(frozen=True)
+class CatalogSnapshot:
+    """A complete catalog view published to readers in one assignment."""
+
+    entities: dict[str, CatalogEntity]
+    metadata: dict[str, EntityMetadata]
+    slug_to_id: dict[str, str]
+    version: int = 0
+    last_updated: str | None = None
+
+
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return slug or "catalog-entity"
@@ -53,15 +66,20 @@ def _extract_category(program_name: str | None, explicit: str | None) -> str | N
     # Catalog V3 uses ``category`` for a broad discipline bucket rather than
     # the degree code. Use the program name for those records while preserving
     # compatibility with earlier publisher data where category was the code.
-    if explicit and explicit.strip() and explicit.casefold() not in {
-        "university",
-        "specialization",
-        "management",
-        "technology",
-        "commerce",
-        "undergraduate",
-        "media",
-    }:
+    if (
+        explicit
+        and explicit.strip()
+        and explicit.casefold()
+        not in {
+            "university",
+            "specialization",
+            "management",
+            "technology",
+            "commerce",
+            "undergraduate",
+            "media",
+        }
+    ):
         return normalize_category(explicit) or None
     return normalize_category(program_name) or None
 
@@ -137,9 +155,7 @@ class CatalogStore:
         configured_path = catalog_path if catalog_path is not None else config.catalog_path
         self.catalog_path = Path(configured_path).expanduser() if configured_path else None
         self.timeout_seconds = timeout_seconds or config.catalog_timeout_seconds
-        self._entities: dict[str, CatalogEntity] = {}
-        self._metadata: dict[str, EntityMetadata] = {}
-        self._slug_to_id: dict[str, str] = {}
+        self._snapshot = CatalogSnapshot({}, {}, {})
         self.source: str | None = None
         if records is not None:
             self.replace(records)
@@ -147,28 +163,36 @@ class CatalogStore:
 
     @property
     def entities(self) -> dict[str, CatalogEntity]:
-        return self._entities
+        return self._snapshot.entities
 
     @property
     def metadata(self) -> dict[str, EntityMetadata]:
-        return self._metadata
+        return self._snapshot.metadata
 
     @property
     def by_id(self) -> dict[str, CatalogEntity]:
-        return self._entities
+        return self._snapshot.entities
 
     @property
     def by_slug(self) -> dict[str, CatalogEntity]:
+        snapshot = self._snapshot
         return {
-            slug: self._entities[entity_id]
-            for slug, entity_id in self._slug_to_id.items()
+            slug: snapshot.entities[entity_id] for slug, entity_id in snapshot.slug_to_id.items()
         }
 
+    @property
+    def version(self) -> int:
+        return self._snapshot.version
+
+    @property
+    def last_updated(self) -> str | None:
+        return self._snapshot.last_updated
+
     def __len__(self) -> int:
-        return len(self._entities)
+        return len(self._snapshot.entities)
 
     def __iter__(self):
-        return iter(self._entities.values())
+        return iter(self._snapshot.entities.values())
 
     async def _read_url(self) -> Any:
         timeout = httpx.Timeout(self.timeout_seconds)
@@ -185,7 +209,7 @@ class CatalogStore:
     async def load(self, *, force: bool = False) -> CatalogStore:
         """Load the configured source, falling back to the bundled representative data."""
 
-        if self._entities and not force:
+        if self._snapshot.entities and not force:
             return self
 
         payload: Any = None
@@ -229,12 +253,12 @@ class CatalogStore:
 
         # Startup summary so it is immediately obvious which catalog loaded.
         counts = {"university": 0, "course": 0, "specialization": 0}
-        for meta in self._metadata.values():
+        for meta in self._snapshot.metadata.values():
             counts[meta.page_type] = counts.get(meta.page_type, 0) + 1
         logger.info(
             "catalog loaded: source=%s entities=%d universities=%d courses=%d specializations=%d",
             source,
-            len(self._metadata),
+            len(self._snapshot.metadata),
             counts["university"],
             counts["course"],
             counts["specialization"],
@@ -246,7 +270,14 @@ class CatalogStore:
         store = cls(**kwargs)
         return await store.load()
 
-    def replace(self, records: Iterable[Mapping[str, Any]]) -> None:
+    def replace(
+        self,
+        records: Iterable[Mapping[str, Any]],
+        *,
+        last_updated: str | None = None,
+        allow_empty: bool = False,
+    ) -> None:
+        """Validate a staged record set and atomically publish a new snapshot."""
         entities: dict[str, CatalogEntity] = {}
         metadata: dict[str, EntityMetadata] = {}
         slug_to_id: dict[str, str] = {}
@@ -268,11 +299,16 @@ class CatalogStore:
             metadata[item.id] = item
             slug_to_id[item.slug.lower()] = item.id
 
-        if not entities:
+        if not entities and not allow_empty:
             raise ValueError("No valid catalog entities were loaded")
-        self._entities = entities
-        self._metadata = metadata
-        self._slug_to_id = slug_to_id
+        previous = self._snapshot
+        self._snapshot = CatalogSnapshot(
+            entities=entities,
+            metadata=metadata,
+            slug_to_id=slug_to_id,
+            version=previous.version + 1,
+            last_updated=last_updated or datetime.now(UTC).isoformat(),
+        )
         if invalid:
             logger.warning("Catalog loaded with %d invalid record(s) skipped", invalid)
 
@@ -335,9 +371,10 @@ class CatalogStore:
         )
 
     def resolve_id(self, identifier: str) -> str | None:
-        if identifier in self._entities:
+        snapshot = self._snapshot
+        if identifier in snapshot.entities:
             return identifier
-        return self._slug_to_id.get(identifier.lower())
+        return snapshot.slug_to_id.get(identifier.lower())
 
     def get_entity(
         self,
@@ -351,21 +388,22 @@ class CatalogStore:
         # The full immutable catalog is already process-cached. Per-session snapshots live
         # in ConversationState.entity_cache, avoiding an unbounded process-global session map.
         del session_id
-        return self._entities.get(entity_id)
+        return self._snapshot.entities.get(entity_id)
 
     get = get_entity
 
     def get_metadata(self, identifier: str) -> EntityMetadata | None:
         entity_id = self.resolve_id(identifier)
-        return self._metadata.get(entity_id) if entity_id else None
+        return self._snapshot.metadata.get(entity_id) if entity_id else None
 
     def list_entities(self, page_type: PageType | None = None) -> list[CatalogEntity]:
+        snapshot = self._snapshot
         if page_type is None:
-            return list(self._entities.values())
+            return list(snapshot.entities.values())
         return [
             entity
-            for entity_id, entity in self._entities.items()
-            if self._metadata[entity_id].page_type == page_type
+            for entity_id, entity in snapshot.entities.items()
+            if snapshot.metadata[entity_id].page_type == page_type
         ]
 
     def list_metadata(
@@ -374,10 +412,11 @@ class CatalogStore:
         *,
         category: str | None = None,
     ) -> list[EntityMetadata]:
+        snapshot = self._snapshot
         normalized_category = category.lower() if category else None
         return [
             item
-            for item in self._metadata.values()
+            for item in snapshot.metadata.values()
             if (page_type is None or item.page_type == page_type)
             and (normalized_category is None or item.category == normalized_category)
         ]
@@ -400,7 +439,12 @@ class CatalogStore:
     async def health(self) -> bool:
         """Return whether at least one validated catalog entity is available."""
 
-        return bool(self._entities)
+        return bool(self._snapshot.entities)
+
+    def export_records(self) -> list[dict[str, Any]]:
+        """Return a detached serializable snapshot for staged sync updates."""
+
+        return [entity.model_dump(by_alias=True) for entity in self._snapshot.entities.values()]
 
 
 DataStore = CatalogStore

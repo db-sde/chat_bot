@@ -75,4 +75,7 @@ async def dependency_health(session_store: Any, catalog: Any) -> dict[str, Any]:
         "timestamp": datetime.now(UTC).isoformat(),
         "dependencies": dependencies,
         "catalog_source": catalog_source,
+        "catalog_version": getattr(catalog, "version", None),
+        "catalog_last_updated": getattr(catalog, "last_updated", None),
+        "catalog_entity_count": len(catalog) if catalog is not None else 0,
     }

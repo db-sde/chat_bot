@@ -30,6 +30,7 @@ from analytics import (
     build_event,
 )
 from config import Settings, get_settings
+from catalog_sync import CatalogSyncService, CatalogSyncValidationError, parse_sync_payload
 from data.accessor import safe_get
 from presentation.cards import build_entity_card
 from response.cards import entity_label, entity_page_type
@@ -133,6 +134,11 @@ class GuidedWidgetService:
             program_lookup=self._lookup_tool_programs,
         )
         self.reindex_lock = asyncio.Lock()
+        self.catalog_sync = CatalogSyncService(
+            catalog,
+            secret=settings.catalog_webhook_secret,
+            lock=self.reindex_lock,
+        )
         # §5.2 request-id idempotency: a duplicate tap within the window returns
         # the cached response instead of re-executing. Bounded FIFO, in-memory —
         # a tap only needs guarding for the few seconds a double-tap spans.
@@ -197,6 +203,7 @@ class GuidedWidgetService:
                 )
             self.catalog = refreshed
             self.tools.catalog = refreshed
+            self.catalog_sync.catalog = refreshed
             return len(refreshed)
 
     def _resolve_tool_entity(self, value: str) -> str | None:
@@ -560,13 +567,38 @@ app.add_middleware(
     allow_origins=_allowed_widget_origins(_runtime_settings.widget_allowed_origins),
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Accept", "Content-Type"],
+    allow_headers=["Accept", "Content-Type", "X-Webhook-Secret"],
 )
 widget_config_store = WidgetConfigStore(_runtime_settings.widget_config_path)
 
 
 def _service(request: Request) -> GuidedWidgetService:
     return request.app.state.service
+
+
+@app.post("/api/catalog/sync")
+async def catalog_sync_endpoint(
+    request: Request,
+    x_webhook_secret: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Receive one authenticated WordPress save-state update."""
+
+    service = _service(request)
+    if not service.settings.catalog_webhook_secret:
+        raise HTTPException(status_code=503, detail="Catalog webhook is not configured")
+    try:
+        service.catalog_sync.authorize(x_webhook_secret)
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    try:
+        raw_payload = await request.json()
+        payload = parse_sync_payload(raw_payload)
+        result = await service.catalog_sync.sync(payload)
+    except CatalogSyncValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid JSON payload") from exc
+    return result.payload()
 
 
 @app.get("/", response_class=HTMLResponse)

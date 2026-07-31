@@ -56,6 +56,16 @@ node widget/build.mjs --watch
 - `POST /api/widget/lead` — lead capture and gated tool reveal.
 - `POST /api/widget/context/clear` — clear page context or an active tool.
 - `POST /api/widget/analytics` — non-blocking widget analytics.
+- `POST /api/catalog/sync` — authenticated WordPress-to-Catalog V3 upsert/delete webhook.
+
+## WordPress catalog sync
+
+Set `CATALOG_WEBHOOK_SECRET` in the chatbot environment. WordPress sends its
+save payload to `POST /api/catalog/sync` with `X-Webhook-Secret`. The required
+payload fields are `post_id`, `post_type`, `status`, `slug`, `modified`, and
+`acf`. `publish` is staged and upserted; `trash`, `draft`, and `pending` remove
+the matching WordPress entity from the live catalog. The endpoint returns the
+new catalog version and any relationships waiting for a parent sync.
 
 ## Configuration
 
