@@ -96,7 +96,21 @@ The integration uses one shared secret.
    define('DEGREEBABA_CATALOG_WEBHOOK_SECRET', 'use-a-long-random-secret-here');
    ```
 
-3. Send it with every request:
+3. Optional but recommended: give the chatbot a Postgres database for synced pages.
+   Otherwise they live only in memory and are gone after a restart or redeploy, until
+   WordPress sends them again:
+
+   ```dotenv
+   CATALOG_DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+   ```
+
+   The chatbot creates its one table (`chatbot_catalog_records`) on first use. Each synced
+   page is stored before it goes live; at startup (and after `/admin/reindex`) the stored
+   pages are laid back over the base catalog. `/health` shows the storage state under
+   `dependencies.catalog_storage` without querying the database, so frequent health checks
+   don't keep a serverless database (e.g. Neon) awake.
+
+4. Send it with every request:
 
    ```http
    X-Webhook-Secret: use-a-long-random-secret-here
@@ -111,7 +125,7 @@ Do not expose this secret in browser JavaScript, page HTML, or a public reposito
 | `200` | The request was accepted. It may have created, updated, deleted, or found an unchanged entity. | Treat as success. |
 | `401` | The header is missing or does not match the configured secret. | Do not retry automatically. Fix the secret. |
 | `422` | The JSON envelope or catalog data is invalid. | Do not retry automatically. Fix the payload/data. |
-| `503` | The chatbot has no `CATALOG_WEBHOOK_SECRET` configured. | Retry after the server configuration is corrected. |
+| `503` | The chatbot has no `CATALOG_WEBHOOK_SECRET` configured, or its catalog database is unreachable (`"Catalog storage unavailable"`; nothing was applied). | Retry later. |
 
 Examples:
 

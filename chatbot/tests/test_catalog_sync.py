@@ -24,6 +24,7 @@ def sync_client(tmp_path) -> Iterator[TestClient]:
         dead_letter_path=tmp_path / "lead-dead-letters.jsonl",
         catalog_webhook_secret="sync-test-secret",
         log_level="CRITICAL",
+        CATALOG_DATABASE_URL=None,
     )
     original = main_module.get_settings
     main_module.get_settings = lambda: settings

@@ -1,5 +1,6 @@
 """WordPress-to-Catalog V3 ingestion boundary."""
 
+from .persistence import CatalogPersistence, CatalogStorageError
 from .service import (
     CatalogSyncService,
     CatalogSyncValidationError,
@@ -9,6 +10,8 @@ from .service import (
 )
 
 __all__ = [
+    "CatalogPersistence",
+    "CatalogStorageError",
     "CatalogSyncService",
     "CatalogSyncValidationError",
     "SyncPayload",

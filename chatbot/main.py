@@ -30,7 +30,13 @@ from analytics import (
     build_event,
 )
 from config import Settings, get_settings
-from catalog_sync import CatalogSyncService, CatalogSyncValidationError, parse_sync_payload
+from catalog_sync import (
+    CatalogPersistence,
+    CatalogStorageError,
+    CatalogSyncService,
+    CatalogSyncValidationError,
+    parse_sync_payload,
+)
 from data.accessor import safe_get
 from presentation.cards import build_entity_card
 from response.cards import entity_label, entity_page_type
@@ -138,6 +144,7 @@ class GuidedWidgetService:
             catalog,
             secret=settings.catalog_webhook_secret,
             lock=self.reindex_lock,
+            persistence=CatalogPersistence(settings.catalog_database_url),
         )
         # §5.2 request-id idempotency: a duplicate tap within the window returns
         # the cached response instead of re-executing. Bounded FIFO, in-memory —
@@ -174,7 +181,7 @@ class GuidedWidgetService:
         loaded_catalog = catalog or await CatalogStore.create(settings=config)
         if not len(loaded_catalog):
             await loaded_catalog.load()
-        return cls(
+        service = cls(
             settings=config,
             catalog=loaded_catalog,
             session_store=session_store or SessionStore(settings=config),
@@ -182,6 +189,12 @@ class GuidedWidgetService:
             chip_map=ChipMapStore(config.chip_map_path),
             analytics=AnalyticsEmitter(config),
         )
+        try:
+            await service.catalog_sync.restore()
+        except CatalogStorageError:
+            # Serve the base catalog meanwhile; the next sync retries the restore first.
+            LOGGER.exception("Catalog storage unavailable at startup; serving the base catalog")
+        return service
 
     async def close(self) -> None:
         await self.lead_funnel.close()
@@ -201,9 +214,18 @@ class GuidedWidgetService:
                 raise RuntimeError(
                     "Configured catalog source is unavailable; existing catalog retained"
                 )
+            # A reindex reloads the base catalog; put the stored WordPress pages back on top
+            # before it goes live, so a reindex never drops them. If storage can't be read,
+            # the reindex fails and the current catalog stays.
+            previous = self.catalog_sync.catalog
+            self.catalog_sync.catalog = refreshed
+            try:
+                await self.catalog_sync.restore(lock_held=True)
+            except Exception:
+                self.catalog_sync.catalog = previous
+                raise
             self.catalog = refreshed
             self.tools.catalog = refreshed
-            self.catalog_sync.catalog = refreshed
             return len(refreshed)
 
     def _resolve_tool_entity(self, value: str) -> str | None:
@@ -596,6 +618,9 @@ async def catalog_sync_endpoint(
         result = await service.catalog_sync.sync(payload)
     except CatalogSyncValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except CatalogStorageError as exc:
+        # Not applied: the sender retries until the database is back.
+        raise HTTPException(status_code=503, detail="Catalog storage unavailable") from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="Invalid JSON payload") from exc
     return result.payload()
@@ -1287,7 +1312,9 @@ async def widget_lead_endpoint(
 @app.get("/health", response_model=HealthResponse)
 async def health_endpoint(request: Request) -> dict[str, Any]:
     service = _service(request)
-    return await dependency_health(service.session_store, service.catalog)
+    return await dependency_health(
+        service.session_store, service.catalog, service.catalog_sync.persistence.state.payload()
+    )
 
 
 @app.get("/metrics")

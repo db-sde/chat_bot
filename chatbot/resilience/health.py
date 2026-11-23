@@ -22,8 +22,14 @@ async def _probe(name: str, call: Any, timeout: float = 1.0) -> tuple[str, Any]:
         return name, {"status": "down", "detail": type(exc).__name__}
 
 
-async def dependency_health(session_store: Any, catalog: Any) -> dict[str, Any]:
-    """Check only dependencies used by the guided widget."""
+async def dependency_health(
+    session_store: Any, catalog: Any, catalog_storage: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Check only dependencies used by the guided widget.
+
+    ``catalog_storage`` is the synced-pages database's last known state; it is not
+    queried here, so frequent health checks don't keep the database awake.
+    """
 
     async def redis_health() -> dict[str, str]:
         if getattr(session_store, "using_memory", False):
@@ -56,6 +62,8 @@ async def dependency_health(session_store: Any, catalog: Any) -> dict[str, Any]:
         _probe("database", catalog_health),
     )
     dependencies = dict(probes)
+    if catalog_storage is not None:
+        dependencies["catalog_storage"] = catalog_storage
     statuses = [
         value.get("status", "ok") if isinstance(value, dict) else "ok"
         for value in dependencies.values()
