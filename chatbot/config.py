@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,13 +35,23 @@ class Settings(BaseSettings):
     catalog_path: Path | None = None
     catalog_timeout_seconds: float = Field(default=5.0, gt=0)
     catalog_webhook_secret: str | None = None
+    # Postgres for pages synced from WordPress, so they survive restarts
+    # (catalog_sync/persistence.py).
+    # CATALOG_DATABASE_URL, or DATABASE_URL when that's the only database. Unset: memory only.
+    catalog_database_url: str | None = Field(
+        default=None, validation_alias=AliasChoices("CATALOG_DATABASE_URL", "DATABASE_URL")
+    )
     widget_config_path: Path | None = None
     chip_map_path: Path | None = None
     tools_content_path: Path | None = None
     widget_allowed_origins: str = "*"
 
     @field_validator(
-        "catalog_url", "analytics_webhook_url", "catalog_webhook_secret", mode="before"
+        "catalog_url",
+        "analytics_webhook_url",
+        "catalog_webhook_secret",
+        "catalog_database_url",
+        mode="before",
     )
     @classmethod
     def _blank_url_is_none(cls, value: object) -> object:

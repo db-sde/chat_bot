@@ -21,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from data.loader import CatalogStore
 from data.models import parse_entity
 
+from .persistence import CatalogPersistence
+
 LOGGER = logging.getLogger(__name__)
 
 _POST_TYPES = {
@@ -270,10 +272,47 @@ class CatalogSyncService:
         *,
         secret: str | None,
         lock: asyncio.Lock | None = None,
+        persistence: CatalogPersistence | None = None,
     ) -> None:
         self.catalog = catalog
         self.secret = secret
         self._lock = lock or asyncio.Lock()
+        # Synced pages survive restarts only when a database is configured (see persistence.py).
+        self.persistence = persistence or CatalogPersistence(None)
+        self._restored = not self.persistence.enabled
+
+    async def restore(self, *, lock_held: bool = False) -> int:
+        """Lay the stored WordPress pages back over the current (base) catalog.
+
+        Called at startup and after a reindex replaces the catalog. Returns how many
+        stored pages there were. Raises CatalogStorageError if the database can't be
+        read; the next sync tries again before it commits anything.
+        """
+
+        if not self.persistence.enabled:
+            return 0
+        if lock_held:
+            return await self._restore()
+        async with self._lock:
+            return await self._restore()
+
+    async def _restore(self) -> int:
+        stored = await self.persistence.load()
+        keys = {record.get("wordpress_post_key") for record in stored}
+        records = [
+            record
+            for record in self.catalog.export_records()
+            if record.get("wordpress_post_key") not in keys
+        ]
+        records.extend(stored)
+        if stored:
+            latest = max(
+                (str(record.get("wordpress_modified") or "") for record in stored), default=""
+            )
+            self.catalog.replace(self._resolve_relationships(records), last_updated=latest or None)
+        self._restored = True
+        LOGGER.info("catalog storage restored %s synced pages", len(stored))
+        return len(stored)
 
     def authorize(self, supplied_secret: str | None) -> None:
         if not self.secret:
@@ -290,6 +329,10 @@ class CatalogSyncService:
 
         post_id = str(payload.post_id)
         async with self._lock:
+            if not self._restored:
+                # Storage was unreachable at startup: load it now, so this change is applied
+                # on top of everything synced before, never instead of it.
+                await self._restore()
             records = self.catalog.export_records()
             key = self._post_key(page_type, post_id)
             current_index = next(
@@ -302,6 +345,8 @@ class CatalogSyncService:
             )
 
             if payload.status in _UNPUBLISHED:
+                if self.persistence.enabled:
+                    await self.persistence.delete(key)
                 if current_index is None:
                     return self._result("deleted", post_id, None, False, ())
                 removed = records.pop(current_index)
@@ -316,6 +361,11 @@ class CatalogSyncService:
                 parse_entity(staged)
             except Exception as exc:
                 raise CatalogSyncValidationError(f"Normalized entity is invalid: {exc}") from exc
+
+            # Stored before it goes live: if the database can't take it, the sync fails
+            # (503) and the sender retries, so nothing live is missing from storage.
+            if self.persistence.enabled:
+                await self.persistence.upsert(staged)
 
             if current_index is None:
                 records.append(staged)
@@ -460,6 +510,11 @@ class CatalogSyncService:
         resolved: list[dict[str, Any]] = []
         for original in records:
             record = dict(original)
+            if not record.get("wordpress_post_key"):
+                # A base-catalog entity (sample, CATALOG_URL or CATALOG_PATH) carries its own
+                # links; resolving it against WordPress references it never had would strip them.
+                resolved.append(record)
+                continue
             relationships = dict(record.get("wordpress_relationships") or {})
             unresolved: dict[str, list[str]] = {}
 

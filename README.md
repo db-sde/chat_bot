@@ -213,6 +213,9 @@ LOG_LEVEL=INFO
 # Catalog & Sync
 CATALOG_PATH=data/catalog.sample.json
 CATALOG_WEBHOOK_SECRET=your_sync_secret_key_here
+# Postgres where synced WordPress pages are stored, so they survive restarts and
+# redeploys (DATABASE_URL also works). Unset: synced pages live in memory only.
+CATALOG_DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
 
 # Sessions & Redis
 REDIS_URL=redis://localhost:6379/0
